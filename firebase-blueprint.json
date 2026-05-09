@@ -1,0 +1,390 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profiles (student, tutor). System-generated role assignments. Memberships, Admins.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["student", "tutor", "admin"] },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "inactive", "suspended"] },
+        "remarks": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "lastLoginAt": { "type": "string", "format": "date-time" },
+        "tutor_profile": {
+          "type": "object",
+          "properties": {
+            "display_name": { "type": "string" },
+            "profile_photo": { "type": "string" },
+            "teaching_languages": { "type": "array", "items": { "type": "string" } },
+            "hourly_rate": { "type": "number" },
+            "employment_type": { "type": "string", "enum": ["full_time", "part_time", "freelance"] },
+            "bio": { "type": "string" },
+            "available_days": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      },
+      "required": ["email", "role", "name", "createdAt", "status"]
+    },
+    "TutorCertification": {
+      "title": "Tutor Certification",
+      "description": "Certifications held by a tutor.",
+      "type": "object",
+      "properties": {
+        "tutorId": { "type": "string" },
+        "certificationName": { "type": "string" },
+        "issuingOrganization": { "type": "string" },
+        "certificationLevel": { "type": "string" },
+        "certificationNumber": { "type": "string" },
+        "issueDate": { "type": "string", "format": "date" },
+        "expiryDate": { "type": "string", "format": "date" },
+        "certificateFileUrl": { "type": "string" },
+        "verificationUrl": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "expired", "pending_verification"] },
+        "remarks": { "type": "string" }
+      },
+      "required": ["tutorId", "certificationName", "status"]
+    },
+    "TutorExpertise": {
+      "title": "Tutor Expertise",
+      "description": "Subject matter expertise areas for tutors.",
+      "type": "object",
+      "properties": {
+        "tutorId": { "type": "string" },
+        "expertiseArea": { "type": "string" },
+        "skillLevel": { "type": "string", "enum": ["beginner", "intermediate", "advanced", "expert"] },
+        "yearsOfExperience": { "type": "number" },
+        "canTeach": { "type": "boolean" },
+        "preferredCourseLevel": { "type": "string", "enum": ["beginner", "intermediate", "advanced", "corporate"] },
+        "remarks": { "type": "string" }
+      },
+      "required": ["tutorId", "expertiseArea", "skillLevel"]
+    },
+    "AuditLog": {
+      "title": "Audit Log",
+      "description": "Record of system actions for auditing.",
+      "type": "object",
+      "properties": {
+        "adminId": { "type": "string" },
+        "adminEmail": { "type": "string" },
+        "action": { "type": "string" },
+        "targetCollection": { "type": "string" },
+        "targetId": { "type": "string" },
+        "payload": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["adminId", "adminEmail", "action", "createdAt"]
+    },
+    "Course": {
+      "title": "Course Template",
+      "description": "Master course definition (reusable template).",
+      "type": "object",
+      "properties": {
+        "courseCode": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "level": { "type": "string", "enum": ["Beginner", "Intermediate", "Advanced"] },
+        "targetAudience": { "type": "string" },
+        "prerequisites": { "type": "array", "items": { "type": "string" } },
+        "courseOutline": { "type": "string" },
+        "durationHours": { "type": "number" },
+        "defaultPrice": { "type": "number" },
+        "earlyBirdPrice": { "type": "number" },
+        "standardPrice": { "type": "number" },
+        "certificateAvailable": { "type": "boolean" },
+        "certName": { "type": "string" },
+        "FAQ": { "type": "array", "items": { "type": "object", "properties": { "q": { "type": "string" }, "a": { "type": "string" } } } },
+        "defaultDeliveryMode": { "type": "string", "enum": ["onsite", "online", "hybrid"] },
+        "defaultMaterials": { "type": "array", "items": { "type": "string" } },
+        "status": { "type": "string", "enum": ["active", "archived", "draft"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "description", "status", "createdAt"]
+    },
+    "CourseSession": {
+      "title": "Course Session / Intake",
+      "description": "A specific intake or opening of a course template.",
+      "type": "object",
+      "properties": {
+        "courseId": { "type": "string" },
+        "tutorId": { "type": "string" },
+        "sessionName": { "type": "string" },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "quota": { "type": "number" },
+        "enrolledCount": { "type": "number" },
+        "classroom": { "type": "string" },
+        "meetingLink": { "type": "string" },
+        "deliveryMode": { "type": "string", "enum": ["onsite", "online", "hybrid"] },
+        "registrationOpen": { "type": "boolean" },
+        "registrationDeadline": { "type": "string", "format": "date" },
+        "sessionStatus": { "type": "string", "enum": ["open", "full", "completed", "cancelled"] },
+        "remarks": { "type": "string" },
+        "price": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["courseId", "sessionName", "startDate", "endDate", "quota", "sessionStatus", "createdAt"]
+    },
+    "Lesson": {
+      "title": "Lesson / Class",
+      "description": "An individual class session within a course intake.",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string" },
+        "tutorId": { "type": "string" },
+        "lessonTitle": { "type": "string" },
+        "lessonNumber": { "type": "number" },
+        "lessonDate": { "type": "string", "format": "date" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "classroom": { "type": "string" },
+        "meetingLink": { "type": "string" },
+        "lessonStatus": { "type": "string", "enum": ["scheduled", "completed", "cancelled"] },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["sessionId", "lessonTitle", "lessonNumber", "lessonDate", "startTime", "endTime", "lessonStatus", "createdAt"]
+    },
+    "Registration": {
+      "title": "Registration",
+      "description": "A student registering for a specific course session.",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string" },
+        "courseId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "studentEmail": { "type": "string" },
+        "studentPhone": { "type": "string" },
+        "company": { "type": "string" },
+        "jobTitle": { "type": "string" },
+        "remarks": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "pending_verification", "verified", "rejected"] },
+        "amount": { "type": "number" },
+        "paymentMethod": { "type": "string" },
+        "paymentProof": { "type": "string" },
+        "invoiceNumber": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["sessionId", "courseId", "studentName", "studentEmail", "status", "amount", "createdAt"]
+    },
+    "Attendance": {
+      "title": "Attendance",
+      "description": "Student attendance record for a lesson.",
+      "type": "object",
+      "properties": {
+        "lessonId": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "status": { "type": "string", "enum": ["present", "absent", "late", "excused"] },
+        "recordedAt": { "type": "string", "format": "date-time" },
+        "recordedBy": { "type": "string" }
+      },
+      "required": ["lessonId", "sessionId", "studentId", "status", "recordedAt"]
+    },
+    "TeachingHours": {
+      "title": "Teaching Hours",
+      "description": "Hours submitted by an instructor for a lesson.",
+      "type": "object",
+      "properties": {
+        "tutorId": { "type": "string" },
+        "lessonId": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "hours": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "approved", "paid", "rejected"] },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tutorId", "lessonId", "sessionId", "hours", "status", "createdAt"]
+    },
+    "Feedback": {
+      "title": "Feedback",
+      "description": "Feedback submitted after course completion.",
+      "type": "object",
+      "properties": {
+        "courseId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["courseId", "studentId", "rating", "createdAt"]
+    },
+    "SchoolSettings": {
+      "title": "School Settings",
+      "description": "Customization settings for the school (logo, name, invoice terms).",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "logo_url": { "type": "string" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "invoice_prefix": { "type": "string" },
+        "terms_conditions": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name"]
+    },
+    "Branch": {
+      "title": "Branch",
+      "description": "School branches (分校).",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "contact_phone": { "type": "string" },
+        "default_shifts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "start_time": { "type": "string" },
+              "end_time": { "type": "string" }
+            }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "createdAt"]
+    },
+    "TutorShift": {
+      "title": "Tutor Shift",
+      "description": "Daily schedules for tutors at specific branches.",
+      "type": "object",
+      "properties": {
+        "tutorId": { "type": "string" },
+        "branchId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "type": { "type": "string", "enum": ["regular", "swap", "borrow", "leave"] },
+        "status": { "type": "string", "enum": ["scheduled", "completed", "cancelled"] },
+        "note": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tutorId", "branchId", "date", "startTime", "endTime", "type"]
+    },
+    "Certificate": {
+      "title": "Student Certificate",
+      "description": "Certificate issued to a student upon course completion.",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "studentEmail": { "type": "string" },
+        "courseId": { "type": "string" },
+        "courseTitle": { "type": "string" },
+        "registrationId": { "type": "string" },
+        "issuedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["studentName", "studentEmail", "courseId", "issuedAt"]
+    },
+    "KnowledgeBase": {
+      "title": "Knowledge Base",
+      "description": "Technical documentation and teaching resources.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "category": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "status": { "type": "string", "enum": ["draft", "published"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "content", "status", "createdAt"]
+    },
+    "SupportTicket": {
+      "title": "Support Ticket",
+      "description": "User support requests.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "subject": { "type": "string" },
+        "message": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "pending", "closed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userEmail", "subject", "message", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "branches/{branchId}": {
+      "schema": { "$ref": "#/entities/Branch" },
+      "description": "School branches"
+    },
+    "tutor_shifts/{shiftId}": {
+      "schema": { "$ref": "#/entities/TutorShift" },
+      "description": "Tutor daily schedules"
+    },
+    "users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "System-created user profiles"
+    },
+    "tutor_certifications/{certId}": {
+      "schema": { "$ref": "#/entities/TutorCertification" },
+      "description": "Tutor professional certifications"
+    },
+    "tutor_expertise/{expertiseId}": {
+      "schema": { "$ref": "#/entities/TutorExpertise" },
+      "description": "Tutor expertise mapping"
+    },
+    "audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "System audit logs"
+    },
+    "courses/{courseId}": {
+      "schema": { "$ref": "#/entities/Course" },
+      "description": "Available course templates"
+    },
+    "course_sessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/CourseSession" },
+      "description": "Specific course intakes"
+    },
+    "lessons/{lessonId}": {
+      "schema": { "$ref": "#/entities/Lesson" },
+      "description": "Individual lessons within sessions"
+    },
+    "attendance/{attendanceId}": {
+      "schema": { "$ref": "#/entities/Attendance" },
+      "description": "Lesson-level attendance records"
+    },
+    "teaching_hours/{hourId}": {
+      "schema": { "$ref": "#/entities/TeachingHours" },
+      "description": "Instructor teaching hours per lesson"
+    },
+    "registrations/{registrationId}": {
+      "schema": { "$ref": "#/entities/Registration" },
+      "description": "Course session registrations"
+    },
+    "certificates/{certId}": {
+      "schema": { "$ref": "#/entities/Certificate" },
+      "description": "Issued student certificates"
+    },
+    "feedbacks/{feedbackId}": {
+      "schema": { "$ref": "#/entities/Feedback" },
+      "description": "Feedback from students"
+    },
+    "knowledge_base/{kbId}": {
+      "schema": { "$ref": "#/entities/KnowledgeBase" },
+      "description": "Internal knowledge base"
+    },
+    "support_tickets/{ticketId}": {
+      "schema": { "$ref": "#/entities/SupportTicket" },
+      "description": "Customer support tickets"
+    },
+    "admins/{userId}": {
+      "schema": { "type": "object", "properties": { "email": { "type": "string" } } },
+      "description": "Admin access list"
+    },
+    "settings/school_info": {
+      "schema": { "$ref": "#/entities/SchoolSettings" },
+      "description": "Global school customization settings"
+    }
+  }
+}

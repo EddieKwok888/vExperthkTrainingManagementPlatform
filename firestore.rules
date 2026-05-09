@@ -1,0 +1,286 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && (request.auth.token.email_verified == true || request.auth.token.firebase.sign_in_provider == 'google.com');
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email != null && request.auth.token.email.lower() == 'aieddie0310@gmail.com') ||
+        (request.auth.token.email != null && request.auth.token.email.lower() == 'system.admin@vexperthk.com') ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    function isTutor() {
+      return isSignedIn() && (
+        (request.auth.token.email != null && request.auth.token.email.lower() == 'aieddie0310@gmail.com') ||
+        (request.auth.token.email != null && request.auth.token.email.lower() == 'trainer@vexperthk.com') ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'tutor'])
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validation Helpers ---
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'role', 'name', 'status', 'createdAt']) &&
+             data.email is string &&
+             data.role in ['student', 'tutor', 'admin'] &&
+             data.name is string && data.name.size() <= 100 &&
+             data.status in ['active', 'inactive', 'suspended'];
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll(['userId', 'userEmail', 'action', 'createdAt']) &&
+             data.userId is string &&
+             data.userEmail is string &&
+             data.action is string;
+    }
+
+    function isValidCourse(data) {
+      return data.keys().hasAll(['title', 'description', 'status', 'createdAt']) &&
+             data.title is string && data.title.size() <= 200 &&
+             data.status in ['active', 'archived', 'draft'];
+    }
+
+    function isValidSession(data) {
+      return data.keys().hasAll(['courseId', 'sessionName', 'startDate', 'endDate', 'quota', 'sessionStatus', 'createdAt']) &&
+             isValidId(data.courseId) &&
+             data.sessionName is string &&
+             data.sessionStatus in ['open', 'full', 'completed', 'cancelled'] &&
+             data.quota is number && data.quota >= 0;
+    }
+
+    function isValidLesson(data) {
+      return data.keys().hasAll(['sessionId', 'lessonTitle', 'lessonNumber', 'lessonDate', 'startTime', 'endTime', 'lessonStatus', 'createdAt']) &&
+             isValidId(data.sessionId) &&
+             data.lessonTitle is string &&
+             data.lessonNumber is number &&
+             data.lessonStatus in ['scheduled', 'completed', 'cancelled'];
+    }
+
+    function isValidRegistration(data) {
+       return data.keys().hasAll(['sessionId', 'courseId', 'studentName', 'studentEmail', 'status', 'amount', 'createdAt']) &&
+              isValidId(data.sessionId) &&
+              isValidId(data.courseId) &&
+              data.status in ['pending', 'pending_verification', 'verified', 'rejected', 'completed'] &&
+              data.amount is number;
+    }
+
+    function isValidAttendance(data) {
+      return data.keys().hasAll(['lessonId', 'sessionId', 'studentId', 'status', 'recordedAt']) &&
+             isValidId(data.lessonId) &&
+             isValidId(data.sessionId) &&
+             data.status in ['present', 'absent', 'late', 'excused'];
+    }
+
+    function isValidTeachingHour(data) {
+      return data.keys().hasAll(['tutorId', 'hours', 'status', 'createdAt']) &&
+             isValidId(data.tutorId) &&
+             data.hours is number &&
+             data.status in ['pending', 'approved', 'paid', 'rejected'];
+    }
+
+    function isValidTutorCertification(data) {
+      return data.keys().hasAll(['tutorId', 'certificationName', 'status']) &&
+             isValidId(data.tutorId) &&
+             data.certificationName is string &&
+             data.status in ['active', 'expired', 'pending_verification'];
+    }
+
+    function isValidTutorExpertise(data) {
+      return data.keys().hasAll(['tutorId', 'expertiseArea', 'skillLevel']) &&
+             isValidId(data.tutorId) &&
+             data.expertiseArea is string &&
+             data.skillLevel in ['beginner', 'intermediate', 'advanced', 'expert'];
+    }
+
+    function isValidCertificate(data) {
+      return data.keys().hasAll(['studentName', 'studentEmail', 'courseId', 'issuedAt']) &&
+             data.studentName is string &&
+             data.studentEmail is string &&
+             isValidId(data.courseId);
+    }
+
+    function isValidKnowledgeBase(data) {
+      return data.keys().hasAll(['title', 'content', 'status', 'createdAt']) &&
+             data.title is string &&
+             data.status in ['draft', 'published'];
+    }
+
+    function isValidSupportTicket(data) {
+      return data.keys().hasAll(['status', 'createdAt']) &&
+             (data.has('userEmail') || data.has('email')) &&
+             data.status in ['open', 'pending', 'closed'];
+    }
+
+    // --- Collections ---
+
+    match /admins/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow list: if isAdmin();
+      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin() || isTutor());
+      allow create: if isSignedIn() && (request.auth.uid == userId || isAdmin()) && isValidUser(incoming());
+      allow update: if isSignedIn() && (
+        isAdmin() || 
+        (request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phone', 'remarks', 'lastLoginAt']))
+      ) && isValidUser(incoming());
+    }
+
+    match /courses/{courseId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidCourse(incoming());
+      allow update: if isAdmin() && isValidCourse(incoming());
+      allow delete: if isAdmin();
+    }
+
+    match /course_sessions/{sessionId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidSession(incoming());
+      allow update: if isAdmin() && isValidSession(incoming());
+      allow delete: if isAdmin();
+    }
+
+    match /lessons/{lessonId} {
+      allow list: if isAdmin() || (isSignedIn() && (resource.data.tutorId == request.auth.uid || isTutor()));
+      allow get: if isAdmin() || (isSignedIn() && (resource.data.tutorId == request.auth.uid || isTutor()));
+      allow create: if isAdmin() && isValidLesson(incoming());
+      allow update: if isAdmin() || (isTutor() && existing().tutorId == request.auth.uid) && isValidLesson(incoming());
+      allow delete: if isAdmin();
+    }
+
+    match /registrations/{registrationId} {
+      allow list: if isAdmin() || isTutor() || (isSignedIn() && (resource.data.studentId == request.auth.uid || resource.data.studentEmail == request.auth.token.email));
+      allow get: if isAdmin() || isTutor() || (isSignedIn() && (resource.data.studentId == request.auth.uid || resource.data.studentEmail == request.auth.token.email));
+      allow create: if (isVerified() || true) && isValidRegistration(incoming()); // Open for public registration with valid schema
+      allow update: if isAdmin() || (
+        isSignedIn() && (existing().studentId == request.auth.uid || existing().studentEmail == request.auth.token.email) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['paymentProof', 'status', 'paymentMethod', 'updatedAt'])
+      ) && isValidRegistration(incoming());
+      allow delete: if isAdmin();
+    }
+
+    match /attendance/{attendanceId} {
+      allow list: if isAdmin() || isTutor();
+      allow get: if isAdmin() || isTutor() || (isSignedIn() && resource.data.studentId == request.auth.uid);
+      allow create: if (isAdmin() || isTutor()) && isValidAttendance(incoming());
+      allow update: if (isAdmin() || isTutor()) && isValidAttendance(incoming());
+      allow delete: if isAdmin();
+    }
+
+    match /teaching_hours/{hourId} {
+      allow list: if isAdmin() || isTutor();
+      allow get: if isAdmin() || (isSignedIn() && (resource.data.tutorId == request.auth.uid || isAdmin()));
+      allow create: if isTutor() && incoming().tutorId == request.auth.uid && isValidTeachingHour(incoming());
+      allow update: if (isAdmin() || (
+        isTutor() && existing().tutorId == request.auth.uid && existing().status == 'pending' &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['hours', 'notes', 'updatedAt'])
+      )) && isValidTeachingHour(incoming());
+    }
+
+    match /materials/{materialId} {
+      allow list: if isSignedIn();
+      allow get: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /feedbacks/{feedbackId} {
+      allow list: if isAdmin() || isTutor();
+      allow get: if isAdmin() || isTutor();
+      allow create: if isSignedIn(); // Any student can submit
+    }
+
+    match /audit_logs/{logId} {
+      allow list: if isAdmin();
+      allow get: if isAdmin();
+      allow create: if isSignedIn() && isValidAuditLog(incoming());
+    }
+
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /branches/{branchId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /tutor_shifts/{shiftId} {
+      allow list: if isAdmin() || isTutor();
+      allow get: if isAdmin() || (isSignedIn() && resource.data.tutorId == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    match /tutor_certifications/{certId} {
+      allow list: if isAdmin() || (isSignedIn() && (resource.data.tutorId == request.auth.uid || isTutor()));
+      allow get: if isAdmin() || (isSignedIn() && (resource.data.tutorId == request.auth.uid || isTutor()));
+      allow write: if isAdmin() || (isTutor() && incoming().tutorId == request.auth.uid && isValidTutorCertification(incoming()));
+    }
+
+    match /tutor_expertise/{expertiseId} {
+      allow list: if isAdmin() || (isSignedIn() && (resource.data.tutorId == request.auth.uid || isTutor()));
+      allow get: if isAdmin() || (isSignedIn() && (resource.data.tutorId == request.auth.uid || isTutor()));
+      allow write: if isAdmin() || (isTutor() && incoming().tutorId == request.auth.uid && isValidTutorExpertise(incoming()));
+    }
+
+    match /certificates/{certId} {
+      allow list: if isAdmin() || isTutor() || (isSignedIn() && (resource.data.studentId == request.auth.uid || resource.data.studentEmail == request.auth.token.email));
+      allow get: if isAdmin() || isTutor() || (isSignedIn() && (resource.data.studentId == request.auth.uid || resource.data.studentEmail == request.auth.token.email));
+      allow create: if isAdmin() && isValidCertificate(incoming());
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /knowledge_base/{kbId} {
+      allow list: if resource.data.status == 'published' || isAdmin();
+      allow get: if resource.data.status == 'published' || isSignedIn();
+      allow write: if isAdmin() && isValidKnowledgeBase(incoming());
+    }
+
+    match /support_tickets/{ticketId} {
+      allow list: if isAdmin() || (isSignedIn() && resource.data.userEmail == request.auth.token.email);
+      allow get: if isAdmin() || (isSignedIn() && resource.data.userEmail == request.auth.token.email);
+      allow create: if isValidSupportTicket(incoming());
+      allow update: if isAdmin();
+    }
+
+    match /error_logs/{errorId} {
+      allow create: if true;
+      allow read: if isAdmin();
+    }
+  }
+}
