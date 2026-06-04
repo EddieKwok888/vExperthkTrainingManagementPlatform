@@ -1,5 +1,5 @@
 
-export type UserRole = 'admin' | 'tutor' | 'student';
+export type UserRole = 'admin' | 'tutor' | 'tutor_pt' | 'student';
 export type UserStatus = 'active' | 'inactive' | 'suspended';
 export type EmploymentType = 'full_time' | 'part_time' | 'freelance';
 export type SkillLevel = 'beginner' | 'intermediate' | 'advanced' | 'expert';
@@ -53,6 +53,30 @@ export interface TutorExpertise {
   canTeach: boolean;
   preferredCourseLevel: CourseLevel;
   remarks?: string;
+}
+
+export type PromotionType = 'code' | 'bundle';
+export type DiscountType = 'fixed';
+
+export interface Promotion {
+  id: string;
+  name: string;
+  code?: string; // Optional if it's an auto-applied bundle
+  type: PromotionType;
+  discountType: DiscountType;
+  discountValue: number;
+  conditions?: {
+    requiredCourseIds?: string[]; // for bundle (always 2 items)
+  };
+  applicableCourseIds?: string[]; // empty means all courses
+  status: 'active' | 'inactive';
+  startDate?: string;
+  endDate?: string;
+  usageLimit?: number;
+  usageCount?: number;
+  createdAt: any;
+  createdByAdminId?: string;
+  createdByAdminEmail?: string;
 }
 
 export interface AuditLog {

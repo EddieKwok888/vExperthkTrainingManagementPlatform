@@ -59,13 +59,17 @@ export function PaymentStatus() {
     if (!id || !paymentProofBase64) return;
     setUploading(true);
     try {
+      const prefix = schoolSettings?.invoice_prefix || 'INV';
+      const invoiceNumber = `${prefix}-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
+
       await updateDoc(doc(db, 'registrations', id), {
         paymentProof: paymentProofBase64,
         paymentMethod: paymentMethod,
+        invoiceNumber,
         status: 'pending_verification'
       });
       toast.success("Payment proof uploaded successfully!");
-      setReg((prev: any) => ({ ...prev, status: 'pending_verification', paymentProof: paymentProofBase64, paymentMethod: paymentMethod }));
+      setReg((prev: any) => ({ ...prev, status: 'pending_verification', paymentProof: paymentProofBase64, paymentMethod: paymentMethod, invoiceNumber }));
     } catch (e: any) {
       handleFirestoreError(e, OperationType.UPDATE, `registrations/${id}`);
       toast.error(e.message || "Failed to upload proof");
@@ -78,12 +82,16 @@ export function PaymentStatus() {
     if (!id) return;
     setUploading(true);
     try {
+      const prefix = schoolSettings?.invoice_prefix || 'INV';
+      const invoiceNumber = `${prefix}-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
+
       await updateDoc(doc(db, 'registrations', id), {
         paymentMethod: 'paypal',
+        invoiceNumber,
         status: 'verified'
       });
       toast.success("PayPal payment successful!");
-      setReg((prev: any) => ({ ...prev, status: 'verified', paymentMethod: 'paypal' }));
+      setReg((prev: any) => ({ ...prev, status: 'verified', paymentMethod: 'paypal', invoiceNumber }));
     } catch (e: any) {
       handleFirestoreError(e, OperationType.UPDATE, `registrations/${id}`);
       toast.error(e.message || "Failed to process PayPal payment");
@@ -125,10 +133,12 @@ export function PaymentStatus() {
           </div>
           
           <div className="bg-slate-50 p-4 rounded-lg text-left text-sm space-y-3 text-slate-600 shadow-inner">
-            <div className="flex justify-between border-b border-slate-200 pb-2">
-              <span className="font-medium">Invoice No:</span>
-              <span className="font-mono text-slate-900">{reg.invoiceNumber || reg.id.slice(0, 8).toUpperCase()}</span>
-            </div>
+            {reg.invoiceNumber && (
+              <div className="flex justify-between border-b border-slate-200 pb-2">
+                <span className="font-medium">Invoice No:</span>
+                <span className="font-mono text-slate-900">{reg.invoiceNumber}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="font-medium">Student:</span>
               <span>{reg.studentName}</span>

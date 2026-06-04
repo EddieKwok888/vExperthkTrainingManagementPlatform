@@ -311,6 +311,24 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userEmail", "subject", "message", "status", "createdAt"]
+    },
+    "Promotion": {
+      "title": "Promotion",
+      "description": "Discount configurations.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "code": { "type": "string" },
+        "type": { "type": "string" },
+        "discountType": { "type": "string" },
+        "discountValue": { "type": "number" },
+        "status": { "type": "string" },
+        "startDate": { "type": "string", "format": "date-time" },
+        "endDate": { "type": "string", "format": "date-time" },
+        "createdByAdminId": { "type": "string" },
+        "createdByAdminEmail": { "type": "string" }
+      },
+      "required": ["name", "type", "discountType", "discountValue", "status"]
     }
   },
   "firestore": {
@@ -385,6 +403,10 @@
     "settings/school_info": {
       "schema": { "$ref": "#/entities/SchoolSettings" },
       "description": "Global school customization settings"
+    },
+    "promotions/{promoId}": {
+      "schema": { "$ref": "#/entities/Promotion" },
+      "description": "Promotions and discounts"
     }
   }
 }

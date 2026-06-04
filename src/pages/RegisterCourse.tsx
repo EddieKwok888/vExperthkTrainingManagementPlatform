@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { db } from '../lib/firebase';
-import { doc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, addDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { AuthContext } from '../App';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -22,6 +22,13 @@ export function RegisterCourse() {
   const [submitting, setSubmitting] = useState(false);
   const [schoolSettings, setSchoolSettings] = useState<any>(null);
 
+  // Promotions State
+  const [promotions, setPromotions] = useState<any[]>([]);
+  const [pastCourseIds, setPastCourseIds] = useState<string[]>([]);
+  const [promoCodeInput, setPromoCodeInput] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState<any>(null);
+  const [pax, setPax] = useState(1);
+
   // Form State
   const [formData, setFormData] = useState({
     studentName: '',
@@ -37,9 +44,10 @@ export function RegisterCourse() {
     if (!id) return;
     const fetchData = async () => {
       try {
-        const [courseSnap, settingsSnap] = await Promise.all([
+        const [courseSnap, settingsSnap, promosSnap] = await Promise.all([
           getDoc(doc(db, 'courses', id)),
-          getDoc(doc(db, 'settings', 'school_info'))
+          getDoc(doc(db, 'settings', 'school_info')),
+          getDocs(query(collection(db, 'promotions'), where('status', '==', 'active')))
         ]);
 
         if (courseSnap.exists()) {
@@ -49,16 +57,59 @@ export function RegisterCourse() {
         if (settingsSnap.exists()) {
           setSchoolSettings(settingsSnap.data());
         }
-        
-        const q = query(collection(db, 'course_sessions'), where('courseId', '==', id), where('sessionStatus', '==', 'open'));
+
+        const promosList = promosSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+        // Fetch user's past courses if user exists
+        let pCourses: string[] = [];
+        if (user?.uid) {
+           const pastRegs = await getDocs(query(collection(db, 'registrations'), where('studentId', '==', user.uid)));
+           pCourses = pastRegs.docs.filter(d => d.data().status === 'verified').map(d => d.data().courseId);
+           setPastCourseIds(pCourses);
+        }
+
+        const q = query(collection(db, 'course_sessions'), where('courseId', '==', id));
         const sSnap = await getDocs(q);
-        const fetchedSessions = sSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const fetchedSessions = sSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter((s: any) => s.sessionStatus === 'open');
         setSessions(fetchedSessions);
         
         if (preselectedSession && fetchedSessions.some(s => s.id === preselectedSession)) {
           setFormData(prev => ({ ...prev, sessionId: preselectedSession }));
         } else if (fetchedSessions.length > 0) {
           setFormData(prev => ({ ...prev, sessionId: fetchedSessions[0].id }));
+        }
+
+        // Update list to be valid dates only
+        const now = new Date();
+        const validPromos = promosList.filter(p => {
+           if (p.startDate && new Date(p.startDate) > now) return false;
+           if (p.endDate && new Date(p.endDate) < now) return false;
+           return true;
+        });
+        setPromotions(validPromos);
+
+        // Auto-apply bundle promos if any match
+        if (courseSnap.exists()) {
+           const bundlePromo = validPromos.find(p => {
+               if (p.type !== 'bundle') return false;
+               
+               const required = p.conditions?.requiredCourseIds || [];
+               if (required.length !== 2) return false;
+               
+               const [c1, c2] = required;
+               
+               // Registering for C1, has C2 in history
+               if (courseSnap.id === c1 && pCourses.includes(c2)) return true;
+               // Registering for C2, has C1 in history
+               if (courseSnap.id === c2 && pCourses.includes(c1)) return true;
+               
+               return false;
+           });
+           
+           if (bundlePromo) {
+             setAppliedPromo(bundlePromo);
+             toast.success(`Bundle discount '${bundlePromo.name}' applied automatically!`);
+           }
         }
       } catch (e) {
         console.error(e);
@@ -67,7 +118,29 @@ export function RegisterCourse() {
       }
     };
     fetchData();
-  }, [id, preselectedSession]);
+  }, [id, preselectedSession, user]);
+
+  const handleApplyPromoCode = () => {
+    if (!promoCodeInput) return;
+    const p = promotions.find(p => p.code?.toUpperCase() === promoCodeInput.toUpperCase() && p.type === 'code');
+    if (!p) {
+       toast.error("Invalid Promo Code");
+       return;
+    }
+    if (p.applicableCourseIds && p.applicableCourseIds.length > 0 && !p.applicableCourseIds.includes(id as string)) {
+       toast.error("This promo code is not applicable to this course");
+       return;
+    }
+    setAppliedPromo(p);
+    toast.success("Promo code applied!");
+  };
+
+  const handleRemovePromo = () => {
+    setAppliedPromo(null);
+    setPromoCodeInput('');
+  };
+
+  // Removed unused group promo auto apply code
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -98,26 +171,22 @@ export function RegisterCourse() {
 
     setSubmitting(true);
     try {
-      const existingQ = query(collection(db, 'registrations'), where('studentEmail', '==', formData.studentEmail), where('sessionId', '==', formData.sessionId));
-      const existingSnap = await getDocs(existingQ);
-      if (!existingSnap.empty) {
-         toast.error("You have already registered for this session.");
-         navigate(`/payment-status/${existingSnap.docs[0].id}`);
-         return;
-      }
-
-      const prefix = schoolSettings?.invoice_prefix || 'INV';
-      const invoiceNumber = `${prefix}-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
-      
       const s = sessions.find(s => s.id === formData.sessionId);
       const early = s?.earlyBirdPrice || course.earlyBirdPrice;
       const std = s?.standardPrice || course.standardPrice || course.price;
-      const finalAmount = (early && early < std) ? early : (std || 0);
+      let baseAmount = (early && early < std) ? early : (std || 0);
+      
+      if (appliedPromo) {
+          if (appliedPromo.discountType === 'fixed') {
+             baseAmount = Math.max(0, baseAmount - appliedPromo.discountValue);
+          } else if (appliedPromo.discountType === 'percentage') {
+             baseAmount = Math.max(0, baseAmount - (baseAmount * (appliedPromo.discountValue / 100)));
+          }
+      }
 
       const payload = {
         courseId: id,
         sessionId: formData.sessionId,
-        invoiceNumber,
         studentId: user?.uid || null,
         studentName: formData.studentName,
         studentEmail: formData.studentEmail,
@@ -125,12 +194,39 @@ export function RegisterCourse() {
         company: formData.company,
         jobTitle: formData.jobTitle,
         remarks: formData.remarks,
+        pax, // Save number of tickets
+        promoCode: appliedPromo?.code || null,
+        promoId: appliedPromo?.id || null,
         status: 'pending',
-        amount: Number(finalAmount),
-        createdAt: serverTimestamp(),
+        amount: Number(baseAmount),
       };
+
+      const existingQ = query(collection(db, 'registrations'), where('studentEmail', '==', formData.studentEmail));
+      const existingSnap = await getDocs(existingQ);
+      const matchedDocs = existingSnap.docs.filter(d => d.data().sessionId === formData.sessionId);
+
+      if (matchedDocs.length > 0) {
+         const existingDoc = matchedDocs[0];
+         const existingData = existingDoc.data();
+         if (existingData.status === 'pending') {
+             await updateDoc(doc(db, 'registrations', existingDoc.id), {
+                 ...payload,
+                 updatedAt: serverTimestamp()
+             });
+             toast.success("Registration updated!");
+             navigate(`/payment-status/${existingDoc.id}`);
+             return;
+         } else {
+             toast.error("You have already registered for this session and the payment is already in progress or completed.");
+             navigate(`/payment-status/${existingDoc.id}`);
+             return;
+         }
+      }
       
-      const docRef = await addDoc(collection(db, 'registrations'), payload);
+      const docRef = await addDoc(collection(db, 'registrations'), {
+        ...payload,
+        createdAt: serverTimestamp(),
+      });
       toast.success("Registration submitted!");
       navigate(`/payment-status/${docRef.id}`);
     } catch(e: any) {
@@ -143,6 +239,22 @@ export function RegisterCourse() {
 
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin" /></div>;
   if (!course) return <div className="text-center py-20">Course not found.</div>;
+
+  let computedAmount = 0;
+  if (course) {
+     const s = sessions.find(s => s.id === formData.sessionId);
+     const early = s?.earlyBirdPrice || course.earlyBirdPrice;
+     const std = s?.standardPrice || course.standardPrice || course.price;
+     let basePrice = (early && early < std) ? early : (std || 0);
+     computedAmount = basePrice;
+     if (appliedPromo) {
+        if (appliedPromo.discountType === 'fixed') {
+           computedAmount = Math.max(0, computedAmount - appliedPromo.discountValue);
+        } else if (appliedPromo.discountType === 'percentage') {
+           computedAmount = Math.max(0, computedAmount - (computedAmount * (appliedPromo.discountValue / 100)));
+        }
+     }
+  }
 
   return (
     <div className="max-w-xl mx-auto space-y-6">
@@ -160,32 +272,78 @@ export function RegisterCourse() {
                 const s = sessions.find(s => s.id === formData.sessionId);
                 const early = s?.earlyBirdPrice || course.earlyBirdPrice;
                 const std = s?.standardPrice || course.standardPrice || course.price;
-                if (early && early < std) {
-                  return <p className="font-bold text-amber-600">${early?.toLocaleString()} <span className="text-sm font-normal text-slate-500 line-through ml-1">${std?.toLocaleString()}</span> <span className="text-sm font-bold uppercase tracking-widest text-amber-600 ml-2 bg-amber-100 px-2 py-0.5 rounded">Early Bird</span></p>;
+                let basePrice = (early && early < std) ? early : (std || 0);
+                
+                let totalAmount = basePrice;
+                let discountAmt = 0;
+
+                if (appliedPromo) {
+                   if (appliedPromo.discountType === 'fixed') {
+                      discountAmt = appliedPromo.discountValue;
+                      totalAmount = Math.max(0, totalAmount - discountAmt);
+                   } else if (appliedPromo.discountType === 'percentage') {
+                      discountAmt = (totalAmount * (appliedPromo.discountValue / 100));
+                      totalAmount = Math.max(0, totalAmount - discountAmt);
+                   }
                 }
-                return <p className="font-bold text-blue-700">${std?.toLocaleString()} <span className="text-sm font-normal text-slate-500">Total Fee</span></p>;
+
+                return (
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-3">
+                       <p className="font-bold text-slate-800">${basePrice.toLocaleString()}</p>
+                       {early && early < std && <span className="text-xs font-bold uppercase tracking-widest text-amber-600 bg-amber-100 px-2 py-0.5 rounded">Early Bird Applied</span>}
+                    </div>
+                    {appliedPromo && (
+                       <p className="font-bold text-emerald-600">-${discountAmt.toLocaleString()} <span className="text-sm font-normal text-emerald-600/80">({appliedPromo.name})</span></p>
+                    )}
+                    {appliedPromo && (
+                       <p className="font-bold text-blue-700 text-2xl border-t border-blue-100 pt-2 mt-1">${totalAmount.toLocaleString()} <span className="text-sm font-normal text-slate-500">Total Fee</span></p>
+                    )}
+                  </div>
+                );
               })()}
             </div>
           </div>
 
+          <div className="mb-6 space-y-3">
+             <label className="text-sm font-medium">Apply Promo Code</label>
+             <div className="flex gap-2">
+                <Input 
+                  value={promoCodeInput} 
+                  onChange={(e) => setPromoCodeInput(e.target.value)} 
+                  disabled={appliedPromo !== null} 
+                  placeholder="EARLYBIRD2026" 
+                  className="bg-white"
+                />
+                {appliedPromo ? (
+                  <Button variant="outline" type="button" onClick={handleRemovePromo} className="text-red-500 hover:text-red-600 hover:bg-red-50">Remove</Button>
+                ) : (
+                  <Button variant="secondary" type="button" onClick={handleApplyPromoCode}>Apply</Button>
+                )}
+             </div>
+             {appliedPromo && <p className="text-sm text-emerald-600 font-medium flex items-center gap-1.5 px-1">Promo applied: {appliedPromo.name}</p>}
+          </div>
+
           <form onSubmit={handleRegister} className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Select Intake / Session <span className="text-red-500">*</span></label>
-              <select 
-                name="sessionId" 
-                required 
-                value={formData.sessionId} 
-                onChange={handleChange}
-                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2"
-              >
-                <option value="" disabled>Select a session</option>
-                {sessions.map(s => (
-                  <option key={s.id} value={s.id}>
-                    {s.sessionName} ({s.startDate} to {s.endDate}) - {s.deliveryMode}
-                  </option>
-                ))}
-              </select>
-              {sessions.length === 0 && <p className="text-xs text-red-500">No active sessions available for this course.</p>}
+            <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Select Intake / Session <span className="text-red-500">*</span></label>
+                <select 
+                  name="sessionId" 
+                  required 
+                  value={formData.sessionId} 
+                  onChange={handleChange}
+                  className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2"
+                >
+                  <option value="" disabled>Select a session</option>
+                  {sessions.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.sessionName} ({s.startDate} to {s.endDate})
+                    </option>
+                  ))}
+                </select>
+                {sessions.length === 0 && <p className="text-xs text-red-500">No active sessions available for this course.</p>}
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

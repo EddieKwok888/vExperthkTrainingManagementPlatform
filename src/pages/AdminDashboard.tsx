@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import { useTranslation } from 'react-i18next';
 import { db, auth } from '../lib/firebase';
@@ -51,6 +51,8 @@ const COMMON_CERTS = [
   'PMP: Project Management', 'AWS Solutions Architect', 'CompTIA Security+'
 ];
 
+import { signInWithEmailAndPassword } from 'firebase/auth';
+
 export function AdminDashboard() {
   const { role, user } = useContext(AuthContext);
   const { t } = useTranslation();
@@ -66,6 +68,7 @@ export function AdminDashboard() {
   const [tutors, setTutors] = useState<any[]>([]);
   const [feedbacks, setFeedbacks] = useState<any[]>([]);
   const [hours, setHours] = useState<any[]>([]);
+  const navigate = useNavigate();
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [certs, setCerts] = useState<TutorCertification[]>([]);
   const [expertise, setExpertise] = useState<TutorExpertise[]>([]);
@@ -154,6 +157,27 @@ export function AdminDashboard() {
     rooms: ''
   });
 
+  // Promotions State
+  const [promotions, setPromotions] = useState<any[]>([]);
+  const [isPromoModalOpen, setIsPromoModalOpen] = useState(false);
+  const [isDeletePromoModalOpen, setIsDeletePromoModalOpen] = useState(false);
+  const [promoToDelete, setPromoToDelete] = useState<any>(null);
+  const [selectedPromo, setSelectedPromo] = useState<any>(null);
+  const [promoForm, setPromoForm] = useState<any>({
+    name: '',
+    code: '',
+    type: 'code',
+    discountType: 'fixed',
+    discountValue: 0,
+    status: 'active',
+    applicableCourseIds: [],
+    bundleCourse1: '',
+    bundleCourse2: '',
+    startDate: '',
+    endDate: '',
+    adminPassword: ''
+  });
+
   // New Course Form
   const [newCourse, setNewCourse] = useState({ 
     courseCode: 'AZ-900T00',
@@ -187,12 +211,12 @@ export function AdminDashboard() {
         }
       };
 
-      const [cSnap, rSnap, sSnap, lSnap, tSnap, fSnap, hSnap, certSnap, auditSnap, schoolSnap, bSnap, tsSnap, uSnap, tCertSnap, tExpSnap, kbSnap, ticketSnap] = await Promise.all([
+      const [cSnap, rSnap, sSnap, lSnap, tSnap, fSnap, hSnap, certSnap, auditSnap, schoolSnap, bSnap, tsSnap, uSnap, tCertSnap, tExpSnap, kbSnap, ticketSnap, promoSnap] = await Promise.all([
         fetchCollection('courses', [orderBy('createdAt', 'desc'), limit(100)]),
         fetchCollection('registrations', [orderBy('createdAt', 'desc'), limit(200)]),
         fetchCollection('course_sessions', [orderBy('createdAt', 'desc'), limit(200)]), 
         fetchCollection('lessons', [orderBy('lessonDate', 'asc'), limit(500)]),
-        fetchCollection('users', [where('role', '==', 'tutor'), limit(50)]),
+        fetchCollection('users', [where('role', 'in', ['tutor', 'tutor_pt']), limit(100)]),
         fetchCollection('feedbacks', [orderBy('createdAt', 'desc'), limit(100)]),
         fetchCollection('teaching_hours', [orderBy('createdAt', 'desc'), limit(100)]),
         fetchCollection('certificates', [limit(100)]),
@@ -204,7 +228,8 @@ export function AdminDashboard() {
         fetchCollection('tutor_certifications', [limit(500)]),
         fetchCollection('tutor_expertise', [limit(500)]),
         fetchCollection('knowledge_base', [limit(500)]),
-        fetchCollection('support_tickets', [limit(500)])
+        fetchCollection('support_tickets', [limit(500)]),
+        fetchCollection('promotions', [orderBy('createdAt', 'desc'), limit(200)])
       ]);
       
       setCourses(cSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -221,6 +246,7 @@ export function AdminDashboard() {
       setAuditLogs(auditSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setBranches(bSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setTutorShifts(tsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setPromotions(promoSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
       const sData = schoolSnap.docs.find(d => d.id === 'school_info')?.data();
       if (sData) setSchoolInfo(sData as any);
@@ -1424,6 +1450,70 @@ export function AdminDashboard() {
     }
   };
 
+  const handleSavePromo = async () => {
+    if (!user?.email) return;
+
+    if (!promoForm.adminPassword) {
+      toast.error("Please enter your admin password to confirm");
+      return;
+    }
+
+    try {
+      // Re-authenticate admin to confirm promotion creation/edit
+      await signInWithEmailAndPassword(auth, user.email, promoForm.adminPassword);
+    } catch (e: any) {
+      toast.error("Invalid password. Promotion not saved.");
+      return;
+    }
+
+    try {
+      let conditions: any = {};
+      if (promoForm.type === 'bundle') {
+          if (!promoForm.bundleCourse1 || !promoForm.bundleCourse2) {
+             toast.error("Please select two courses for the bundle.");
+             return;
+          }
+          conditions.requiredCourseIds = [promoForm.bundleCourse1, promoForm.bundleCourse2];
+      }
+
+      const payload = {
+        name: promoForm.name,
+        code: promoForm.type === 'code' ? promoForm.code.toUpperCase() : null,
+        type: promoForm.type,
+        discountType: 'fixed',
+        discountValue: Number(promoForm.discountValue),
+        status: promoForm.status,
+        applicableCourseIds: promoForm.applicableCourseIds,
+        startDate: promoForm.startDate ? `${promoForm.startDate}T00:00:00` : null,
+        endDate: promoForm.endDate ? `${promoForm.endDate}T23:59:59` : null,
+        conditions,
+        updatedAt: serverTimestamp()
+      };
+
+      if (selectedPromo) {
+        await updateDoc(doc(db, 'promotions', selectedPromo.id), {
+           ...payload,
+           updatedByAdminId: user.uid,
+           updatedByAdminEmail: user.email
+        });
+        toast.success("Promotion updated");
+      } else {
+        await addDoc(collection(db, 'promotions'), { 
+           ...payload, 
+           createdAt: serverTimestamp(), 
+           usageCount: 0,
+           createdByAdminId: user.uid,
+           createdByAdminEmail: user.email 
+        });
+        toast.success("Promotion created");
+      }
+      setIsPromoModalOpen(false);
+      fetchData();
+    } catch(e: any) {
+      toast.error("Failed to save promotion: " + e.message);
+    }
+  };
+
   if (role !== 'admin') return <div className="text-center py-20">Access Denied</div>;
 
   const NavigationMenu = () => (
@@ -1440,6 +1530,7 @@ export function AdminDashboard() {
         { id: 'feedback', label: t('nav.feedback'), icon: MessageSquare },
         { id: 'logs', label: t('nav.logs'), icon: ShieldAlert },
         { id: 'users', label: t('nav.users'), icon: Users },
+        { id: 'promotions', label: 'Promotions', icon: Sparkles },
         { id: 'settings', label: t('nav.settings'), icon: Upload }
       ].map(tab => (
         <button
@@ -2650,7 +2741,13 @@ export function AdminDashboard() {
                       <Plus className="w-3.5 h-3.5" /> Add Course
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => {
-                        const uniqueTutors = Array.from(new Set(hours.filter(h => h.date && h.date.startsWith(ptMonth) && (!instructorSearchTerm || tutors.find(t=>t.id===h.tutorId)?.name?.toLowerCase().includes(instructorSearchTerm.toLowerCase()))).map(h => h.tutorId)));
+                        const uniqueTutors = Array.from(new Set(hours.filter(h => {
+                             if (!h.date || !h.date.startsWith(ptMonth)) return false;
+                             const t = tutors.find(t=>t.id===h.tutorId);
+                             if (t?.role !== 'tutor_pt') return false;
+                             if (instructorSearchTerm && !t?.name?.toLowerCase().includes(instructorSearchTerm.toLowerCase())) return false;
+                             return true;
+                        }).map(h => h.tutorId)));
                         if (uniqueTutors.length === 0) return toast.error('No records found to generate report');
                         uniqueTutors.forEach(tid => {
                            const t = tutors.find(t=>t.id===tid);
@@ -2676,8 +2773,9 @@ export function AdminDashboard() {
                     <TableBody>
                       {hours.filter(h => {
                          if (ptMonth && (!h.date || !h.date.startsWith(ptMonth))) return false;
-                         if (!instructorSearchTerm) return true;
                          const tutor = tutors.find(t => t.id === h.tutorId);
+                         if (tutor?.role !== 'tutor_pt') return false;
+                         if (!instructorSearchTerm) return true;
                          return tutor?.name?.toLowerCase().includes(instructorSearchTerm.toLowerCase());
                       }).map(h => {
                         const tutor = tutors.find(t => t.id === h.tutorId);
@@ -2721,8 +2819,9 @@ export function AdminDashboard() {
                       })}
                       {hours.filter(h => {
                          if (ptMonth && (!h.date || !h.date.startsWith(ptMonth))) return false;
-                         if (!instructorSearchTerm) return true;
                          const tutor = tutors.find(t => t.id === h.tutorId);
+                         if (tutor?.role !== 'tutor_pt') return false;
+                         if (!instructorSearchTerm) return true;
                          return tutor?.name?.toLowerCase().includes(instructorSearchTerm.toLowerCase());
                       }).length === 0 && <TableRow><TableCell colSpan={5} className="text-center py-12 text-slate-400 text-xs italic tracking-wider">No part-time instructor records found matching your criteria.</TableCell></TableRow>}
                     </TableBody>
@@ -3213,10 +3312,10 @@ export function AdminDashboard() {
                             <TableCell>
                               <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                                 u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 
-                                u.role === 'tutor' ? 'bg-blue-100 text-blue-700' : 
+                                u.role === 'tutor' || u.role === 'tutor_pt' ? 'bg-blue-100 text-blue-700' : 
                                 'bg-slate-100 text-slate-600'
                               }`}>
-                                {u.role ? t(`common.${u.role}`) : t('common.student')}
+                                {u.role === 'tutor_pt' ? 'Instructor (Part-Time)' : u.role === 'tutor' ? 'Instructor (Full-Time)' : u.role ? t(`common.${u.role}`) : t('common.student')}
                               </span>
                             </TableCell>
                             <TableCell>
@@ -3241,11 +3340,8 @@ export function AdminDashboard() {
                                 <Button 
                                   variant="ghost" 
                                   size="sm" 
-                                  className="h-8 px-2 text-indigo-600"
-                                  onClick={() => {
-                                    setSelectedUser(u);
-                                    setIsUserViewModalOpen(true);
-                                  }}
+                                  className="h-8 px-2 text-indigo-600 cursor-pointer"
+                                  onClick={() => navigate(`/admin/student/${u.id}`)}
                                 >
                                   <ExternalLink className="w-3.5 h-3.5" />
                                 </Button>
@@ -3330,6 +3426,108 @@ export function AdminDashboard() {
                   </Table>
                </CardContent>
              </Card>
+          )}
+
+          {activeTab === 'promotions' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-xl font-bold flex items-center gap-2"><Sparkles className="w-6 h-6 text-indigo-500"/> Promotions & Discounts</h3>
+                <Button onClick={() => {
+                  setSelectedPromo(null);
+                  setPromoForm({ name: '', code: '', type: 'code', discountType: 'fixed', discountValue: 0, status: 'active', applicableCourseIds: [], bundleCourse1: '', bundleCourse2: '', startDate: '', endDate: '', adminPassword: '' });
+                  setIsPromoModalOpen(true);
+                }} className="bg-indigo-600 hover:bg-indigo-700">
+                  <Plus className="w-4 h-4 mr-2" /> Add Promotion
+                </Button>
+              </div>
+              
+              <Card>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead>Promotion Name</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Code / Conditions</TableHead>
+                        <TableHead>Discount Value</TableHead>
+                        <TableHead>Validity Period</TableHead>
+                        <TableHead>Usage Count</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {promotions.map((p) => (
+                        <TableRow key={p.id}>
+                          <TableCell className="font-medium">{p.name}</TableCell>
+                          <TableCell className="capitalize">{p.type}</TableCell>
+                          <TableCell>
+                            {p.type === 'code' ? (
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-mono bg-slate-100 text-slate-700">{p.code}</span>
+                            ) : p.type === 'bundle' ? (
+                                <span className="text-sm text-slate-600">Bundle (2 courses)</span>
+                            ) : '-'}
+                          </TableCell>
+                          <TableCell>
+                             {p.discountType === 'percentage' ? `${p.discountValue}%` : `HKD ${p.discountValue}`}
+                          </TableCell>
+                          <TableCell className="text-xs text-slate-600">
+                             {p.startDate ? format(new Date(p.startDate), 'yyyy-MM-dd HH:mm') : 'Any time'} - {p.endDate ? format(new Date(p.endDate), 'yyyy-MM-dd HH:mm') : 'No expiry'}
+                          </TableCell>
+                          <TableCell>{p.usageCount || 0}</TableCell>
+                          <TableCell>
+                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${p.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-700'}`}>{p.status}</span>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                className="text-indigo-600 hover:text-indigo-900"
+                                onClick={() => {
+                                   let b1 = '';
+                                   let b2 = '';
+                                   if (p.type === 'bundle' && p.conditions?.requiredCourseIds) {
+                                       b1 = p.conditions.requiredCourseIds[0] || '';
+                                       b2 = p.conditions.requiredCourseIds[1] || '';
+                                   }
+                                   setSelectedPromo(p);
+                                   setPromoForm({ 
+                                     ...p, 
+                                     startDate: p.startDate ? p.startDate.split('T')[0] : '',
+                                     endDate: p.endDate ? p.endDate.split('T')[0] : '',
+                                     bundleCourse1: b1, 
+                                     bundleCourse2: b2, 
+                                     adminPassword: '' 
+                                   });
+                                   setIsPromoModalOpen(true);
+                                }}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-red-600 hover:text-red-900 hover:bg-red-50"
+                                onClick={() => {
+                                  setPromoToDelete(p);
+                                  setIsDeletePromoModalOpen(true);
+                                }}
+                              >
+                                Delete
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {promotions.length === 0 && (
+                        <TableRow><TableCell colSpan={7} className="text-center h-24 text-slate-500">No promotions configured.</TableCell></TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </div>
           )}
 
           {activeTab === 'settings' && (
@@ -3480,7 +3678,8 @@ export function AdminDashboard() {
                   onChange={e => setUserForm({...userForm, role: e.target.value as UserRole})}
                 >
                   <option value="student">Student</option>
-                  <option value="tutor">Instructor</option>
+                  <option value="tutor">Instructor (Full-Time)</option>
+                  <option value="tutor_pt">Instructor (Part-Time)</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>
@@ -3538,10 +3737,10 @@ export function AdminDashboard() {
                     <div className="flex items-center gap-2 mt-1">
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                         selectedUser.role === 'admin' ? 'bg-purple-100 text-purple-700' : 
-                        selectedUser.role === 'tutor' ? 'bg-blue-100 text-blue-700' : 
+                        selectedUser.role === 'tutor' || selectedUser.role === 'tutor_pt' ? 'bg-blue-100 text-blue-700' : 
                         'bg-slate-100 text-slate-600'
                       }`}>
-                        {selectedUser.role}
+                        {selectedUser.role === 'tutor_pt' ? 'Instructor (Part-Time)' : selectedUser.role === 'tutor' ? 'Instructor (Full-Time)' : selectedUser.role}
                       </span>
                       <span className={`flex items-center gap-1 text-[10px] font-bold uppercase ${
                         selectedUser.status === 'active' ? 'text-green-600' : 'text-slate-400'
@@ -3590,7 +3789,7 @@ export function AdminDashboard() {
                 </div>
 
                 <div className="md:col-span-2">
-                  {selectedUser.role === 'tutor' ? (
+                  {['tutor','tutor_pt'].includes(selectedUser.role || '') ? (
                     <div className="space-y-6">
                        <h3 className="text-lg font-bold flex items-center gap-2">
                          <GraduationCap className="w-5 h-5 text-indigo-600" /> Instructor Profile
@@ -4846,7 +5045,7 @@ export function AdminDashboard() {
                   required
                 >
                   <option value="">-- Select Instructor --</option>
-                  {tutors.map(t => (
+                  {tutors.filter(t => t.role === 'tutor_pt').map(t => (
                     <option key={t.id} value={t.id}>{t.name || t.email}</option>
                   ))}
                 </select>
@@ -4889,6 +5088,133 @@ export function AdminDashboard() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isPromoModalOpen} onOpenChange={setIsPromoModalOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{selectedPromo ? 'Edit Promotion' : 'Add Promotion'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+               <label className="text-sm font-medium">Promotion Name</label>
+               <Input value={promoForm.name || ''} onChange={e => setPromoForm({...promoForm, name: e.target.value})} placeholder="e.g. Early Bird 2026" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+               <div className="space-y-2">
+                  <label className="text-sm font-medium">Type</label>
+                  <select className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2" value={promoForm.type} onChange={e => setPromoForm({...promoForm, type: e.target.value})}>
+                     <option value="code">Promo Code</option>
+                     <option value="bundle">Course Bundle Automatic (Require 2 Courses)</option>
+                  </select>
+               </div>
+               <div className="space-y-2">
+                  <label className="text-sm font-medium">Status</label>
+                  <select className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2" value={promoForm.status} onChange={e => setPromoForm({...promoForm, status: e.target.value})}>
+                     <option value="active">Active</option>
+                     <option value="inactive">Inactive</option>
+                  </select>
+               </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+               <div className="space-y-2">
+                  <label className="text-sm font-medium">Start Date (Optional)</label>
+                  <Input type="date" value={promoForm.startDate || ''} onChange={e => setPromoForm({...promoForm, startDate: e.target.value})} />
+               </div>
+               <div className="space-y-2">
+                  <label className="text-sm font-medium">End Date (Optional)</label>
+                  <Input type="date" value={promoForm.endDate || ''} onChange={e => setPromoForm({...promoForm, endDate: e.target.value})} />
+               </div>
+            </div>
+
+            {promoForm.type === 'code' && (
+               <div className="space-y-2">
+                  <label className="text-sm font-medium">Promo Code</label>
+                  <div className="flex gap-2">
+                    <Input value={promoForm.code || ''} onChange={e => setPromoForm({...promoForm, code: e.target.value.toUpperCase()})} placeholder="e.g. EARLY26" className="uppercase font-mono flex-1" />
+                    <Button type="button" variant="outline" onClick={() => {
+                        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+                        let result = '';
+                        for (let i = 0; i < 6; i++) {
+                            result += chars.charAt(Math.floor(Math.random() * chars.length));
+                        }
+                        setPromoForm({ ...promoForm, code: result });
+                    }}>Generate</Button>
+                  </div>
+               </div>
+            )}
+            {promoForm.type === 'bundle' && (
+               <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                     <label className="text-sm font-medium">Bundle Course 1</label>
+                     <select className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2" value={promoForm.bundleCourse1} onChange={e => setPromoForm({...promoForm, bundleCourse1: e.target.value})}>
+                        <option value="">Select Course</option>
+                        {courses.map(c => <option key={c.id} value={c.id}>{c.courseCode} - {c.title}</option>)}
+                     </select>
+                  </div>
+                  <div className="space-y-2">
+                     <label className="text-sm font-medium">Bundle Course 2</label>
+                     <select className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2" value={promoForm.bundleCourse2} onChange={e => setPromoForm({...promoForm, bundleCourse2: e.target.value})}>
+                        <option value="">Select Course</option>
+                        {courses.map(c => <option key={c.id} value={c.id}>{c.courseCode} - {c.title}</option>)}
+                     </select>
+                  </div>
+                  <p className="text-xs text-slate-500 col-span-2">System will check if the registering student is taking one course and has the other in their registration history, or both together if cart allows.</p>
+               </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+               <div className="space-y-2">
+                  <label className="text-sm font-medium">Discount Type</label>
+                  <Input value="Fixed Amount (HKD)" disabled className="bg-slate-50 text-slate-500 cursor-not-allowed" />
+               </div>
+               <div className="space-y-2">
+                  <label className="text-sm font-medium">Discount Amount (HKD)</label>
+                  <Input type="number" min="0" value={promoForm.discountValue} onChange={e => setPromoForm({...promoForm, discountValue: Number(e.target.value)})} />
+               </div>
+            </div>
+
+            <div className="space-y-2 border-t pt-4 border-slate-100 mt-2">
+               <label className="text-sm font-medium flex items-center gap-2"><KeyRound className="w-4 h-4 text-slate-400" /> Admin Password Confirm <span className="text-red-500">*</span></label>
+               <Input type="password" placeholder="Enter your password to save changes" value={promoForm.adminPassword || ''} onChange={e => setPromoForm({...promoForm, adminPassword: e.target.value})} />
+            </div>
+          </div>
+          <DialogFooter>
+             <Button variant="outline" onClick={() => setIsPromoModalOpen(false)}>Cancel</Button>
+             <Button onClick={handleSavePromo}>Save Promotion</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Promo Modal */}
+      <Dialog open={isDeletePromoModalOpen} onOpenChange={setIsDeletePromoModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Delete Promotion</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+             <p className="text-sm text-slate-600">Are you sure you want to delete the promotion "{promoToDelete?.name}"? This action cannot be undone.</p>
+          </div>
+          <DialogFooter>
+             <Button variant="outline" onClick={() => setIsDeletePromoModalOpen(false)}>Cancel</Button>
+             <Button 
+                variant="destructive" 
+                className="bg-red-600 hover:bg-red-700 text-white"
+                onClick={async () => {
+                   if (!promoToDelete) return;
+                   try {
+                     await deleteDoc(doc(db, 'promotions', promoToDelete.id));
+                     toast.success('Promotion deleted successfully');
+                     setIsDeletePromoModalOpen(false);
+                     fetchData();
+                   } catch (e) {
+                     toast.error('Failed to delete promotion');
+                   }
+                }}
+             >Delete</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -57,8 +57,8 @@ export function CourseDetail() {
         const sessionDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
         if (sessionDocs.length > 0) {
-           const regSnap = await getDocs(query(collection(db, 'registrations'), where('courseId', '==', id), where('status', '==', 'verified')));
-           const regs = regSnap.docs.map(d => d.data());
+           const regSnap = await getDocs(query(collection(db, 'registrations'), where('courseId', '==', id)));
+           const regs = regSnap.docs.map(d => d.data()).filter((r: any) => r.status === 'verified');
            
            sessionDocs.forEach((s: any) => {
               s.enrolledCount = regs.filter(r => r.sessionId === s.id).length;

@@ -33,6 +33,7 @@ import { InstructorDashboard } from './pages/InstructorDashboard';
 import { MyCourses } from './pages/MyCourses';
 import { FeedbackForm } from './pages/FeedbackForm';
 import { ChatBot } from './components/ChatBot';
+import { StudentProfile } from './pages/StudentProfile';
 
 // Context for Auth
 interface AuthContextType {
@@ -323,7 +324,12 @@ function Layout() {
                 <div className="flex bg-slate-100 p-1 rounded-md text-xs font-medium">
                   {role === 'admin' && <Link to="/admin" className="px-3 py-1 bg-white shadow-sm rounded text-blue-600 border border-slate-200">{t('common.admin')}</Link>}
                   {role === 'tutor' && <Link to="/instructor" className="px-3 py-1 bg-white shadow-sm rounded text-blue-600 border border-slate-200">{t('common.tutor')}</Link>}
-                  {role === 'student' && <Link to="/student/registrations" className="px-3 py-1 bg-white shadow-sm rounded text-blue-600 border border-slate-200">{t('common.my_courses')}</Link>}
+                  {role === 'student' && (
+                    <>
+                      <Link to="/student/registrations" className="px-3 py-1 hover:bg-white hover:shadow-sm rounded text-slate-600 hover:text-blue-600 transition-all">{t('common.my_courses')}</Link>
+                      <Link to="/student/profile" className="px-3 py-1 bg-white shadow-sm rounded text-blue-600 border border-slate-200">Student Portal</Link>
+                    </>
+                  )}
                 </div>
                 <div className="h-8 w-px bg-slate-200 mx-1"></div>
                 <div className="flex items-center gap-3">
@@ -385,8 +391,10 @@ export default function App() {
             <Route path="register/:id" element={<RegisterCourse />} />
             <Route path="payment-status/:id" element={<PaymentStatus />} />
             <Route path="admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
+            <Route path="admin/student/:id" element={<ProtectedRoute allowedRoles={['admin']}><StudentProfile /></ProtectedRoute>} />
             <Route path="instructor" element={<ProtectedRoute allowedRoles={['admin', 'tutor']}><InstructorDashboard /></ProtectedRoute>} />
             <Route path="student/registrations" element={<ProtectedRoute allowedRoles={['admin', 'student']}><MyCourses /></ProtectedRoute>} />
+            <Route path="student/profile" element={<ProtectedRoute allowedRoles={['student']}><StudentProfile /></ProtectedRoute>} />
             <Route path="feedback/:id" element={<ProtectedRoute allowedRoles={['admin', 'tutor', 'student']}><FeedbackForm /></ProtectedRoute>} />
           </Route>
         </Routes>

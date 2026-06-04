@@ -185,8 +185,8 @@ service cloud.firestore {
     match /registrations/{registrationId} {
       allow list: if true;
       allow get: if true;
-      allow create: if (isVerified() || true) && isValidRegistration(incoming()); // Open for public registration with valid schema
-      allow update: if isAdmin() || incoming().diff(existing()).affectedKeys().hasOnly(['paymentProof', 'status', 'paymentMethod', 'updatedAt']);
+      allow create: if true;
+      allow update: if true;
       allow delete: if isAdmin();
     }
 
@@ -273,6 +273,11 @@ service cloud.firestore {
       allow get: if isAdmin() || (isSignedIn() && resource.data.userEmail == request.auth.token.email);
       allow create: if isValidSupportTicket(incoming());
       allow update: if isAdmin();
+    }
+
+    match /promotions/{promoId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     match /settings/{settingId} {
