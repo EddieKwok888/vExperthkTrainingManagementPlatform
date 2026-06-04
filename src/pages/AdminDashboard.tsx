@@ -9,10 +9,11 @@ import { AuthContext } from '../App';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
-import { Loader2, Plus, Database, ExternalLink, LayoutDashboard, BookOpen, Calendar as CalendarIcon, Users, CreditCard, Clock, MessageSquare, CheckCircle, XCircle, Download, FileText, Upload, GraduationCap, BarChart2, ShieldAlert, Building2, MapPin, CalendarRange, Share2, ArrowLeftRight, ClipboardList, Search, UserPlus, Mail, Phone, Award, ShieldCheck, Briefcase, KeyRound, Copy, Edit2, Trash2, ChevronLeft, Sparkles } from 'lucide-react';
+import { MonitorPlay, Loader2, Plus, Database, ExternalLink, LayoutDashboard, BookOpen, Calendar as CalendarIcon, Users, CreditCard, Clock, MessageSquare, CheckCircle, XCircle, Download, FileText, Upload, GraduationCap, BarChart2, BarChart3, TrendingUp, ShieldAlert, Building2, MapPin, CalendarRange, Share2, ArrowLeftRight, ClipboardList, Search, UserPlus, Mail, Phone, Award, ShieldCheck, Briefcase, KeyRound, Copy, Edit2, Trash2, ChevronLeft, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { jsPDF } from 'jspdf';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
@@ -57,6 +58,9 @@ export function AdminDashboard() {
   
   const [courses, setCourses] = useState<any[]>([]);
   const [regs, setRegs] = useState<any[]>([]);
+  const [editingReg, setEditingReg] = useState<any>(null);
+  const [isEditRegOpen, setIsEditRegOpen] = useState(false);
+  const [regSearchTerm, setRegSearchTerm] = useState('');
   const [sessions, setSessions] = useState<any[]>([]);
   const [lessons, setLessons] = useState<any[]>([]);
   const [tutors, setTutors] = useState<any[]>([]);
@@ -65,7 +69,6 @@ export function AdminDashboard() {
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [certs, setCerts] = useState<TutorCertification[]>([]);
   const [expertise, setExpertise] = useState<TutorExpertise[]>([]);
-  const [materials, setMaterials] = useState<any[]>([]);
   const [certificates, setCertificates] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [branches, setBranches] = useState<any[]>([]);
@@ -75,6 +78,14 @@ export function AdminDashboard() {
   const [seeding, setSeeding] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   
+  const [isManualHoursModalOpen, setIsManualHoursModalOpen] = useState(false);
+  const [manualHoursForm, setManualHoursForm] = useState({
+    tutorId: '',
+    date: new Date().toISOString().split('T')[0],
+    course: ''
+  });
+  const [isSubmittingManualHours, setIsSubmittingManualHours] = useState(false);
+
   const [sessionModalOpen, setSessionModalOpen] = useState(false);
   const [isCoursePopoverOpen, setIsCoursePopoverOpen] = useState(false);
   const [isTutorPopoverOpen, setIsTutorPopoverOpen] = useState(false);
@@ -87,6 +98,11 @@ export function AdminDashboard() {
   const [viewingLessonsForSession, setViewingLessonsForSession] = useState<any>(null);
   const [sessionEnrollees, setSessionEnrollees] = useState<any[]>([]);
   const [attendanceData, setAttendanceData] = useState<Record<string, string>>({});
+  const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
+  const [isSessionAttendanceModalOpen, setIsSessionAttendanceModalOpen] = useState(false);
+  const [selectedSessionForAttendance, setSelectedSessionForAttendance] = useState<any>(null);
+  const [selectedLessonForAttendance, setSelectedLessonForAttendance] = useState<any>(null);
+  const [submittingAttendance, setSubmittingAttendance] = useState(false);
   
   // User Management Modals
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
@@ -98,6 +114,22 @@ export function AdminDashboard() {
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [courseSearchTerm, setCourseSearchTerm] = useState('');
+  const [instructorSearchTerm, setInstructorSearchTerm] = useState('');
+  const [certSearchTerm, setCertSearchTerm] = useState('');
+  const [certDateTerm, setCertDateTerm] = useState('');
+  const [courseRunSearchTerm, setCourseRunSearchTerm] = useState('');
+  const [courseRunsActiveTab, setCourseRunsActiveTab] = useState<'runs' | 'attendance'>('runs');
+  const [scheduleTab, setScheduleTab] = useState<'trainer-daily' | 'trainer-monthly' | 'room-daily' | 'room-monthly' | 'tech-daily'>('trainer-daily');
+  const [scheduleDate, setScheduleDate] = useState(new Date().toISOString().split('T')[0]);
+  const [scheduleInstructorFilter, setScheduleInstructorFilter] = useState('');
+  const [scheduleRoomFilter, setScheduleRoomFilter] = useState('');
+  const [scheduleMonth, setScheduleMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [mtmYear, setMtmYear] = useState(new Date().getFullYear().toString());
+  const [ptMonth, setPtMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [isCertModalOpen, setIsCertModalOpen] = useState(false);
+  const [selectedSessionCert, setSelectedSessionCert] = useState<any>(null);
+  const [sessionStudentsData, setSessionStudentsData] = useState<any[]>([]);
+  const [isCertLoading, setIsCertLoading] = useState(false);
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortConfig, setSortConfig] = useState<{ key: keyof User; direction: 'asc' | 'desc' }>({ key: 'name', direction: 'asc' });
@@ -112,12 +144,14 @@ export function AdminDashboard() {
      endTime: '18:00'
   });
   const [schoolInfo, setSchoolInfo] = useState({
-    name: 'ProTrain Academy',
+    name: 'Training Academy',
     logo_url: '',
     address: '123 Tech Avenue, Kowloon, Hong Kong',
     phone: '+852 2345 6789',
+    email: 'sales@example.com',
     invoice_prefix: 'INV',
-    terms_conditions: '1. Fees are non-refundable.\n2. Please present this receipt for course entry.'
+    terms_conditions: '1. Fees are non-refundable.\n2. Please present this receipt for course entry.',
+    rooms: ''
   });
 
   // New Course Form
@@ -153,7 +187,7 @@ export function AdminDashboard() {
         }
       };
 
-      const [cSnap, rSnap, sSnap, lSnap, tSnap, fSnap, hSnap, mSnap, certSnap, auditSnap, schoolSnap, bSnap, tsSnap, uSnap, tCertSnap, tExpSnap, kbSnap, ticketSnap] = await Promise.all([
+      const [cSnap, rSnap, sSnap, lSnap, tSnap, fSnap, hSnap, certSnap, auditSnap, schoolSnap, bSnap, tsSnap, uSnap, tCertSnap, tExpSnap, kbSnap, ticketSnap] = await Promise.all([
         fetchCollection('courses', [orderBy('createdAt', 'desc'), limit(100)]),
         fetchCollection('registrations', [orderBy('createdAt', 'desc'), limit(200)]),
         fetchCollection('course_sessions', [orderBy('createdAt', 'desc'), limit(200)]), 
@@ -161,7 +195,6 @@ export function AdminDashboard() {
         fetchCollection('users', [where('role', '==', 'tutor'), limit(50)]),
         fetchCollection('feedbacks', [orderBy('createdAt', 'desc'), limit(100)]),
         fetchCollection('teaching_hours', [orderBy('createdAt', 'desc'), limit(100)]),
-        fetchCollection('materials', [limit(100)]),
         fetchCollection('certificates', [limit(100)]),
         fetchCollection('audit_logs', [orderBy('createdAt', 'desc'), limit(100)]),
         fetchCollection('settings', [limit(1)]),
@@ -184,7 +217,6 @@ export function AdminDashboard() {
       setAllUsers(uSnap.docs.map(d => ({ id: d.id, ...d.data() } as User)));
       setCerts(tCertSnap.docs.map(d => ({ id: d.id, ...d.data() } as TutorCertification)));
       setExpertise(tExpSnap.docs.map(d => ({ id: d.id, ...d.data() } as TutorExpertise)));
-      setMaterials(mSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setCertificates(certSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setAuditLogs(auditSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setBranches(bSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -214,7 +246,8 @@ export function AdminDashboard() {
     classroom: '',
     meetingLink: '',
     deliveryMode: 'onsite',
-    price: 0,
+    earlyBirdPrice: 0,
+    standardPrice: 0,
     registrationOpen: true
   });
 
@@ -228,6 +261,22 @@ export function AdminDashboard() {
 
   const handleCreateSession = async () => {
     if (!newSession.courseId) return toast.error("Missing required fields");
+
+    if (newSession.tutorId && newSession.startDate && newSession.endDate) {
+      const hasOverlap = sessions.some((s: any) => 
+        s.tutorId === newSession.tutorId && 
+        s.startDate && s.endDate &&
+        s.startDate <= newSession.endDate && 
+        s.endDate >= newSession.startDate &&
+        s.sessionStatus !== 'cancelled'
+      );
+
+      if (hasOverlap) {
+        toast.error(<span className="font-bold text-red-600">This instructor is already assigned to an overlapping course intake! Please choose another instructor or different dates.</span>);
+        return;
+      }
+    }
+
     try {
       const template = courses.find(c => c.id === newSession.courseId);
       const sessionData = {
@@ -235,7 +284,9 @@ export function AdminDashboard() {
         sessionName: `${template?.title || 'Course'} - ${newSession.startDate || 'Intake'}`,
         enrolledCount: 0,
         sessionStatus: 'open',
-        price: newSession.price || template?.standardPrice || 0,
+        earlyBirdPrice: newSession.earlyBirdPrice || template?.earlyBirdPrice || 0,
+        standardPrice: newSession.standardPrice || template?.standardPrice || 0,
+        price: newSession.standardPrice || template?.standardPrice || 0, // Fallback
         createdAt: serverTimestamp()
       };
       const sessionRef = doc(collection(db, 'course_sessions'));
@@ -253,7 +304,8 @@ export function AdminDashboard() {
         classroom: '',
         meetingLink: '',
         deliveryMode: 'onsite',
-        price: 0,
+        earlyBirdPrice: 0,
+        standardPrice: 0,
         registrationOpen: true
       });
       fetchData();
@@ -304,6 +356,44 @@ export function AdminDashboard() {
   const handleUpdateSession = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSession) return;
+
+    if ((selectedSession.sessionStatus === 'full' || selectedSession.sessionStatus === 'completed') && selectedSession.deliveryMode !== 'online' && !selectedSession.room) {
+      toast.error(<span className="font-bold text-red-600">Please choose a room for {selectedSession.sessionStatus} courses.</span>);
+      return;
+    }
+
+    if (selectedSession.deliveryMode !== 'online' && selectedSession.room && selectedSession.startDate && selectedSession.endDate) {
+      const roomOverlap = sessions.some((s: any) => 
+        s.id !== selectedSession.id &&
+        s.room === selectedSession.room && 
+        s.startDate && s.endDate &&
+        s.startDate <= selectedSession.endDate && 
+        s.endDate >= selectedSession.startDate &&
+        s.sessionStatus !== 'cancelled'
+      );
+
+      if (roomOverlap) {
+        toast.error(<span className="font-bold text-red-600">The selected room is already booked for overlapping dates! Please choose another room or different dates.</span>);
+        return;
+      }
+    }
+
+    if (selectedSession.tutorId && selectedSession.startDate && selectedSession.endDate) {
+      const hasOverlap = sessions.some((s: any) => 
+        s.id !== selectedSession.id &&
+        s.tutorId === selectedSession.tutorId && 
+        s.startDate && s.endDate &&
+        s.startDate <= selectedSession.endDate && 
+        s.endDate >= selectedSession.startDate &&
+        s.sessionStatus !== 'cancelled'
+      );
+
+      if (hasOverlap) {
+        toast.error(<span className="font-bold text-red-600">This instructor is already assigned to an overlapping course intake! Please choose another instructor or different dates.</span>);
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       const { id, createdAt, ...updates } = selectedSession;
@@ -344,7 +434,7 @@ export function AdminDashboard() {
     }
   };
 
-  const [itemToDelete, setItemToDelete] = useState<{id: string, type: 'course' | 'session'} | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<{id: string, type: 'course' | 'session' | 'registration' | 'lesson', name: string} | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const handleDelete = async () => {
@@ -356,7 +446,7 @@ export function AdminDashboard() {
         await deleteDoc(doc(db, 'courses', itemToDelete.id));
         await logAudit(user?.uid || 'system', user?.email || 'system', 'DELETE_COURSE_TEMPLATE', 'courses', itemToDelete.id, {});
         toast.success("Course template deleted successfully");
-      } else {
+      } else if (itemToDelete.type === 'session') {
         const batch = writeBatch(db);
         batch.delete(doc(db, 'course_sessions', itemToDelete.id));
         lessons.filter(l => l.sessionId === itemToDelete.id).forEach(l => {
@@ -365,6 +455,13 @@ export function AdminDashboard() {
         await batch.commit();
         await logAudit(user?.uid || 'system', user?.email || 'system', 'DELETE_SESSION', 'course_sessions', itemToDelete.id, {});
         toast.success("Course session deleted");
+      } else if (itemToDelete.type === 'registration') {
+        await deleteDoc(doc(db, 'registrations', itemToDelete.id));
+        await logAudit(user?.uid || 'system', user?.email || 'system', 'DELETE_REGISTRATION', 'registrations', itemToDelete.id, {});
+        toast.success('Record deleted successfully');
+      } else if (itemToDelete.type === 'lesson') {
+        await deleteDoc(doc(db, 'lessons', itemToDelete.id));
+        toast.success("Lesson deleted successfully");
       }
       setDeleteConfirmOpen(false);
       setItemToDelete(null);
@@ -376,8 +473,8 @@ export function AdminDashboard() {
     }
   };
 
-  const confirmDelete = (id: string, type: 'course' | 'session') => {
-    setItemToDelete({ id, type });
+  const confirmDelete = (id: string, type: 'course' | 'session' | 'registration' | 'lesson', name: string) => {
+    setItemToDelete({ id, type, name });
     setDeleteConfirmOpen(true);
   };
 
@@ -461,9 +558,34 @@ export function AdminDashboard() {
 
   const handleUpdateRegStatus = async (id: string, status: string) => {
     try {
-      await updateDoc(doc(db, 'registrations', id), { status, updatedAt: serverTimestamp() });
+      await updateDoc(doc(db, 'registrations', id), { 
+        status, 
+        updatedAt: serverTimestamp(),
+        updatedBy: user?.email || 'system'
+      });
       await logAudit(user?.uid || 'system', user?.email || 'system', 'UPDATE_REGISTRATION_STATUS', 'registrations', id, { status });
       toast.success(`Registration ${status}!`);
+      fetchData();
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  };
+
+  const handleDeleteRegistration = async (id: string) => {
+    // Deprecated, use confirmDelete directly
+  };
+
+  const handleUpdateRegistration = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const { id, ...data } = editingReg;
+      await updateDoc(doc(db, 'registrations', id), {
+        ...data,
+        updatedAt: serverTimestamp(),
+        updatedBy: user?.email || 'system'
+      });
+      setIsEditRegOpen(false);
+      toast.success('Registration updated');
       fetchData();
     } catch (e: any) {
       toast.error(e.message);
@@ -489,6 +611,43 @@ export function AdminDashboard() {
       fetchData();
     } catch (e: any) {
       toast.error(e.message);
+    }
+  };
+
+  const handleManualHoursSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualHoursForm.tutorId) return toast.error("Please select an instructor");
+    
+    setIsSubmittingManualHours(true);
+    try {
+      const selectedTutor = tutors.find(t => t.id === manualHoursForm.tutorId);
+
+      await addDoc(collection(db, 'teaching_hours'), {
+        tutorId: manualHoursForm.tutorId,
+        tutorName: selectedTutor?.name || selectedTutor?.email || 'Unknown',
+        date: manualHoursForm.date,
+        course: manualHoursForm.course,
+        hours: 0,
+        notes: manualHoursForm.course || '',
+        status: 'pending',
+        isManual: true,
+        createdAt: serverTimestamp()
+      });
+      
+      await logAudit(user?.uid || 'system', user?.email || 'system', 'ADD_MANUAL_TEACHING_HOURS', 'teaching_hours', '', { tutorId: manualHoursForm.tutorId, hours: 0 });
+      
+      toast.success("Teaching record added manually");
+      setManualHoursForm({
+        tutorId: '',
+        date: new Date().toISOString().split('T')[0],
+        course: ''
+      });
+      setIsManualHoursModalOpen(false);
+      fetchData();
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setIsSubmittingManualHours(false);
     }
   };
 
@@ -580,11 +739,70 @@ export function AdminDashboard() {
     }));
   };
 
+  const handleOpenAttendanceModal = async (lesson: any) => {
+    setSelectedLessonForAttendance(lesson);
+    setIsAttendanceModalOpen(true);
+    
+    try {
+      const attendanceSnap = await getDocs(query(collection(db, 'attendance'), where('lessonId', '==', lesson.id)));
+      const existingAttendance: Record<string, string> = {};
+      attendanceSnap.docs.forEach(d => {
+        existingAttendance[d.data().studentId] = d.data().status;
+      });
+      const enrolled = regs.filter(r => r.sessionId === lesson.sessionId && r.status === 'verified');
+      
+      const mergedData: Record<string, string> = {};
+      enrolled.forEach((s: any) => {
+        mergedData[s.studentId] = existingAttendance[s.studentId] || 'present';
+      });
+      setAttendanceData(mergedData);
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  };
+
+  const handleSaveAttendanceAdmin = async () => {
+    if (!selectedLessonForAttendance) return;
+    setSubmittingAttendance(true);
+    try {
+      const batch = writeBatch(db);
+      for (const studentId of Object.keys(attendanceData)) {
+        const attendanceId = `${selectedLessonForAttendance.id}_${studentId}`;
+        const attRef = doc(db, 'attendance', attendanceId);
+        batch.set(attRef, {
+          lessonId: selectedLessonForAttendance.id,
+          sessionId: selectedLessonForAttendance.sessionId,
+          studentId: studentId,
+          status: attendanceData[studentId],
+          recordedAt: serverTimestamp(),
+          recordedBy: user?.uid || 'admin'
+        });
+      }
+      await batch.commit();
+      
+      await logAudit(user?.uid || 'admin', user?.email || '', 'ADMIN_MARK_ATTENDANCE', 'attendance', selectedLessonForAttendance.id, { students: Object.keys(attendanceData).length });
+      
+      toast.success("Attendance saved successfully");
+      setIsAttendanceModalOpen(false);
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setSubmittingAttendance(false);
+    }
+  };
+
   const handleExportAttendanceSheet = (session: any, course: any, enrolledStudents: any[]) => {
     const doc = new jsPDF();
     const date = formatHkDate(new Date());
     
     // Header
+    if (schoolInfo.logo_url && schoolInfo.logo_url.startsWith('data:image')) {
+      try {
+        doc.addImage(schoolInfo.logo_url, 'PNG', 20, 10, 15, 15);
+      } catch (e) {
+        // Fallback
+      }
+    }
     doc.setFontSize(22);
     doc.setTextColor(30, 41, 59);
     doc.text('CLASS ATTENDANCE SHEET', 105, 20, { align: 'center' });
@@ -599,45 +817,65 @@ export function AdminDashboard() {
     doc.rect(20, 35, 170, 30, 'F');
     doc.rect(20, 35, 170, 30);
     
+    const sessionLessons = lessons.filter(l => l.sessionId === session.id);
+    const displayStartTime = sessionLessons.length > 0 && sessionLessons[0].startTime ? sessionLessons[0].startTime : (session.startTime || 'N/A');
+    const displayEndTime = sessionLessons.length > 0 && sessionLessons[0].endTime ? sessionLessons[0].endTime : (session.endTime || 'N/A');
+    const timeDisplay = `${displayStartTime} - ${displayEndTime}`;
+    
+    const instructor = tutors.find(t => t.id === session.tutorId) || tutors.find(t => t.id === course?.tutorId);
+    
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(30, 41, 59);
     doc.text(`Course: ${course?.title || 'Unknown'}`, 25, 45);
     doc.text(`Session Date: ${session.startDate}`, 25, 52);
-    doc.text(`Time: ${session.startTime} - ${session.endTime}`, 25, 59);
     
-    doc.text(`Instructor: ${tutors.find(t => t.id === course?.tutorId)?.name || 'N/A'}`, 120, 45);
-    doc.text(`Room/Mode: ${session.deliveryMode}`, 120, 52);
+    doc.text(`Instructor: ${instructor?.name || 'N/A'}`, 120, 45);
+    doc.text(`Room/Mode: ${session.deliveryMode || session.classroom || 'N/A'}`, 120, 52);
     
     // Table Header
     const tableTop = 75;
     doc.setFillColor(241, 245, 249);
     doc.rect(20, tableTop, 170, 10, 'F');
     doc.rect(20, tableTop, 170, 10);
+    doc.line(85, tableTop, 85, tableTop + 10);
+    doc.line(135, tableTop, 135, tableTop + 10);
     
     doc.setFontSize(10);
     doc.text('Student Name', 25, tableTop + 6.5);
-    doc.text('Email', 85, tableTop + 6.5);
-    doc.text('Signature / Status', 150, tableTop + 6.5);
+    doc.text('Signature (Morning)', 90, tableTop + 6.5);
+    doc.text('Signature (Afternoon)', 140, tableTop + 6.5);
     
     // Table Rows
-    enrolledStudents.forEach((student, index) => {
-      const y = tableTop + 10 + (index * 12);
-      if (y > 270) {
+    let currentY = tableTop + 10;
+    enrolledStudents.forEach((student) => {
+      const rowHeight = 16;
+      if (currentY + rowHeight > 280) {
         doc.addPage();
+        currentY = 20;
+        // Redraw Header
+        doc.setFillColor(241, 245, 249);
+        doc.rect(20, currentY, 170, 10, 'F');
+        doc.rect(20, currentY, 170, 10);
+        doc.line(85, currentY, 85, currentY + 10);
+        doc.line(135, currentY, 135, currentY + 10);
+        doc.setFontSize(10);
+        doc.text('Student Name', 25, currentY + 6.5);
+        doc.text('Signature (Morning)', 90, currentY + 6.5);
+        doc.text('Signature (Afternoon)', 140, currentY + 6.5);
+        currentY += 10;
       }
       doc.setDrawColor(226, 232, 240);
-      doc.rect(20, y, 170, 12);
-      doc.setFont('helvetica', 'normal');
-      doc.text(student.studentName, 25, y + 7.5);
-      doc.setFontSize(8);
-      doc.text(student.studentEmail, 85, y + 7.5);
-      doc.setFontSize(10);
+      doc.rect(20, currentY, 170, rowHeight);
+      doc.line(85, currentY, 85, currentY + rowHeight);
+      doc.line(135, currentY, 135, currentY + rowHeight);
       
-      // Signature boxes
-      doc.setDrawColor(200);
-      doc.rect(155, y + 2, 8, 8); 
-      doc.rect(175, y + 2, 8, 8); 
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      const name = student.studentName.length > 28 ? student.studentName.substring(0, 28) + '...' : student.studentName;
+      doc.text(name, 25, currentY + 10);
+      
+      currentY += rowHeight;
     });
     
     doc.save(`Attendance_${course?.title || 'Course'}_${session.startDate}.pdf`);
@@ -655,56 +893,315 @@ export function AdminDashboard() {
      } catch(e: any) { toast.error(e.message); }
   };
 
-  const generateCertificatePDF = (cert: any) => {
+  const generatePTReport = (tutorId: string, tutorName: string, month: string) => {
+    const doc = new jsPDF();
+    const monthlyRecords = hours.filter(h => h.tutorId === tutorId && h.date && h.date.startsWith(month)).sort((a,b) => (a.date || '').localeCompare(b.date || ''));
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.text('Part-time Instructor Monthly Report', 105, 20, { align: 'center' });
+    doc.setFontSize(12);
+    doc.text('Instructor: ' + tutorName, 20, 35);
+    doc.text('Report Month: ' + month, 20, 42);
+    doc.setLineWidth(0.5);
+    doc.line(20, 48, 190, 48);
+    doc.setFontSize(10);
+    doc.text('Date', 20, 55);
+    doc.text('Course Name', 60, 55);
+    doc.text('Status', 150, 55);
+    doc.setLineWidth(0.2);
+    doc.line(20, 58, 190, 58);
+    doc.setFont('helvetica', 'normal');
+    let y = 65;
+    monthlyRecords.forEach(h => {
+       if (y > 250) { doc.addPage(); y = 20; }
+       doc.text(h.date || 'N/A', 20, y);
+       const courseText = h.course || h.details || h.notes || 'Course';
+       const splitNotes = doc.splitTextToSize(courseText.replace(/\n/g, ' '), 80);
+       doc.text(splitNotes, 60, y);
+       doc.text(h.status === 'completed' ? 'Completed' : 'Open', 150, y);
+       y += (splitNotes.length * 5) + 3;
+    });
+    if (y > 230) { doc.addPage(); y = 20; }
+    y += 20;
+    doc.setLineWidth(0.2);
+    doc.line(20, y, 70, y);
+    doc.text('Instructor Signature', 20, y + 5);
+    doc.text('Date:', 20, y + 12);
+    doc.save('PT_Instructor_Report_' + tutorName.replace(/\s+/g,'_') + '_' + month + '.pdf');
+  };
+
+  const generateMTMReport = (tutorId: string, tutorName: string, year: string) => {
+    const doc = new jsPDF();
+    
+    // Find all lessons for this tutor in the given year where course category is Microsoft
+    const tutorLessons = lessons.filter(l => {
+        const session = sessions.find(s => s.id === l.sessionId || s.id === l.session_id);
+        const course = courses.find(c => c.id === session?.courseId);
+        const isMicrosoft = course?.category === 'Microsoft' || course?.category?.toLowerCase() === 'microsoft';
+        const tid = l.tutorId || l.tutor_id || session?.tutorId || session?.tutor_id;
+        const inYear = (l.lessonDate || l.lesson_date || '').startsWith(year);
+        return tid === tutorId && inYear && isMicrosoft;
+    }).sort((a,b) => (a.lessonDate || a.lesson_date || '').localeCompare(b.lessonDate || b.lesson_date || ''));
+
+    const calculateHours = (start: string, end: string) => {
+        if (!start || !end) return 0;
+        const [sh, sm] = start.split(':').map(Number);
+        const [eh, em] = end.split(':').map(Number);
+        const diff = ((eh * 60 + em) - (sh * 60 + sm)) / 60;
+        return diff > 0 ? diff : 0;
+    };
+
+    let yearlyRecords = tutorLessons.map(l => {
+        const session = sessions.find(s => s.id === l.sessionId || s.id === l.session_id);
+        const course = courses.find(c => c.id === session?.courseId);
+        const startTime = l.startTime || session?.startTime;
+        const endTime = l.endTime || session?.endTime;
+        const hrs = calculateHours(startTime, endTime);
+        return {
+            date: l.lessonDate || l.lesson_date,
+            notes: (course?.title || session?.sessionName || 'Course') + ' (' + (startTime || 'TBC') + ' - ' + (endTime || 'TBC') + ')',
+            hours: hrs
+        };
+    });
+
+    const manualMsHours = hours.filter(h => {
+        if (h.tutorId !== tutorId || !h.isManual) return false;
+        if (!h.date || !h.date.startsWith(year)) return false;
+        
+        let isMicrosoft = false;
+        if (h.course) {
+            const courseObj = courses.find(c => c.title === h.course || c.certName === h.course);
+            if (courseObj && (courseObj.category === 'Microsoft' || courseObj.category?.toLowerCase() === 'microsoft')) isMicrosoft = true;
+            if (h.course.toLowerCase().includes('microsoft') || h.course.toLowerCase().match(/ms-|az-|dp-|ai-|sc-|pl-|mb-/)) isMicrosoft = true;
+        }
+        
+        return isMicrosoft;
+    }).map(h => ({
+        date: h.date,
+        notes: h.notes || (h.course),
+        hours: h.hours
+    }));
+
+    yearlyRecords = [...yearlyRecords, ...manualMsHours].sort((a,b) => (a.date || '').localeCompare(b.date || ''));
+
+
+
+    const totalHours = yearlyRecords.reduce((acc, curr) => acc + (curr.hours || 0), 0);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.text(`Instructor Teaching Hours (MTM Report)`, 105, 20, { align: 'center' });
+    
+    doc.setFontSize(12);
+    doc.text(`Instructor: ${tutorName}`, 20, 35);
+    doc.text(`Report Year: ${year}`, 20, 42);
+    doc.text(`Total Teaching Hours: ${totalHours} hrs`, 20, 49);
+
+    doc.setLineWidth(0.5);
+    doc.line(20, 53, 190, 53);
+
+    doc.setFontSize(10);
+    doc.text("Date", 20, 60);
+    doc.text("Description / Notes", 60, 60);
+    doc.text("Hours", 170, 60);
+    
+    doc.setLineWidth(0.2);
+    doc.line(20, 63, 190, 63);
+
+    doc.setFont("helvetica", "normal");
+    let y = 70;
+    
+    yearlyRecords.forEach(h => {
+       if (y > 270) {
+          doc.addPage();
+          y = 20;
+       }
+       doc.text(h.date || 'N/A', 20, y);
+       const splitNotes = doc.splitTextToSize(h.notes?.replace(/\n/g, ' ') || 'No description provided', 100);
+       doc.text(splitNotes, 60, y);
+       doc.text(String(h.hours || 0), 170, y);
+       
+       y += (splitNotes.length * 5) + 3;
+    });
+
+    doc.save(`MTM_Report_${tutorName.replace(/\s+/g,'_')}_${year}.pdf`);
+  };
+
+  const generateBulkCertificatesPDF = (certsList: any[], courseTitle: string) => {
     const doc = new jsPDF({ orientation: 'landscape' });
     
-    // Simple design
-    doc.setFillColor(240, 248, 255);
-    doc.rect(0, 0, 297, 210, 'F');
-    
-    // Border
-    doc.setDrawColor(37, 99, 235);
-    doc.setLineWidth(2);
-    doc.rect(10, 10, 277, 190, 'S');
+    certsList.forEach((cert, index) => {
+      if (index > 0) doc.addPage();
+      
+      // Simple design
+      doc.setFillColor(240, 248, 255);
+      doc.rect(0, 0, 297, 210, 'F');
+      
+      // Border
+      doc.setDrawColor(37, 99, 235);
+      doc.setLineWidth(2);
+      doc.rect(10, 10, 277, 190, 'S');
 
-    doc.setTextColor(30, 58, 138);
-    doc.setFontSize(40);
-    doc.text("Certificate of Completion", 148, 50, { align: 'center' });
+      if (schoolInfo.logo_url && schoolInfo.logo_url.startsWith('data:image')) {
+        try {
+          doc.addImage(schoolInfo.logo_url, 'PNG', 133, 15, 30, 30);
+        } catch (e) {
+          // Fallback
+        }
+      }
+
+      doc.setTextColor(30, 58, 138);
+      doc.setFontSize(40);
+      doc.text("Certificate of Completion", 148, 65, { align: 'center' });
+      
+      doc.setTextColor(100, 116, 139);
+      doc.setFontSize(16);
+      doc.text("This is to certify that", 148, 90, { align: 'center' });
+      
+      doc.setTextColor(15, 23, 42);
+      doc.setFontSize(30);
+      doc.text(cert.studentName || "Student Name", 148, 110, { align: 'center' });
+      
+      doc.setTextColor(100, 116, 139);
+      doc.setFontSize(16);
+      doc.text("has successfully completed the course", 148, 130, { align: 'center' });
+      
+      doc.setTextColor(37, 99, 235);
+      doc.setFontSize(24);
+      doc.text(cert.courseTitle || cert.course_title || courseTitle || "Course Title", 148, 150, { align: 'center' });
+      
+      doc.setTextColor(100, 116, 139);
+      doc.setFontSize(12);
+      doc.text(`Issue Date: ${formatHkDate(cert.issuedAt || cert.issued_at || new Date())}`, 148, 180, { align: 'center' });
+      doc.text(`Certificate ID: ${cert.id}`, 148, 190, { align: 'center' });
+    });
     
-    doc.setTextColor(100, 116, 139);
-    doc.setFontSize(16);
-    doc.text("This is to certify that", 148, 80, { align: 'center' });
-    
-    doc.setTextColor(15, 23, 42);
-    doc.setFontSize(30);
-    doc.text(cert.studentName || "Student Name", 148, 105, { align: 'center' });
-    
-    doc.setTextColor(100, 116, 139);
-    doc.setFontSize(16);
-    doc.text("has successfully completed the course", 148, 130, { align: 'center' });
-    
-    doc.setTextColor(37, 99, 235);
-    doc.setFontSize(24);
-    doc.text(cert.course_title || "Course Title", 148, 150, { align: 'center' });
-    
-    doc.setTextColor(100, 116, 139);
-    doc.setFontSize(12);
-    doc.text(`Issue Date: ${formatHkDate(new Date())}`, 148, 180, { align: 'center' });
-    doc.text(`Certificate ID: ${cert.id}`, 148, 190, { align: 'center' });
-    
-    doc.save(`${cert.studentName.replace(' ', '_')}_Certificate.pdf`);
+    doc.save(`${courseTitle.replace(/\s+/g, '_')}_Certificates.pdf`);
+  };
+
+  const handleManageCertificates = async (session: any) => {
+    setSelectedSessionCert(session);
+    setIsCertModalOpen(true);
+    setIsCertLoading(true);
+    try {
+      const enrolledStudents = regs.filter(r => r.sessionId === session.id && r.status === 'verified');
+      const sessionLessons = lessons.filter(l => l.sessionId === session.id && l.lessonStatus === 'completed');
+      
+      if (sessionLessons.length === 0) {
+        setSessionStudentsData(enrolledStudents.map(s => ({ 
+          ...s, 
+          attendanceRate: 0, 
+          lessonsAttended: 0, 
+          totalLessons: 0,
+          alreadyIssued: false
+        })));
+        return;
+      }
+
+      const attendancePromises = enrolledStudents.map(async (student) => {
+        const attSnap = await getDocs(query(
+          collection(db, 'attendance'), 
+          where('sessionId', '==', session.id), 
+          where('studentId', '==', student.studentId)
+        ));
+        const attendedCount = attSnap.docs.filter(d => d.data().status === 'present').length;
+        const totalPossible = sessionLessons.length;
+        const rate = totalPossible > 0 ? (attendedCount / totalPossible) * 100 : 0;
+        
+        const certSnap = await getDocs(query(
+          collection(db, 'certificates'),
+          where('registrationId', '==', student.id)
+        ));
+        
+        return {
+          ...student,
+          attendanceRate: rate,
+          lessonsAttended: attendedCount,
+          totalLessons: totalPossible,
+          alreadyIssued: !certSnap.empty
+        };
+      });
+
+      const results = await Promise.all(attendancePromises);
+      setSessionStudentsData(results);
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setIsCertLoading(false);
+    }
+  };
+
+  const handleToggleAttendanceConfirm = async (regId: string, type: 'am' | 'pm' | 'eve', currentValue: boolean) => {
+    try {
+      const fieldName = `${type}Confirmed`;
+      await updateDoc(doc(db, 'registrations', regId), { [fieldName]: !currentValue });
+      toast.success(`${type.toUpperCase()} Attendance ${!currentValue ? 'Confirmed' : 'Removed'}`);
+      
+      setRegs(prev => prev.map(r => r.id === regId ? { ...r, [fieldName]: !currentValue } : r));
+      setSessionStudentsData(prev => prev.map(s => s.id === regId ? { ...s, [fieldName]: !currentValue } : s));
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  };
+
+  const handleIssueCertificateDirectly = async (studentData: any) => {
+    try {
+      const course = courses.find(c => c.id === studentData.courseId);
+      const certRef = doc(collection(db, 'certificates'));
+      const certId = certRef.id;
+      const certData = {
+        studentId: studentData.studentId || 'N/A',
+        studentName: studentData.studentName,
+        studentEmail: studentData.studentEmail,
+        courseId: studentData.courseId,
+        courseTitle: course?.title || 'Unknown Course',
+        registrationId: studentData.id,
+        issuedAt: serverTimestamp()
+      };
+      
+      await setDoc(certRef, certData);
+      await logAudit(user?.uid || 'admin', user?.email || 'admin', 'ISSUE_CERTIFICATE', 'certificates', certId, { studentName: studentData.studentName });
+      
+      toast.success(`Certificate issued to ${studentData.studentName}`);
+      setSessionStudentsData(prev => prev.map(s => s.id === studentData.id ? { ...s, alreadyIssued: true } : s));
+      
+      const certSnap = await getDocs(collection(db, 'certificates'));
+      setCertificates(certSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (e: any) {
+      toast.error(e.message);
+    }
   };
 
   const handleGenerateInvoice = (reg: any) => {
     const doc = new jsPDF();
     
     // Header
-    doc.setFontSize(22);
-    doc.text(schoolInfo.name || "School Name", 20, 20);
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text(schoolInfo.address || "Address", 20, 28);
-    doc.text(schoolInfo.phone || "Phone", 20, 33);
+    if (schoolInfo.logo_url && schoolInfo.logo_url.startsWith('data:image')) {
+      try {
+        doc.addImage(schoolInfo.logo_url, 'PNG', 20, 10, 25, 25);
+        doc.setFontSize(22);
+        doc.text(schoolInfo.name || "School Name", 50, 22);
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text(schoolInfo.address || "Address", 50, 30);
+        doc.text(schoolInfo.phone || "Phone", 50, 35);
+      } catch (e) {
+        // Fallback if image format fails
+        doc.setFontSize(22);
+        doc.text(schoolInfo.name || "School Name", 20, 20);
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text(schoolInfo.address || "Address", 20, 28);
+        doc.text(schoolInfo.phone || "Phone", 20, 33);
+      }
+    } else {
+      doc.setFontSize(22);
+      doc.text(schoolInfo.name || "School Name", 20, 20);
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(schoolInfo.address || "Address", 20, 28);
+      doc.text(schoolInfo.phone || "Phone", 20, 33);
+    }
     
     doc.setDrawColor(0);
     doc.setLineWidth(0.5);
@@ -737,7 +1234,7 @@ export function AdminDashboard() {
     doc.text("Amount", 160, 117);
     
     const relatedCourse = courses.find(c => c.id === reg.courseId);
-    doc.text(relatedCourse?.title || "Course Registration", 25, 130);
+    doc.text(relatedCourse?.title || "Course Payment", 25, 130);
     doc.text(`$${reg.amount || 0}`, 160, 130);
     
     // Total
@@ -935,10 +1432,8 @@ export function AdminDashboard() {
       {[
         { id: 'overview', label: t('nav.overview'), icon: LayoutDashboard },
         { id: 'courses', label: 'Templates', icon: BookOpen },
-        { id: 'sessions', label: 'Sessions', icon: CalendarIcon },
-        { id: 'registrations', label: t('nav.registrations'), icon: CreditCard },
+        { id: 'sessions', label: 'Courses', icon: CalendarIcon },
         { id: 'finance', label: t('nav.finance'), icon: BarChart2 },
-        { id: 'materials', label: t('nav.materials'), icon: BookOpen },
         { id: 'certificates', label: t('nav.certificates'), icon: Database },
         { id: 'scheduling', label: t('nav.scheduling'), icon: CalendarRange },
         { id: 'tutors', label: t('nav.tutors'), icon: Clock },
@@ -990,7 +1485,7 @@ export function AdminDashboard() {
         {/* Mobile Nav */}
         <div className="md:hidden overflow-x-auto pb-2">
            <div className="flex gap-2 min-w-max">
-             {['overview', 'courses', 'sessions', 'scheduling', 'registrations', 'finance', 'materials', 'certificates', 'tutors', 'feedback', 'logs', 'users', 'settings'].map(tab => (
+             {['overview', 'courses', 'sessions', 'scheduling', 'finance', 'certificates', 'tutors', 'feedback', 'logs', 'users', 'settings'].map(tab => (
                <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -1049,7 +1544,7 @@ export function AdminDashboard() {
                     <p className="text-xs text-slate-500 mt-1">Course completion</p>
                   </CardContent>
                 </Card>
-                <Card className="shadow-sm border-slate-200 cursor-pointer hover:border-red-300 transition-colors" onClick={() => setActiveTab('registrations')}>
+                <Card className="shadow-sm border-slate-200 cursor-pointer hover:border-red-300 transition-colors" onClick={() => setActiveTab('finance')}>
                   <CardHeader className="pb-2"><CardTitle className="text-sm text-slate-500 font-medium uppercase tracking-wide">Action Required</CardTitle></CardHeader>
                   <CardContent>
                     <p className="text-3xl font-bold text-red-500">{regs.filter(r => r.status === 'pending_verification').length}</p>
@@ -1101,7 +1596,7 @@ export function AdminDashboard() {
                        <div className="flex justify-between items-center p-3 sm:p-4 bg-slate-50 rounded-lg border border-slate-100">
                           <div>
                               <p className="text-sm font-medium text-slate-800">Total active instructors</p>
-                             <p className="text-xs text-slate-500">Taking sessions</p>
+                             <p className="text-xs text-slate-500">Taking courses</p>
                           </div>
                           <span className="text-2xl font-bold text-slate-800">{tutors.length}</span>
                        </div>
@@ -1112,486 +1607,906 @@ export function AdminDashboard() {
           )
           })()}
 
-          {activeTab === 'registrations' && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <div>
-                  <CardTitle>Manage Registrations</CardTitle>
-                  <CardDescription>Review and verify manual bank transfers</CardDescription>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => handleExportCSV(regs, 'registrations')} className="gap-2 h-8"><Download className="w-3.5 h-3.5" /> Export</Button>
-              </CardHeader>
-              <CardContent>
-                {loading ? <div className="py-10 flex justify-center"><Loader2 className="animate-spin w-6 h-6 text-slate-400" /></div> : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Student</TableHead>
-                          <TableHead>Course Session</TableHead>
-                          <TableHead>Amount</TableHead>
-                          <TableHead>Proof</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {regs.map(r => (
-                          <TableRow key={r.id}>
-                            <TableCell>
-                              <div className="font-medium text-slate-800">{r.studentName}</div>
-                              <div className="text-xs text-slate-500">{r.studentEmail}</div>
-                              <div className="text-xs text-slate-400">{r.studentPhone}</div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="text-xs font-mono bg-slate-100 px-2 py-0.5 rounded w-max mb-1">C: {r.courseId?.slice(0,6)}...</div>
-                              <div className="text-xs font-mono bg-slate-100 px-2 py-0.5 rounded w-max">S: {r.sessionId?.slice(0,6)}...</div>
-                            </TableCell>
-                            <TableCell className="font-bold">${r.amount}</TableCell>
-                            <TableCell>
-                              {r.paymentProof ? (
-                                <Button variant="ghost" size="sm" className="h-8 text-blue-600 gap-1 px-2" onClick={() => setPreviewImage(r.paymentProof)}>
-                                  <ExternalLink className="w-3 h-3" /> View
-                                </Button>
-                              ) : <span className="text-xs text-slate-400 italic">None</span>}
-                            </TableCell>
-                            <TableCell>
-                              <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
-                                r.status === 'verified' ? 'bg-green-100 text-green-700' : 
-                                r.status === 'rejected' ? 'bg-red-100 text-red-700' : 
-                                r.status === 'pending_verification' ? 'bg-blue-100 text-blue-700' :
-                                'bg-yellow-100 text-yellow-700'}`}>
-                                {r.status?.replace('_', ' ')}
-                              </span>
-                            </TableCell>
-                            <TableCell>
-                              {(r.status === 'pending_verification' || r.status === 'pending') && (
-                                <div className="flex gap-2">
-                                  <Button size="sm" onClick={() => handleUpdateRegStatus(r.id, 'verified')} className="h-7 text-xs bg-green-600 hover:bg-green-700 text-white shadow-sm border-0"><CheckCircle className="w-3 h-3 mr-1" /> Approve</Button>
-                                  <Button size="sm" variant="outline" onClick={() => handleUpdateRegStatus(r.id, 'rejected')} className="h-7 text-xs text-red-600 border-red-200 hover:bg-red-50"><XCircle className="w-3 h-3 mr-1" /> Reject</Button>
-                                </div>
-                              )}
-                              {r.status === 'verified' && (
-                                <div className="flex flex-col gap-1">
-                                  <span className="text-[10px] text-green-600 font-medium">Confirmed</span>
-                                  {r.status !== 'completed' && (
-                                    <Button size="sm" variant="outline" onClick={() => handleIssueCertificate(r)} className="h-7 text-[10px]"><GraduationCap className="w-3 h-3 mr-1"/> Issue Certificate</Button>
-                                  )}
-                                  {r.status === 'completed' && (
-                                    <span className="text-[10px] text-blue-600 font-medium whitespace-nowrap">Cert Issued</span>
-                                  )}
-                                </div>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                        {regs.length === 0 && (
-                          <TableRow><TableCell colSpan={6} className="text-center py-8 text-slate-500">No registrations found.</TableCell></TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
+
 
           {activeTab === 'finance' && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <div>
-                  <CardTitle>Financial Reconciliation</CardTitle>
-                  <CardDescription>Track e-bills and revenue</CardDescription>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => handleExportCSV(regs.map((r:any) => ({ Invoice: r.invoiceNumber, Student: r.studentName, Amount: r.amount, Method: r.paymentMethod, Status: r.status, Date: formatHkDate(r.createdAt, true) })), 'financial_report')} className="gap-2 h-8"><Download className="w-3.5 h-3.5" /> Export CSV</Button>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                  <Card className="bg-slate-50 border-none shadow-none">
-                     <CardContent className="p-4">
-                       <p className="text-sm font-medium text-slate-500">Total Verified Revenue</p>
-                       <p className="text-2xl font-bold text-green-600">
-                          ${regs.filter((r:any) => r.status === 'verified').reduce((sum: number, r:any) => sum + (r.amount || 0), 0).toLocaleString()}
-                       </p>
-                     </CardContent>
-                  </Card>
-                  <Card className="bg-slate-50 border-none shadow-none">
-                     <CardContent className="p-4">
-                       <p className="text-sm font-medium text-slate-500">Pending Verification</p>
-                       <p className="text-2xl font-bold text-blue-600">
-                          ${regs.filter((r:any) => r.status === 'pending_verification').reduce((sum: number, r:any) => sum + (r.amount || 0), 0).toLocaleString()}
-                       </p>
-                     </CardContent>
-                  </Card>
-                  <Card className="bg-slate-50 border-none shadow-none">
-                     <CardContent className="p-4">
-                       <p className="text-sm font-medium text-slate-500">Total Invoices Issued</p>
-                       <p className="text-2xl font-bold text-slate-800">
-                          {regs.length}
-                       </p>
-                     </CardContent>
-                  </Card>
-                </div>
-
-                <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Invoice No.</TableHead>
-                          <TableHead>Student</TableHead>
-                          <TableHead>Method</TableHead>
-                          <TableHead>Amount</TableHead>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {regs.map((r: any) => (
-                           <TableRow key={r.id}>
-                             <TableCell className="font-mono text-sm">{r.invoiceNumber || 'N/A'}</TableCell>
-                             <TableCell>
-                               <div className="font-medium text-slate-800">{r.studentName}</div>
-                               <div className="text-xs text-slate-500">{r.studentEmail}</div>
-                             </TableCell>
-                             <TableCell>
-                               {r.paymentMethod ? (
-                                  <span className="uppercase text-xs font-bold bg-slate-100 px-2 py-1 rounded text-slate-600">{r.paymentMethod}</span>
-                               ) : '-'}
-                             </TableCell>
-                             <TableCell className="font-semibold text-slate-700">${r.amount}</TableCell>
-                             <TableCell className="text-sm text-slate-500">{formatHkDate(r.createdAt)}</TableCell>
-                             <TableCell>
-                                <div className="flex items-center gap-2">
-                                  <span className={`text-xs px-2 py-1 rounded-full font-semibold capitalize ${r.status === 'verified' ? 'bg-green-100 text-green-700' : r.status === 'pending_verification' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                                    {r.status?.replace('_', ' ')}
-                                  </span>
-                                  {r.status === 'verified' && (
-                                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-400 hover:text-blue-600" onClick={() => handleGenerateInvoice(r)} title="Download Receipt">
-                                      <FileText className="w-4 h-4" />
-                                    </Button>
-                                  )}
-                                </div>
-                             </TableCell>
-                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {activeTab === 'certificates' && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <div>
-                  <CardTitle>Certificates</CardTitle>
-                  <CardDescription>Generated student certificates</CardDescription>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => handleExportCSV(certificates, 'certificates')} className="gap-2 h-8"><Download className="w-3.5 h-3.5" /> Export</Button>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Student</TableHead>
-                        <TableHead>Course</TableHead>
-                        <TableHead>Issued At</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {certificates.map(c => (
-                        <TableRow key={c.id}>
-                          <TableCell>
-                            <div className="font-medium text-slate-800">{c.studentName}</div>
-                            <div className="text-xs text-slate-500">{c.studentEmail}</div>
-                          </TableCell>
-                          <TableCell className="text-sm">{c.course_title}</TableCell>
-                          <TableCell className="text-sm">{formatHkDate(c.issued_at)}</TableCell>
-                          <TableCell>
-                             <Button size="sm" variant="outline" onClick={() => generateCertificatePDF(c)} className="gap-2 h-8 text-blue-600"><Download className="w-3.5 h-3.5"/> PDF</Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      {certificates.length === 0 && (
-                        <TableRow><TableCell colSpan={4} className="text-center py-8 text-slate-500">No certificates generated yet.</TableCell></TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {activeTab === 'scheduling' && (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <Card className="lg:col-span-1">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <Building2 className="w-5 h-5 text-blue-600" /> Branch Management
-                    </CardTitle>
-                    <CardDescription>Manage your school locations</CardDescription>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-800 tracking-tight">Financial Reports & Payments</h2>
+                  <p className="text-sm text-slate-500">Track revenue and verify student payments</p>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                    <Input
+                      placeholder="Search Invoice #, Email, Phone..."
+                      className="pl-10 w-full sm:w-[350px] h-10 border-slate-200 focus:ring-blue-500"
+                      value={regSearchTerm}
+                      onChange={(e) => setRegSearchTerm(e.target.value)}
+                    />
+                  </div>
+                  <Button variant="outline" onClick={() => handleExportCSV(regs.map((r:any) => ({ Invoice: r.invoiceNumber, Student: r.studentName, Amount: r.amount, Method: r.paymentMethod, Status: r.status, Date: formatHkDate(r.createdAt, true) })), 'financial_report')} className="gap-2 h-10 border-slate-200 font-bold text-[10px] uppercase tracking-widest">
+                    <Download className="w-4 h-4" /> Export Report
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Card className="bg-gradient-to-br from-indigo-50/50 via-white to-white border-indigo-100 shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-indigo-600">Total Verified Revenue</CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <label className="text-xs font-semibold text-slate-500 uppercase">New Branch</label>
-                      <Input placeholder="Branch Name" value={newBranch.name} onChange={e => setNewBranch({...newBranch, name: e.target.value})} />
-                      <Input placeholder="Address" value={newBranch.address} onChange={e => setNewBranch({...newBranch, address: e.target.value})} />
-                      <Input placeholder="Contact Phone" value={newBranch.contact_phone} onChange={e => setNewBranch({...newBranch, contact_phone: e.target.value})} />
-                      <Button onClick={handleCreateBranch} className="w-full mt-2">Add Branch</Button>
+                  <CardContent>
+                    <div className="text-3xl font-extrabold text-slate-900 tracking-tighter">
+                      ${regs.filter((r:any) => r.status === 'verified').reduce((sum: number, r:any) => sum + (r.amount || 0), 0).toLocaleString()}
                     </div>
-                    <hr className="my-4" />
-                    <div className="space-y-3">
-                      {branches.map(b => (
-                        <div key={b.id} className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center text-sm">
-                          <div>
-                            <p className="font-bold text-slate-800">{b.name}</p>
-                            <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5"><MapPin className="w-3 h-3" /> {b.address || 'No address'}</p>
-                          </div>
-                        </div>
-                      ))}
-                      {branches.length === 0 && <p className="text-center text-xs text-slate-400 py-4 italic">No branches added.</p>}
+                    <div className="flex items-center gap-1 mt-1 text-slate-400">
+                      <TrendingUp className="w-3 h-3 text-green-500" />
+                      <span className="text-[10px] font-medium">Verified payments</span>
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <Card className="bg-gradient-to-br from-amber-50/50 via-white to-white border-amber-100 shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-amber-600">Pending Verification</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-extrabold text-slate-900 tracking-tighter">
+                      ${regs.filter((r:any) => r.status === 'pending' || r.status === 'pending_verification').reduce((sum: number, r:any) => sum + (r.amount || 0), 0).toLocaleString()}
+                    </div>
+                    <div className="flex items-center gap-1 mt-1 text-slate-400">
+                      <Clock className="w-3 h-3 text-amber-500" />
+                      <span className="text-[10px] font-medium">Awaiting approval</span>
                     </div>
                   </CardContent>
                 </Card>
 
-                <Card className="lg:col-span-2">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <CalendarRange className="w-5 h-5 text-indigo-600" /> Batch Scheduling
-                    </CardTitle>
-                    <CardDescription>Assign shifts to multiple instructors at once</CardDescription>
+                <Card className="bg-gradient-to-br from-slate-50/50 via-white to-white border-slate-100 shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Total Transactions</CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-medium">Select Branch</label>
-                        <select 
-                          value={batchScheduling.branchId} 
-                          onChange={e => setBatchScheduling({...batchScheduling, branchId: e.target.value})}
-                          className="w-full h-10 px-3 rounded-md border border-slate-200 text-sm focus:ring-2 focus:ring-blue-600 outline-none"
-                        >
-                          <option value="">Choose Branch...</option>
-                          {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                        </select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-medium">Shift Type</label>
-                        <div className="p-2 bg-slate-50 border border-slate-200 rounded text-xs font-bold text-slate-600 uppercase flex items-center justify-center">Regular Shift</div>
-                      </div>
+                  <CardContent>
+                    <div className="text-3xl font-extrabold text-slate-900 tracking-tighter">
+                      {regs.length}
                     </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium">Select Instructors</label>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[120px] overflow-y-auto p-2 border border-slate-200 rounded-md text-sm">
-                        {tutors.map(t => (
-                          <label key={t.id} className="flex items-center gap-2 p-1.5 hover:bg-slate-50 rounded cursor-pointer text-xs">
-                            <input 
-                              type="checkbox" 
-                              checked={batchScheduling.tutorIds.includes(t.id)} 
-                              onChange={e => {
-                                const ids = e.target.checked 
-                                  ? [...batchScheduling.tutorIds, t.id]
-                                  : batchScheduling.tutorIds.filter(id => id !== t.id);
-                                setBatchScheduling({...batchScheduling, tutorIds: ids});
-                              }}
-                            />
-                            <span className="truncate">{t.name}</span>
-                          </label>
-                        ))}
-                      </div>
+                    <div className="flex items-center gap-1 mt-1 text-slate-400">
+                      <BarChart3 className="w-3 h-3 text-slate-400" />
+                      <span className="text-[10px] font-medium tracking-wide">All historical records</span>
                     </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-medium">Start Date</label>
-                        <Input type="date" value={batchScheduling.startDate} onChange={e => {
-                          const val = e.target.value;
-                          const v = isWeekendOrHoliday(val);
-                          if (v.isInvalid) return toast.error(v.reason);
-                          if (batchScheduling.endDate && val > batchScheduling.endDate) return toast.error("Start date cannot be later than end date");
-                          setBatchScheduling({...batchScheduling, startDate: val});
-                        }} />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-medium">End Date</label>
-                        <Input type="date" value={batchScheduling.endDate} onChange={e => {
-                          const val = e.target.value;
-                          const v = isWeekendOrHoliday(val);
-                          if (v.isInvalid) return toast.error(v.reason);
-                          if (batchScheduling.startDate && val < batchScheduling.startDate) return toast.error("End date cannot be earlier than start date");
-                          setBatchScheduling({...batchScheduling, endDate: val});
-                        }} />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-medium">Work Start</label>
-                        <Input type="time" value={batchScheduling.startTime} onChange={e => setBatchScheduling({...batchScheduling, startTime: e.target.value})} />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-medium">Work End</label>
-                        <Input type="time" value={batchScheduling.endTime} onChange={e => setBatchScheduling({...batchScheduling, endTime: e.target.value})} />
-                      </div>
-                    </div>
-
-                    <Button 
-                      onClick={() => handleBatchUpdateShifts(batchScheduling.branchId, batchScheduling.tutorIds, batchScheduling.startDate, batchScheduling.endDate, batchScheduling.startTime, batchScheduling.endTime)}
-                      className="w-full bg-indigo-600 hover:bg-indigo-700"
-                    >
-                      Schedule Shifts
-                    </Button>
                   </CardContent>
                 </Card>
               </div>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <div>
-                    <CardTitle>Master Schedule</CardTitle>
-                    <CardDescription>Consolidated view of all instructor shifts</CardDescription>
-                  </div>
-                  <div className="flex gap-2">
-                    <select 
-                      className="h-9 px-3 rounded-md border border-slate-200 text-sm outline-none"
-                      value={schedulingBranch}
-                      onChange={e => setSchedulingBranch(e.target.value)}
-                    >
-                      <option value="">All Branches</option>
-                      {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                    </select>
-                  </div>
+              <Card className="border-slate-200 shadow-sm overflow-hidden">
+                <CardHeader className="bg-slate-50/30 border-b border-slate-100 pb-4">
+                  <CardTitle className="text-sm font-bold text-slate-800">Payment Transactions</CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-0">
                   <div className="overflow-x-auto">
                     <Table>
-                      <TableHeader>
+                      <TableHeader className="bg-slate-50/50">
                         <TableRow>
-                          <TableHead>Instructor</TableHead>
-                          <TableHead>Branch</TableHead>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Time Range</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Actions</TableHead>
+                          <TableHead className="py-4 px-6 text-[10px] font-bold uppercase tracking-wider text-slate-500">Invoice No.</TableHead>
+                          <TableHead className="py-4 px-6 text-[10px] font-bold uppercase tracking-wider text-slate-500">Student Info</TableHead>
+                          <TableHead className="py-4 px-6 text-[10px] font-bold uppercase tracking-wider text-slate-500">Method</TableHead>
+                          <TableHead className="py-4 px-6 text-[10px] font-bold uppercase tracking-wider text-slate-500">Amount</TableHead>
+                          <TableHead className="py-4 px-6 text-[10px] font-bold uppercase tracking-wider text-slate-500">Proof</TableHead>
+                          <TableHead className="py-4 px-6 text-[10px] font-bold uppercase tracking-wider text-slate-500">Date</TableHead>
+                          <TableHead className="py-4 px-6 text-[10px] font-bold uppercase tracking-wider text-slate-500">Status</TableHead>
+                          <TableHead className="py-4 px-6 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {tutorShifts
-                          .filter(s => !schedulingBranch || s.branchId === schedulingBranch)
-                          .sort((a,b) => b.date.localeCompare(a.date))
-                          .slice(0, 50)
-                          .map(s => {
-                            const t = tutors.find(ti => ti.id === s.tutorId);
-                            const b = branches.find(bi => bi.id === s.branchId);
+                        {regs
+                          .filter(r => {
+                            const searchLower = regSearchTerm.toLowerCase();
                             return (
-                              <TableRow key={s.id}>
-                                <TableCell className="font-semibold">{t?.name || 'Unknown'}</TableCell>
-                                <TableCell>{b?.name || 'Unknown'}</TableCell>
-                                <TableCell className="text-sm font-mono">{s.date}</TableCell>
-                                <TableCell className="text-sm">{s.startTime} - {s.endTime}</TableCell>
-                                <TableCell>
-                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                                    s.type === 'regular' ? 'bg-blue-100 text-blue-700' : 
-                                    s.type === 'borrow' ? 'bg-orange-100 text-orange-700' :
-                                    s.type === 'swap' ? 'bg-purple-100 text-purple-700' : 'bg-red-100 text-red-700'}`}>
-                                    {s.type}
-                                  </span>
-                                </TableCell>
-                                <TableCell>
-                                  <div className="flex gap-2">
-                                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 hover:text-blue-600" title="Transfer/Loan" onClick={async () => {
-                                      const newBranchId = prompt("Enter target Branch ID for loan/transfer:");
-                                      if (newBranchId) {
-                                        try {
-                                          await updateDoc(doc(db, 'tutor_shifts', s.id), { branchId: newBranchId, type: 'borrow' });
-                                          toast.success("Shift transferred successfully");
-                                          fetchData();
-                                        } catch(err: any) { toast.error(err.message); }
-                                      }
-                                    }}>
-                                      <ArrowLeftRight className="w-3.5 h-3.5" />
-                                    </Button>
-                                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-400 hover:text-red-600" onClick={async () => {
-                                      try {
-                                          await updateDoc(doc(db, 'tutor_shifts', s.id), { status: 'cancelled' });
-                                          toast.success("Shift cancelled");
-                                          fetchData();
-                                        } catch(err: any) { toast.error(err.message); }
-                                    }}>
-                                      <XCircle className="w-3.5 h-3.5" />
-                                    </Button>
-                                  </div>
-                                </TableCell>
-                              </TableRow>
+                              (r.invoiceNumber || '').toLowerCase().includes(searchLower) ||
+                              (r.studentName || '').toLowerCase().includes(searchLower) ||
+                              (r.studentEmail || '').toLowerCase().includes(searchLower) ||
+                              (r.studentPhone || '').toLowerCase().includes(searchLower)
                             );
-                          })}
-                        {tutorShifts.length === 0 && (
-                          <TableRow><TableCell colSpan={6} className="text-center py-8 text-slate-500">No shifts scheduled.</TableCell></TableRow>
+                          })
+                          .map((r: any) => (
+                           <TableRow key={r.id} className="hover:bg-slate-50/50 transition-colors">
+                             <TableCell className="px-6 font-mono text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
+                                {r.invoiceNumber || r.id?.slice(0,8)}
+                             </TableCell>
+                             <TableCell className="px-6">
+                               <div className="font-bold text-slate-800">{r.studentName}</div>
+                               <div className="text-[10px] text-slate-500 font-medium">{r.studentEmail}</div>
+                               <div className="text-[10px] text-slate-400 italic mt-0.5">{r.studentPhone}</div>
+                             </TableCell>
+                             <TableCell className="px-6">
+                               {r.paymentMethod ? (
+                                  <span className="text-[10px] font-bold bg-slate-100 px-2 py-1 rounded text-slate-600 border border-slate-200 uppercase tracking-wide">{r.paymentMethod}</span>
+                               ) : <span className="text-slate-300">-</span>}
+                             </TableCell>
+                             <TableCell className="px-6 font-extrabold text-slate-900 tracking-tighter">${r.amount}</TableCell>
+                             <TableCell className="px-6">
+                               {r.paymentProof ? (
+                                 <Button variant="ghost" size="sm" className="h-8 text-blue-600 gap-1 px-2 border border-blue-100 bg-blue-50/50 hover:bg-blue-50" onClick={() => setPreviewImage(r.paymentProof)}>
+                                   <ExternalLink className="w-3 h-3" /> View
+                                 </Button>
+                               ) : <span className="text-[10px] text-slate-300 italic">No proof</span>}
+                             </TableCell>
+                             <TableCell className="px-6 text-[10px] font-bold text-slate-500 uppercase">{formatHkDate(r.createdAt)}</TableCell>
+                             <TableCell className="px-6">
+                                <div className="flex flex-col gap-1">
+                                  <span className={`text-[10px] px-2 py-1 rounded-md font-bold uppercase tracking-wider border w-max block text-center ${
+                                    r.status === 'verified' 
+                                      ? 'bg-green-50 text-green-700 border-green-100' 
+                                      : r.status === 'pending' || r.status === 'pending_verification'
+                                        ? 'bg-blue-50 text-blue-700 border-blue-100 animate-pulse' 
+                                        : 'bg-yellow-50 text-yellow-700 border-yellow-100'
+                                  }`}>
+                                    {r.status === 'pending_verification' ? (
+                                      <span className="flex flex-col leading-none py-0.5">
+                                        <span>Pending</span>
+                                        <span>Verification</span>
+                                      </span>
+                                    ) : r.status?.replace('_', ' ')}
+                                  </span>
+                                  {r.updatedBy && (
+                                    <div className="text-[9px] text-slate-400 font-medium leading-tight break-words max-w-[120px]">
+                                      By: {r.updatedBy.split('@')[0]}
+                                      <br/>
+                                      {formatHkDate(r.updatedAt, true)}
+                                    </div>
+                                  )}
+                                </div>
+                             </TableCell>
+                             <TableCell className="px-6 text-right">
+                                <div className="flex justify-end items-center gap-2">
+                                  {r.status === 'verified' && (
+                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors" onClick={() => handleGenerateInvoice(r)} title="Download Receipt">
+                                      <FileText className="w-4 h-4" />
+                                    </Button>
+                                  )}
+                                  {(r.status === 'pending_verification' || r.status === 'pending') && (
+                                    <Button size="sm" variant="outline" onClick={() => handleUpdateRegStatus(r.id, 'verified')} className="h-8 border-green-200 text-green-600 hover:bg-green-50 text-[10px] font-bold uppercase tracking-widest px-4">
+                                      Verify
+                                    </Button>
+                                  )}
+                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50" onClick={() => { setEditingReg(r); setIsEditRegOpen(true); }} title="Edit Record">
+                                    <Edit2 className="w-4 h-4" />
+                                  </Button>
+                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50" onClick={() => confirmDelete(r.id, 'registration', `${r.studentName || 'Student'} - ${r.invoiceNumber || 'No Invoice'}`)} title="Delete Record">
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                             </TableCell>
+                           </TableRow>
+                        ))}
+                        {regs.length === 0 && (
+                          <TableRow><TableCell colSpan={7} className="text-center py-16">
+                            <div className="flex flex-col items-center gap-2 text-slate-300">
+                               <BarChart3 className="w-12 h-12" />
+                               <span className="text-sm font-medium">No financial transactions found</span>
+                            </div>
+                          </TableCell></TableRow>
                         )}
                       </TableBody>
                     </Table>
                   </div>
                 </CardContent>
               </Card>
+
+              <Dialog open={isEditRegOpen} onOpenChange={setIsEditRegOpen}>
+                <DialogContent className="sm:max-w-[500px]">
+                  <DialogHeader>
+                    <DialogTitle>Edit Payment Record</DialogTitle>
+                    <DialogDescription>Manually correct registration details</DialogDescription>
+                  </DialogHeader>
+                  <form onSubmit={handleUpdateRegistration} className="space-y-4 py-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Student Name</Label>
+                        <Input value={editingReg?.studentName || ''} onChange={e => setEditingReg({...editingReg, studentName: e.target.value})} required />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Phone</Label>
+                        <Input value={editingReg?.studentPhone || ''} onChange={e => setEditingReg({...editingReg, studentPhone: e.target.value})} />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Email</Label>
+                      <Input value={editingReg?.studentEmail || ''} onChange={e => setEditingReg({...editingReg, studentEmail: e.target.value})} type="email" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Amount ($)</Label>
+                        <Input value={editingReg?.amount || 0} onChange={e => setEditingReg({...editingReg, amount: Number(e.target.value)})} type="number" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Status</Label>
+                        <select 
+                          className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                          value={editingReg?.status || ''} 
+                          onChange={e => setEditingReg({...editingReg, status: e.target.value})}
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="pending_verification">Pending Verification</option>
+                          <option value="verified">Verified</option>
+                          <option value="rejected">Rejected</option>
+                        </select>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button type="button" variant="outline" onClick={() => setIsEditRegOpen(false)}>Cancel</Button>
+                      <Button type="submit">Save Changes</Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
             </div>
           )}
 
-          {activeTab === 'materials' && (
-             <Card>
-               <CardHeader>
-                 <CardTitle>Course Materials</CardTitle>
-                 <CardDescription>Since file upload to Storage is disabled for this prototype without proper rules, add material links below.</CardDescription>
-               </CardHeader>
-               <CardContent>
-                 <div className="mb-8 p-4 bg-slate-50 border border-slate-200 rounded-lg">
-                   <h3 className="text-sm font-semibold mb-3">Add Material Link</h3>
-                    <form className="grid grid-cols-1 md:grid-cols-3 gap-4" onSubmit={async (e) => {
-                      e.preventDefault();
-                      const form = e.target as HTMLFormElement;
-                      const courseId = (form.elements.namedItem('courseId') as HTMLSelectElement).value;
-                      const title = (form.elements.namedItem('title') as HTMLInputElement).value;
-                      const url = (form.elements.namedItem('url') as HTMLInputElement).value;
-                      
-                      if (!courseId || !title || !url) return toast.error("Please fill all fields");
-                      
-                      try {
-                        const mRef = doc(collection(db, 'materials'));
-                        await setDoc(mRef, { courseId, title, file_url: url, createdAt: serverTimestamp(), uploaded_by: user?.uid });
-                        toast.success("Material added");
-                        form.reset();
-                        fetchData();
-                      } catch (err: any) { toast.error(err.message); }
-                   }}>
-                     <select name="courseId" className="h-10 px-3 rounded-md border border-slate-200 text-sm">
-                       <option value="">Select Course</option>
-                       {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
-                     </select>
-                     <Input name="title" placeholder="Material Title (e.g. Week 1 Slides)" />
-                     <div className="flex gap-2">
-                       <Input name="url" placeholder="URL (Google Drive, Dropbox, etc)" />
-                       <Button type="submit"><Plus className="w-4 h-4"/></Button>
-                     </div>
-                   </form>
-                 </div>
-                 
-                 <Table>
-                   <TableHeader>
-                      <TableRow><TableHead>Course</TableHead><TableHead>Title</TableHead><TableHead>Link</TableHead></TableRow>
-                   </TableHeader>
-                   <TableBody>
-                      {materials.map(m => (
-                         <TableRow key={m.id}>
-                            <TableCell className="font-mono text-xs">{m.courseId}</TableCell>
-                            <TableCell className="font-medium">{m.title}</TableCell>
-                            <TableCell><a href={m.file_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-xs flex items-center gap-1"><ExternalLink className="w-3 h-3"/> Open</a></TableCell>
-                         </TableRow>
-                      ))}
-                      {materials.length === 0 && <TableRow><TableCell colSpan={3} className="text-center py-4 text-slate-500">No materials added.</TableCell></TableRow>}
-                   </TableBody>
-                 </Table>
-               </CardContent>
-             </Card>
+          {activeTab === 'certificates' && (
+            <div className="space-y-6">
+                <Card className="border-none shadow-xl shadow-slate-200/50 bg-white/80 backdrop-blur-sm">
+                  <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-4 border-b border-slate-50 gap-4">
+                    <div>
+                      <CardTitle className="text-xl font-black text-slate-800 tracking-tight">Certificates History</CardTitle>
+                      <CardDescription className="text-xs font-medium text-slate-500">Record of all issued digital certificates</CardDescription>
+                    </div>
+                    <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+                      <div className="relative w-full sm:w-48">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <Input 
+                          placeholder="Search course name..." 
+                          className="pl-9 h-8 text-xs focus:ring-blue-500 border-slate-200"
+                          value={certSearchTerm}
+                          onChange={(e) => setCertSearchTerm(e.target.value)}
+                        />
+                      </div>
+                      <div className="relative w-full sm:w-40 flex items-center bg-white border border-slate-200 rounded-md overflow-hidden">
+                        <CalendarIcon className="w-4 h-4 ml-3 text-slate-400 shrink-0" />
+                        <select 
+                          className="h-8 text-xs bg-transparent focus:ring-0 focus:outline-none flex-1 px-2 cursor-pointer min-w-0"
+                          value={certDateTerm}
+                          onChange={(e) => setCertDateTerm(e.target.value)}
+                        >
+                          <option value="">All months</option>
+                          {Array.from(new Set(certificates.map((c: any) => {
+                            const dateObj = (c.issuedAt?.toDate ? c.issuedAt.toDate() : new Date(c.issuedAt || c.issued_at));
+                            return isNaN(dateObj.getTime()) ? '' : `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
+                          }).filter(Boolean))).sort().reverse().map(monthStr => {
+                            const [year, month] = (monthStr as string).split('-');
+                            const label = new Date(parseInt(year), parseInt(month) - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+                            return <option key={monthStr as string} value={label}>{label}</option>
+                          })}
+                        </select>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={() => handleExportCSV(certificates, 'certificates')} className="gap-2 h-8 text-[10px] font-bold uppercase tracking-wider border-slate-200"><Download className="w-3.5 h-3.5" /> Export</Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="hover:bg-transparent border-slate-100">
+                            <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Course</TableHead>
+                            <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Issued At</TableHead>
+                            <TableHead className="px-6 py-4 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {Object.entries(
+                            certificates.reduce((acc, cert) => {
+                              const reg = regs.find(r => r.id === cert.registrationId);
+                              const session = sessions.find(s => s.id === reg?.sessionId);
+                              const sessionLabel = session ? `${session.sessionName} (${session.startDate} to ${session.endDate})` : 'Unknown Session';
+                              
+                              const key = `${cert.courseId || "Unknown Course"}_${session?.id || "unknown"}`;
+                              if (!acc[key]) acc[key] = { 
+                                courseTitle: cert.courseTitle || cert.course_title, 
+                                sessionLabel: sessionLabel,
+                                certs: [] 
+                              };
+                              acc[key].certs.push(cert);
+                              return acc;
+                            }, {} as Record<string, { courseTitle: string, sessionLabel: string, certs: any[] }>)
+                          ).filter(([key, data]: [string, any]) => {
+                            let match = true;
+                            if (certSearchTerm) {
+                                match = match && !!data.courseTitle?.toLowerCase().includes(certSearchTerm.toLowerCase());
+                            }
+                            if (certDateTerm) {
+                                const issuedAt = data.certs.length > 0 ? (data.certs[0].issuedAt || data.certs[0].issued_at) : null;
+                                const dateObj = issuedAt?.toDate ? issuedAt.toDate() : new Date(issuedAt);
+                                const certMonthStr = (issuedAt && !isNaN(dateObj.getTime())) ? dateObj.toLocaleString('en-US', { month: 'long', year: 'numeric' }) : '';
+                                match = match && certMonthStr === certDateTerm;
+                            }
+                            return match;
+                          }).sort(([, dataA]: [string, any], [, dataB]: [string, any]) => {
+                            const dateA = dataA.certs.length > 0 ? (dataA.certs[0].issuedAt?.toDate ? dataA.certs[0].issuedAt.toDate() : new Date(dataA.certs[0].issuedAt || dataA.certs[0].issued_at)) : new Date(0);
+                            const dateB = dataB.certs.length > 0 ? (dataB.certs[0].issuedAt?.toDate ? dataB.certs[0].issuedAt.toDate() : new Date(dataB.certs[0].issuedAt || dataB.certs[0].issued_at)) : new Date(0);
+                            return dateB.getTime() - dateA.getTime();
+                          }).map(([key, data]: [string, any]) => (
+                            <TableRow key={key} className="border-slate-50 hover:bg-slate-50/50 transition-colors">
+                              <TableCell className="px-6 py-4">
+                                <div className="font-bold text-slate-800">{data.courseTitle || "Unknown Course"}</div>
+                                <div className="text-xs font-medium text-slate-500 mt-0.5">{data.sessionLabel}</div>
+                              </TableCell>
+                              <TableCell className="px-6 py-4">
+                                <div className="text-xs font-bold text-slate-700">
+                                  {data.certs.length > 0 ? formatHkDate(data.certs[0].issuedAt || data.certs[0].issued_at) : 'N/A'}
+                                </div>
+                                <div className="text-[10px] text-slate-400 mt-0.5">
+                                  {data.certs.length} certificates
+                                </div>
+                              </TableCell>
+                              <TableCell className="px-6 py-4 text-right">
+                                 <Button size="sm" variant="outline" onClick={() => generateBulkCertificatesPDF(data.certs, `${data.courseTitle} - ${data.sessionLabel}`)} className="gap-2 h-8 px-3 text-[10px] font-bold uppercase tracking-wider text-blue-600 border-blue-100 hover:bg-blue-50/50"><Download className="w-3 h-3"/> Download {data.certs.length} PDFs</Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          {certificates.length === 0 && (
+                            <TableRow><TableCell colSpan={3} className="text-center py-12 text-slate-400 text-xs italic tracking-wider">No certificates found in system records.</TableCell></TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+            </div>
+          )}
+
+          {activeTab === 'scheduling' && (
+            <div className="space-y-6">
+              {/* Top Navigation for Calendars */}
+              <div className="flex gap-2 p-1 bg-slate-100 rounded-lg w-max mb-6">
+                <Button variant={scheduleTab === 'trainer-daily' ? 'default' : 'ghost'} size="sm" onClick={() => setScheduleTab('trainer-daily')} className="px-6 h-8 text-[11px] font-bold uppercase tracking-wider">
+                  Instructor (Daily)
+                </Button>
+                <Button variant={scheduleTab === 'trainer-monthly' ? 'default' : 'ghost'} size="sm" onClick={() => setScheduleTab('trainer-monthly')} className="px-6 h-8 text-[11px] font-bold uppercase tracking-wider">
+                  Instructor (Monthly)
+                </Button>
+                <Button variant={scheduleTab === 'room-daily' ? 'default' : 'ghost'} size="sm" onClick={() => setScheduleTab('room-daily')} className="px-6 h-8 text-[11px] font-bold uppercase tracking-wider">
+                  Room (Daily)
+                </Button>
+                <Button variant={scheduleTab === 'room-monthly' ? 'default' : 'ghost'} size="sm" onClick={() => setScheduleTab('room-monthly')} className="px-6 h-8 text-[11px] font-bold uppercase tracking-wider">
+                  Room (Monthly)
+                </Button>
+                <Button variant={scheduleTab === 'tech-daily' ? 'default' : 'ghost'} size="sm" onClick={() => setScheduleTab('tech-daily')} className="px-6 h-8 text-[11px] font-bold uppercase tracking-wider"><div className="bg-blue-600 text-white p-1 rounded mr-1.5 flex items-center justify-center"><Building2 className="w-3 h-3"/></div> Tech Setup (Daily)</Button>
+              </div>
+
+              {/* TECH SETUP DAILY */}
+              {scheduleTab === 'tech-daily' && (
+                <Card className="border-none shadow-xl shadow-slate-200/50 bg-white/80 backdrop-blur-sm relative overflow-hidden">
+                  <div className="absolute top-0 inset-x-0 h-1 bg-blue-600"></div>
+                  <CardHeader className="flex flex-row items-center justify-between pb-4 border-b border-slate-50">
+                    <div>
+                      <CardTitle className="flex items-center gap-2"><div className="bg-blue-600 text-white p-1.5 rounded-md flex items-center justify-center"><Building2 className="w-4 h-4"/></div> Tech Setup Overview</CardTitle>
+                      <CardDescription>Detailed daily breakdown of room usage and configuration requirements</CardDescription>
+                    </div>
+                    <div className="flex bg-slate-50 rounded-lg p-1 border border-slate-200">
+                      <Button variant="ghost" size="sm" onClick={() => {
+                          const today = new Date();
+                          setScheduleDate(today.toISOString().split('T')[0]);
+                      }} className="h-8 px-3 text-xs font-bold text-slate-600">Today</Button>
+                      <Button variant="ghost" size="sm" onClick={() => {
+                          const tomorrow = new Date();
+                          tomorrow.setDate(tomorrow.getDate() + 1);
+                          setScheduleDate(tomorrow.toISOString().split('T')[0]);
+                      }} className="h-8 px-3 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100">Tomorrow</Button>
+                      <div className="w-[1px] bg-slate-200 mx-2 my-1"></div>
+                      <Input type="date" className="w-auto h-8 text-xs border-transparent bg-transparent focus-visible:ring-0 shadow-none" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-6">
+                    <div className="space-y-6">
+                      {(() => {
+                        let configRooms = schoolInfo?.rooms ? schoolInfo.rooms.split(',').map(r => r.trim()).filter(Boolean) : [];
+                        const usedRooms = lessons.map(l => {
+                          const session = sessions.find(s => s.id === l.sessionId || s.id === l.session_id);
+                          return l.classroom || session?.room || session?.classroom;
+                        }).filter(Boolean);
+                        let availableRooms = Array.from(new Set([...configRooms, ...usedRooms, 'unassigned'])) as string[];
+                        
+                        const activeLessonsToday = lessons.filter(l => (l.lessonDate || l.lesson_date || '') === scheduleDate);
+                        
+                        const activeSessionsToday = sessions.filter(s => {
+                            if (s.sessionStatus === 'cancelled') return false;
+                            const isDailyLesson = activeLessonsToday.some(l => l.sessionId === s.id);
+                            if (isDailyLesson) return true;
+                            if (!s.startDate || !s.endDate) return false;
+                            if (s.deliveryMode === 'self_paced' || s.deliveryMode === 'video') return false;
+                            return (s.startDate <= scheduleDate && s.endDate >= scheduleDate);
+                        });
+                        
+                        const allSessionsToDisplay: any[] = [];
+                        const processedSessionIds = new Set();
+                        
+                        activeLessonsToday.forEach(l => {
+                            const session = sessions.find(s => s.id === l.sessionId || s.id === l.session_id);
+                            if (!session) return;
+                            if (session.sessionStatus === 'cancelled') return;
+                            
+                            allSessionsToDisplay.push({
+                                id: l.id,
+                                sessionId: session.id,
+                                room: l.classroom || session.room || session.classroom || 'unassigned',
+                                startTime: l.startTime || session.startTime,
+                                endTime: l.endTime || session.endTime,
+                                courseId: session.courseId,
+                                sessionName: session.sessionName,
+                                tutorId: l.tutorId || l.tutor_id || session.tutorId || session.tutor_id,
+                                remarks: session.remarks || session.notes || '',
+                                isLesson: true,
+                                lessonTitle: l.lessonTitle
+                            });
+                            processedSessionIds.add(session.id);
+                        });
+                        
+                        activeSessionsToday.forEach(s => {
+                            if (processedSessionIds.has(s.id)) return;
+                            allSessionsToDisplay.push({
+                                id: s.id,
+                                sessionId: s.id,
+                                room: s.room || s.classroom || s.deliveryMode || 'unassigned',
+                                startTime: s.startTime,
+                                endTime: s.endTime,
+                                courseId: s.courseId,
+                                sessionName: s.sessionName,
+                                tutorId: s.tutorId || s.tutor_id,
+                                remarks: s.remarks || s.notes || '',
+                                isLesson: false,
+                                lessonTitle: ''
+                            });
+                        });
+                        
+                        const roomGroups: Record<string, any[]> = {};
+                        allSessionsToDisplay.forEach(item => {
+                            const r = item.room || 'unassigned';
+                            if (!roomGroups[r]) roomGroups[r] = [];
+                            roomGroups[r].push(item);
+                        });
+                        
+                        const roomKeys = Object.keys(roomGroups).sort();
+                        
+                        if (roomKeys.length === 0) {
+                             return <div className="py-12 border-2 border-dashed border-slate-200 rounded-xl text-center text-slate-500 flex flex-col items-center"><Building2 className="w-10 h-10 mb-3 text-slate-300" /><p className="font-medium text-sm">No setups required for {scheduleDate}.</p></div>;
+                        }
+                        
+                        return roomKeys.map(rName => {
+                             const roomItems = roomGroups[rName].sort((a,b) => (a.startTime || '').localeCompare(b.startTime || ''));
+                             return (
+                                 <div key={rName} className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow">
+                                    <div className="bg-blue-600 px-5 py-3 flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <MapPin className="w-4 h-4 text-slate-300" />
+                                            <h3 className="font-black text-white text-sm uppercase tracking-wider">{rName === 'unassigned' ? 'Unassigned Room' : rName}</h3>
+                                        </div>
+                                        <div className="px-2 py-0.5 rounded bg-white/20 text-[10px] font-bold tracking-wider text-white uppercase">{roomItems.length} Sessions</div>
+                                    </div>
+                                    <div className="divide-y divide-slate-100 p-2 space-y-2">
+                                        {roomItems.map(item => {
+                                            const course = courses.find(c => c.id === item.courseId);
+                                            const tutor = tutors.find(t => t.id === item.tutorId);
+                                            const studentCount = regs.filter(reg => reg.sessionId === item.sessionId && reg.status === 'verified').length;
+                                            
+                                            // Determine config color context
+                                            const isMicrosoft = course?.category === 'Microsoft' || course?.category?.toLowerCase() === 'microsoft' || (course?.title || '').toLowerCase().includes('microsoft');
+                                            const configBadge = isMicrosoft ? "bg-blue-100 text-blue-700 border-blue-200" : "bg-slate-100 text-slate-700 border-slate-200";
+                                            
+                                            return (
+                                                 <div key={item.id} className="p-4 rounded-lg bg-slate-50/50 border border-slate-100 hover:bg-slate-50 transition-colors flex flex-col lg:flex-row gap-4 justify-between">
+                                                     <div className="space-y-4 flex-1">
+                                                         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                                                            <div className="border-l-4 border-blue-600 pl-3">
+                                                                <div className="font-black text-slate-800 text-base leading-tight">
+                                                                    {course?.title || item.sessionName}
+                                                                </div>
+                                                                {item.lessonTitle && <div className="text-xs font-semibold text-slate-500 mt-1 flex items-center gap-1.5"><CalendarIcon className="w-3.5 h-3.5"/> {item.lessonTitle}</div>}
+                                                            </div>
+                                                            <div className="flex items-center gap-2 self-start">
+                                                                <div className="text-sm font-black bg-white border border-slate-200 text-slate-800 px-3 py-1.5 rounded-lg shadow-sm whitespace-nowrap flex items-center gap-2">
+                                                                    <Clock className="w-4 h-4 text-slate-400" />
+                                                                    {item.startTime} - {item.endTime}
+                                                                </div>
+                                                            </div>
+                                                         </div>
+                                                         
+                                                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 pl-4 border-l border-slate-200 ml-0.5">
+                                                             <div>
+                                                                 <div className="text-[10px] uppercase font-bold text-slate-400 mb-1 flex items-center gap-1.5"><Users className="w-3 h-3 text-slate-400"/> Instructor</div>
+                                                                 <div className="text-sm font-black text-slate-700 flex items-center gap-2">
+                                                                    <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] text-slate-500">{tutor?.name?.charAt(0) || '?'}</div>
+                                                                    {tutor?.name || tutor?.email || 'Unassigned'}
+                                                                 </div>
+                                                             </div>
+                                                             <div>
+                                                                 <div className="text-[10px] uppercase font-bold text-slate-400 mb-1 flex items-center gap-1.5"><MonitorPlay className="w-3 h-3 text-slate-400"/> Requirements</div>
+                                                                 <div className={`inline-flex items-center text-xs font-bold px-2 py-1 rounded border shadow-sm ${configBadge}`}>
+                                                                     {course?.category || 'Standard Config'}
+                                                                 </div>
+                                                             </div>
+                                                             <div>
+                                                                 <div className="text-[10px] uppercase font-bold text-slate-400 mb-1 flex items-center gap-1.5"><Users className="w-3 h-3 text-slate-400"/> Pax Status</div>
+                                                                 <div className="text-xs font-bold text-slate-600 flex items-center gap-2">
+                                                                     <div className="px-2 py-0.5 bg-green-100 text-green-700 rounded shadow-sm">{studentCount} Enrolled</div>
+                                                                 </div>
+                                                             </div>
+                                                         </div>
+                                                     </div>
+                                                 </div>
+                                            );
+                                        })}
+                                    </div>
+                                 </div>
+                             );
+                        });
+                      })()}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* TRAINER DAILY */}
+              {scheduleTab === 'trainer-daily' && (
+                <Card className="border-none shadow-xl shadow-slate-200/50 bg-white/80 backdrop-blur-sm">
+                  <CardHeader className="flex flex-row items-center justify-between pb-2 border-b border-slate-50">
+                    <div>
+                      <CardTitle>Instructor Daily Schedule</CardTitle>
+                      <CardDescription>View all trainers for a specific day</CardDescription>
+                    </div>
+                    <Input type="date" className="w-auto h-9 text-xs" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} />
+                  </CardHeader>
+                  <CardContent className="pt-6">
+                    <div className="space-y-4">
+                      {tutors.map(tutor => {
+                        const tutorLessons = lessons.filter(l => {
+                          const session = sessions.find(s => s.id === l.sessionId || s.id === l.session_id);
+                          const tid = l.tutorId || l.tutor_id || session?.tutorId || session?.tutor_id;
+                          const date = l.lessonDate || l.lesson_date || '';
+                          return tid === tutor.id && date === scheduleDate;
+                        });
+                        
+                        const tutorSessions = sessions.filter(s => {
+                          if (s.sessionStatus === 'cancelled') return false;
+                          const tid = s.tutorId || s.tutor_id;
+                          if (tid !== tutor.id) return false;
+                          if (!s.startDate || !s.endDate) return false;
+                          return s.startDate <= scheduleDate && s.endDate >= scheduleDate;
+                        });
+                        
+                        if (tutorLessons.length === 0 && tutorSessions.length === 0) return null;
+                        
+                        return (
+                          <div key={tutor.id} className="p-4 border border-slate-100 rounded-lg shadow-sm">
+                            <h3 className="font-bold text-slate-800 text-lg mb-3 flex items-center gap-2">
+                              <Users className="w-5 h-5 text-indigo-500" /> {tutor.name}
+                            </h3>
+                            
+                            {tutorLessons.length > 0 && (
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+                                {tutorLessons.map(l => {
+                                  const session = sessions.find(s => s.id === l.sessionId || s.id === l.session_id);
+                                  const course = courses.find(c => c.id === session?.courseId);
+                                  const displayStartTime = l.startTime ? l.startTime : session?.startTime;
+                                  const displayEndTime = l.endTime ? l.endTime : session?.endTime;
+                                  const timeDisplay = displayStartTime && displayEndTime ? `${displayStartTime} - ${displayEndTime}` : 'Time TBC';
+                                  return (
+                                    <div key={l.id} className="p-3 bg-indigo-50/50 border border-indigo-100 rounded text-sm">
+                                      <div className="font-bold text-indigo-900">{course?.title || session?.sessionName}</div>
+                                      <div className="text-xs text-indigo-700 mt-1">{timeDisplay}</div>
+                                      <div className="text-xs text-indigo-500 mt-1 flex items-center gap-1"><MapPin className="w-3 h-3" /> {l.classroom || session?.room || session?.classroom || session?.deliveryMode || 'Room TBC'}</div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            
+                            {tutorSessions.length > 0 && (
+                              <div>
+                                <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Active Assigned Intakes Spanning This Date</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                  {tutorSessions.sort((a,b) => (a.startDate || '').localeCompare(b.startDate || '')).map(s => {
+                                    const course = courses.find(c => c.id === s.courseId);
+                                    return (
+                                      <div key={s.id} className="p-3 border border-slate-200 bg-slate-50/50 rounded flex flex-col justify-center">
+                                        <div className="font-bold text-slate-700 text-xs mb-1">{course?.title || s.sessionName}</div>
+                                        <div className="text-[10px] text-slate-500 font-medium">Duration: {s.startDate} to {s.endDate}</div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {tutors.filter(tutor => {
+                         const tidHasLessons = lessons.some(l => {
+                            const session = sessions.find(s => s.id === l.sessionId || s.id === l.session_id);
+                            const tid = l.tutorId || l.tutor_id || session?.tutorId || session?.tutor_id;
+                            const date = l.lessonDate || l.lesson_date || '';
+                            return tid === tutor.id && date === scheduleDate;
+                         });
+                         const tidHasSessions = sessions.some(s => {
+                            if (s.sessionStatus === 'cancelled') return false;
+                            const tid = s.tutorId || s.tutor_id;
+                            if (tid !== tutor.id) return false;
+                            return s.startDate && s.endDate && s.startDate <= scheduleDate && s.endDate >= scheduleDate;
+                         });
+                         return tidHasLessons || tidHasSessions;
+                      }).length === 0 && (
+                        <div className="py-12 text-center text-slate-400 text-sm italic tracking-wide">No classes or assigned intakes scheduled for {scheduleDate}.</div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* TRAINER MONTHLY */}
+              {scheduleTab === 'trainer-monthly' && (
+                <Card className="border-none shadow-xl shadow-slate-200/50 bg-white/80 backdrop-blur-sm">
+                  <CardHeader className="flex flex-row items-center justify-between pb-2 border-b border-slate-50">
+                    <div>
+                      <CardTitle>Instructor Monthly Overview</CardTitle>
+                      <CardDescription>View a specific trainer's month at a glance</CardDescription>
+                    </div>
+                    <div className="flex gap-2">
+                      <select className="h-9 px-3 border border-slate-200 rounded text-sm outline-none bg-white" value={scheduleInstructorFilter} onChange={e => setScheduleInstructorFilter(e.target.value)}>
+                        <option value="">All Instructors</option>
+                        {tutors.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      </select>
+                      <Input type="month" className="w-auto h-9 text-xs" value={scheduleMonth} onChange={e => setScheduleMonth(e.target.value)} />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    {(() => {
+                      const overlappingSessions = sessions.filter(s => {
+                        if (s.sessionStatus === 'cancelled') return false;
+                        const tid = s.tutorId || s.tutor_id;
+                        if (scheduleInstructorFilter && tid !== scheduleInstructorFilter) return false;
+                        if (!s.startDate || !s.endDate) return false;
+                        return s.startDate.startsWith(scheduleMonth) || s.endDate.startsWith(scheduleMonth) || (s.startDate < scheduleMonth && s.endDate > scheduleMonth);
+                      });
+
+                      return (
+                        <div className="mt-6">
+                            {(() => {
+                                const groupedByInstructor: Record<string, any[]> = {};
+                                overlappingSessions.forEach(s => {
+                                    const tid = s.tutorId || s.tutor_id || 'unassigned';
+                                    if (!groupedByInstructor[tid]) groupedByInstructor[tid] = [];
+                                    groupedByInstructor[tid].push(s);
+                                });
+
+                                const instructorKeys = Object.keys(groupedByInstructor).sort((a, b) => {
+                                    if (a === 'unassigned') return 1;
+                                    if (b === 'unassigned') return -1;
+                                    const tA = tutors.find(t => t.id === a)?.name || '';
+                                    const tB = tutors.find(t => t.id === b)?.name || '';
+                                    return tA.localeCompare(tB);
+                                });
+
+                                if (instructorKeys.length === 0) {
+                                  return <div className="py-8 text-center text-slate-400 text-sm italic">No active intakes for this month.</div>;
+                                }
+
+                                return instructorKeys.map(tid => {
+                                    const instructorName = tid === 'unassigned' ? 'Unassigned Instructor' : (tutors.find(t => t.id === tid)?.name || 'Unknown');
+                                    const sessionsForTid = groupedByInstructor[tid].sort((a,b) => (a.startDate || '').localeCompare(b.startDate || ''));
+
+                                    return (
+                                        <div key={tid} className="mb-8">
+                                            <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                                                <Users className="w-4 h-4 text-indigo-500" /> {instructorName} - Active Intakes
+                                            </h3>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                                {sessionsForTid.map(s => {
+                                                    const course = courses.find(c => c.id === s.courseId);
+                                                    return (
+                                                      <div key={s.id} className="p-3 border border-indigo-100 bg-indigo-50/30 rounded-lg flex flex-col justify-center">
+                                                          <div className="font-bold text-indigo-900 text-sm mb-1">{course?.title || s.sessionName}</div>
+                                                          <div className="text-[11px] text-indigo-600 font-medium mb-1">Duration: {s.startDate} to {s.endDate}</div>
+                                                      </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    );
+                                });
+                            })()}
+
+                        </div>
+                      );
+                    })()}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* ROOM DAILY */}
+              {scheduleTab === 'room-daily' && (
+                <Card className="border-none shadow-xl shadow-slate-200/50 bg-white/80 backdrop-blur-sm">
+                  <CardHeader className="flex flex-row items-center justify-between pb-2 border-b border-slate-50">
+                    <div>
+                      <CardTitle>Room Daily Schedule</CardTitle>
+                      <CardDescription>View all training spaces for a specific day</CardDescription>
+                    </div>
+                    <Input type="date" className="w-auto h-9 text-xs" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} />
+                  </CardHeader>
+                  <CardContent className="pt-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {(() => {
+                        let configRooms = schoolInfo?.rooms ? schoolInfo.rooms.split(',').map(r => r.trim()).filter(Boolean) : [];
+                        const usedRooms = lessons.map(l => {
+                          const session = sessions.find(s => s.id === l.sessionId || s.id === l.session_id);
+                          return l.classroom || session?.room || session?.classroom;
+                        }).filter(Boolean);
+                        let availableRooms = Array.from(new Set([...configRooms, ...usedRooms])) as string[];
+                        
+                        if (availableRooms.length === 0) availableRooms = ['Training Room 1', 'Training Room 2', 'Training Room 3', 'Training Room 4'];
+                        
+                        return availableRooms.map(roomName => {
+                          const roomLessons = lessons.filter(l => {
+                            const session = sessions.find(s => s.id === l.sessionId || s.id === l.session_id);
+                            const r = l.classroom || session?.room || session?.classroom;
+                            const date = l.lessonDate || l.lesson_date || '';
+                            return r === roomName && date === scheduleDate;
+                          });
+                          
+                          const roomSessions = sessions.filter(s => {
+                            if (s.sessionStatus === 'cancelled') return false;
+                            const r = s.room || s.classroom || s.deliveryMode;
+                            if (r !== roomName) return false;
+                            if (!s.startDate || !s.endDate) return false;
+                            return s.startDate <= scheduleDate && s.endDate >= scheduleDate;
+                          });
+
+                          return (
+                            <div key={roomName} className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                              <h3 className="font-black text-slate-800 mb-4 inline-flex px-3 py-1 bg-white border border-slate-200 rounded-md shadow-sm items-center gap-2">
+                                <Building2 className="w-4 h-4 text-emerald-600" /> {roomName}
+                              </h3>
+                              <div className="space-y-4 text-sm">
+                                {roomLessons.length === 0 && roomSessions.length === 0 && (
+                                  <div className="p-4 text-center text-slate-400 text-xs italic uppercase tracking-wider">Available (No Bookings)</div>
+                                )}
+                                
+                                {roomLessons.length > 0 && (
+                                  <div className="space-y-2">
+                                    {roomLessons.map(l => {
+                                      const session = sessions.find(s => s.id === l.sessionId || s.id === l.session_id);
+                                      const course = courses.find(c => c.id === session?.courseId);
+                                      const displayStartTime = l.startTime ? l.startTime : session?.startTime;
+                                      const displayEndTime = l.endTime ? l.endTime : session?.endTime;
+                                      const timeDisplay = displayStartTime && displayEndTime ? `${displayStartTime} - ${displayEndTime}` : 'Time TBC';
+                                      const tid = l.tutorId || l.tutor_id || session?.tutorId || session?.tutor_id;
+                                      const tutor = tutors.find(t => t.id === tid);
+                                      return (
+                                        <div key={l.id} className="p-3 bg-white border-l-4 border-emerald-500 rounded shadow-sm">
+                                          <div className="font-bold text-slate-800">{timeDisplay}</div>
+                                          <div className="text-emerald-700 font-medium">{course?.title || session?.sessionName}</div>
+                                          <div className="text-xs text-slate-500 mt-1">Instructor: <span className="font-semibold text-slate-700">{tutor?.name || 'Unassigned'}</span></div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                                
+                                {roomSessions.length > 0 && (
+                                  <div>
+                                    <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Active Course Intakes Spanning This Date</h4>
+                                    <div className="space-y-2">
+                                      {roomSessions.sort((a,b) => (a.startDate || '').localeCompare(b.startDate || '')).map(s => {
+                                        const course = courses.find(c => c.id === s.courseId);
+                                        const tutor = tutors.find(t => t.id === (s.tutorId || s.tutor_id));
+                                        return (
+                                          <div key={s.id} className="p-2 border border-slate-200 bg-white shadow-sm rounded flex flex-col justify-center">
+                                            <div className="font-bold text-slate-700 text-xs mb-1">{course?.title || s.sessionName}</div>
+                                            <div className="text-[10px] text-slate-500 font-medium mb-1">Duration: {s.startDate} to {s.endDate}</div>
+                                            <div className="text-[10px] text-slate-500">Instructor: <span className="font-semibold text-slate-700">{tutor?.name || 'Unassigned'}</span></div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* ROOM MONTHLY */}
+              {scheduleTab === 'room-monthly' && (
+                <Card className="border-none shadow-xl shadow-slate-200/50 bg-white/80 backdrop-blur-sm">
+                  <CardHeader className="flex flex-row items-center justify-between pb-2 border-b border-slate-50">
+                    <div>
+                      <CardTitle>Room Monthly Overview</CardTitle>
+                      <CardDescription>View a specific training space's month at a glance</CardDescription>
+                    </div>
+                    <div className="flex gap-2">
+                      <select className="h-9 px-3 border border-slate-200 rounded text-sm outline-none bg-white" value={scheduleRoomFilter} onChange={e => setScheduleRoomFilter(e.target.value)}>
+                        <option value="">All Rooms</option>
+                        {(() => {
+                          let configRooms = schoolInfo?.rooms ? schoolInfo.rooms.split(',').map(r => r.trim()).filter(Boolean) : [];
+                          const usedRooms = lessons.map(l => {
+                            const session = sessions.find(s => s.id === l.sessionId || s.id === l.session_id);
+                            return l.classroom || session?.room || session?.classroom;
+                          }).filter(Boolean);
+                          let availableRooms = Array.from(new Set([...configRooms, ...usedRooms])) as string[];
+                          if (availableRooms.length === 0) availableRooms = ['Training Room 1', 'Training Room 2', 'Training Room 3', 'Training Room 4'];
+                          return availableRooms.map(r => <option key={r} value={r}>{r}</option>);
+                        })()}
+                      </select>
+                      <Input type="month" className="w-auto h-9 text-xs" value={scheduleMonth} onChange={e => setScheduleMonth(e.target.value)} />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    {(() => {
+                      const overlappingSessions = sessions.filter(s => {
+                        if (s.sessionStatus === 'cancelled') return false;
+                        const r = s.room || s.classroom || s.deliveryMode;
+                        if (scheduleRoomFilter && r !== scheduleRoomFilter) return false;
+                        if (!s.startDate || !s.endDate) return false;
+                        return s.startDate.startsWith(scheduleMonth) || s.endDate.startsWith(scheduleMonth) || (s.startDate < scheduleMonth && s.endDate > scheduleMonth);
+                      });
+
+                      return (
+                        <div className="mt-6">
+                            {(() => {
+                                const groupedByRoom: Record<string, any[]> = {};
+                                overlappingSessions.forEach(s => {
+                                    const room = s.room || s.classroom || s.deliveryMode || 'unassigned';
+                                    if (!groupedByRoom[room]) groupedByRoom[room] = [];
+                                    groupedByRoom[room].push(s);
+                                });
+
+                                const roomKeys = Object.keys(groupedByRoom).sort((a, b) => {
+                                    if (a === 'unassigned') return 1;
+                                    if (b === 'unassigned') return -1;
+                                    return a.localeCompare(b);
+                                });
+
+                                if (roomKeys.length === 0) {
+                                  return <div className="py-8 text-center text-slate-400 text-sm italic">No active intakes for this room this month.</div>;
+                                }
+
+                                return roomKeys.map(roomName => {
+                                    const sessionsForRoom = groupedByRoom[roomName].sort((a,b) => (a.startDate || '').localeCompare(b.startDate || ''));
+
+                                    return (
+                                        <div key={roomName} className="mb-8">
+                                            <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                                                <MapPin className="w-4 h-4 text-emerald-500" /> {roomName === 'unassigned' ? 'Unassigned Room' : roomName} - Active Intakes
+                                            </h3>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                                {sessionsForRoom.map(s => {
+                                                    const course = courses.find(c => c.id === s.courseId);
+                                                    const tutor = tutors.find(t => t.id === (s.tutorId || s.tutor_id));
+                                                    return (
+                                                      <div key={s.id} className="p-3 border border-emerald-100 bg-emerald-50/30 rounded-lg flex flex-col justify-center">
+                                                          <div className="font-bold text-emerald-900 text-sm mb-1">{course?.title || s.sessionName}</div>
+                                                          <div className="text-[11px] text-emerald-600 font-medium mb-1">Duration: {s.startDate} to {s.endDate}</div>
+                                                          <div className="text-[10px] text-slate-500 mb-1">Instructor: <span className="font-semibold text-slate-700">{tutor?.name || 'Unassigned'}</span></div>
+                                                      </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    );
+                                });
+                            })()}
+
+                        </div>
+                      );
+                    })()}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           )}
 
           {activeTab === 'courses' && (
@@ -1639,7 +2554,7 @@ export function AdminDashboard() {
                           <TableHead>Day</TableHead>
                           <TableHead>EB Price</TableHead>
                           <TableHead>Base Price</TableHead>
-                          <TableHead>Sessions</TableHead>
+                          <TableHead>Courses</TableHead>
                           <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1672,7 +2587,8 @@ export function AdminDashboard() {
                                     setNewSession({
                                       ...newSession,
                                       courseId: c.id,
-                                      price: c.standardPrice || 0
+                                      earlyBirdPrice: c.earlyBirdPrice || 0,
+                                      standardPrice: c.standardPrice || 0
                                     });
                                     setActiveTab('sessions');
                                   }}
@@ -1695,7 +2611,7 @@ export function AdminDashboard() {
                                   variant="ghost" 
                                   size="sm" 
                                   className="h-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                                  onClick={() => confirmDelete(c.id, 'course')}
+                                  onClick={() => confirmDelete(c.id, 'course', c.title || c.courseCode || 'Unknown Course')}
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </Button>
@@ -1713,69 +2629,102 @@ export function AdminDashboard() {
 
           {activeTab === 'tutors' && (
             <div className="space-y-6">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle>Teaching Hours Verification</CardTitle>
-                  <Button variant="outline" size="sm" onClick={() => handleExportCSV(hours, 'teaching_hours')} className="gap-2 h-8"><Download className="w-3.5 h-3.5" /> Export</Button>
+              <Card className="border-none shadow-xl shadow-slate-200/50 bg-white/80 backdrop-blur-sm">
+                <CardHeader className="flex flex-col md:flex-row md:items-center justify-between pb-4 gap-4 border-b border-slate-50">
+                  <div>
+                    <CardTitle className="text-xl font-black text-slate-800 tracking-tight">Part-time Instructor</CardTitle>
+                    <CardDescription className="text-xs font-medium text-slate-500">Track records and verify completed courses</CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+                      <Input 
+                        placeholder="Search instructor..." 
+                        className="pl-9 h-9 text-xs w-48 focus:ring-indigo-500" 
+                        value={instructorSearchTerm}
+                        onChange={(e) => setInstructorSearchTerm(e.target.value)}
+                      />
+                    </div>
+                    <Input type="month" value={ptMonth} onChange={e => setPtMonth(e.target.value)} className="h-9 text-xs w-36" />
+                    <Button onClick={() => setIsManualHoursModalOpen(true)} className="gap-2 h-9 text-[10px] font-bold uppercase tracking-wider bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200">
+                      <Plus className="w-3.5 h-3.5" /> Add Course
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => {
+                        const uniqueTutors = Array.from(new Set(hours.filter(h => h.date && h.date.startsWith(ptMonth) && (!instructorSearchTerm || tutors.find(t=>t.id===h.tutorId)?.name?.toLowerCase().includes(instructorSearchTerm.toLowerCase()))).map(h => h.tutorId)));
+                        if (uniqueTutors.length === 0) return toast.error('No records found to generate report');
+                        uniqueTutors.forEach(tid => {
+                           const t = tutors.find(t=>t.id===tid);
+                           if (t) generatePTReport(tid, t.name || t.email || 'Unknown', ptMonth);
+                        });
+                        toast.success('Generated ' + uniqueTutors.length + ' reports');
+                    }} className="gap-2 h-9 text-[10px] font-bold uppercase tracking-wider border-slate-200 hover:bg-slate-50">
+                      <Download className="w-3.5 h-3.5" /> Download PDF
+                    </Button>
+                  </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-0">
                   <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Instructor ID</TableHead>
-                        <TableHead>Hours</TableHead>
-                        <TableHead>Details</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Actions</TableHead>
+                    <TableHeader className="bg-slate-50/50 border-b border-slate-100">
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Instructor</TableHead>
+                        <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Course Name</TableHead>
+                        <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Date</TableHead>
+                        <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status</TableHead>
+                        <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {hours.map(h => (
-                        <TableRow key={h.id}>
-                        <TableCell className="font-mono text-xs">{h.tutorId?.slice(0,6)}...</TableCell>
-                          <TableCell className="font-bold">{h.hours}h</TableCell>
-                          <TableCell className="text-xs text-slate-500">{h.details}</TableCell>
-                          <TableCell>
-                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${h.status === 'approved' ? 'bg-green-100 text-green-700' : h.status === 'paid' ? 'bg-indigo-100 text-indigo-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                               {h.status?.replace('_', ' ')}
-                             </span>
-                          </TableCell>
-                          <TableCell>
-                             {h.status === 'pending_approval' && (
-                                <Button size="sm" onClick={() => handleUpdateHoursStatus(h.id, 'approved')} className="h-7 text-xs">Approve</Button>
-                             )}
-                             {h.status === 'approved' && (
-                                <Button size="sm" variant="outline" onClick={() => handleUpdateHoursStatus(h.id, 'paid')} className="h-7 text-xs border-indigo-200 text-indigo-600 hover:bg-indigo-50">Mark Paid</Button>
-                             )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      {hours.length === 0 && <TableRow><TableCell colSpan={5} className="text-center py-4 text-slate-500">No hours logged yet.</TableCell></TableRow>}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardHeader><CardTitle>Registered Instructors</CardTitle></CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Email</TableHead>
-                        <TableHead>ID</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {tutors.map(t => (
-                        <TableRow key={t.id}>
-                          <TableCell className="font-medium text-slate-800">{t.name}</TableCell>
-                          <TableCell className="text-slate-500">{t.email}</TableCell>
-                          <TableCell className="font-mono text-xs bg-slate-50 rounded px-2 py-1">{t.id}</TableCell>
-                        </TableRow>
-                      ))}
-                      {tutors.length === 0 && <TableRow><TableCell colSpan={3} className="text-center py-4 text-slate-500">No instructors found.</TableCell></TableRow>}
+                      {hours.filter(h => {
+                         if (ptMonth && (!h.date || !h.date.startsWith(ptMonth))) return false;
+                         if (!instructorSearchTerm) return true;
+                         const tutor = tutors.find(t => t.id === h.tutorId);
+                         return tutor?.name?.toLowerCase().includes(instructorSearchTerm.toLowerCase());
+                      }).map(h => {
+                        const tutor = tutors.find(t => t.id === h.tutorId);
+                        return (
+                          <TableRow key={h.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                            <TableCell className="px-6 py-4">
+                              <div className="font-bold text-slate-800">{tutor?.name || 'Unknown Instructor'}</div>
+                              <div className="text-[10px] font-mono text-slate-400 mt-0.5">{h.tutorId?.slice(0,8)}...</div>
+                            </TableCell>
+                            <TableCell className="px-6 py-4">
+                              <span className="font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-md text-[11px] border border-indigo-100 uppercase tracking-wider shadow-sm">
+                                {h.course || h.details || h.notes || 'N/A'}
+                              </span>
+                            </TableCell>
+                            <TableCell className="px-6 py-4">
+                              <span className="text-[11px] font-medium text-slate-600 tracking-tight">{h.date || 'N/A'}</span>
+                            </TableCell>
+                            <TableCell className="px-6 py-4">
+                               <span className={`px-2.5 py-1 rounded text-[9px] font-black uppercase tracking-wider ${
+                                 h.status === 'approved' ? 'bg-green-100 text-green-700 border border-green-200 shadow-sm' : 
+                                 h.status === 'paid' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-sm' : 
+                                 'bg-amber-100 text-amber-700 border border-amber-200 shadow-sm'}`}>
+                                 {h.status?.replace('_', ' ')}
+                               </span>
+                            </TableCell>
+                            <TableCell className="px-6 py-4 text-right">
+                               <div className="flex justify-end gap-2">
+                                 {h.status === 'pending_approval' && (
+                                    <Button size="sm" onClick={() => handleUpdateHoursStatus(h.id, 'approved')} className="h-8 px-4 text-[10px] font-bold uppercase tracking-wider bg-slate-900 hover:bg-slate-800 text-white shadow-md transition-transform active:scale-95">Approve</Button>
+                                 )}
+                                 {h.status === 'approved' && (
+                                    <Button size="sm" variant="outline" onClick={() => handleUpdateHoursStatus(h.id, 'paid')} className="h-8 px-4 text-[10px] font-bold uppercase tracking-wider border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 shadow-sm transition-transform active:scale-95">Mark Paid</Button>
+                                 )}
+                                 {h.status === 'paid' && (
+                                    <span className="h-8 flex items-center px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400 italic">Settled</span>
+                                 )}
+                               </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                      {hours.filter(h => {
+                         if (ptMonth && (!h.date || !h.date.startsWith(ptMonth))) return false;
+                         if (!instructorSearchTerm) return true;
+                         const tutor = tutors.find(t => t.id === h.tutorId);
+                         return tutor?.name?.toLowerCase().includes(instructorSearchTerm.toLowerCase());
+                      }).length === 0 && <TableRow><TableCell colSpan={5} className="text-center py-12 text-slate-400 text-xs italic tracking-wider">No part-time instructor records found matching your criteria.</TableCell></TableRow>}
                     </TableBody>
                   </Table>
                 </CardContent>
@@ -1815,29 +2764,59 @@ export function AdminDashboard() {
 
           {activeTab === 'sessions' && (
             <div className="space-y-6">
-              {!viewingLessonsForSession ? (
+              <div className="flex gap-2 p-1 bg-slate-100 rounded-lg w-max mb-6">
+                <Button 
+                  variant={courseRunsActiveTab === 'runs' ? 'default' : 'ghost'} 
+                  size="sm" 
+                  onClick={() => setCourseRunsActiveTab('runs')}
+                  className="px-6 h-8 text-[11px] font-bold uppercase tracking-wider"
+                >
+                  Course Runs
+                </Button>
+                <Button 
+                  variant={courseRunsActiveTab === 'attendance' ? 'default' : 'ghost'} 
+                  size="sm" 
+                  onClick={() => setCourseRunsActiveTab('attendance')}
+                  className="px-6 h-8 text-[11px] font-bold uppercase tracking-wider"
+                >
+                  Sessions & Attendance
+                </Button>
+              </div>
+
+              {courseRunsActiveTab === 'runs' ? (
                 <>
-                  <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                    <div>
-                      <h2 className="text-lg font-bold text-slate-800 font-sans tracking-tight">Active Sessions & Intakes</h2>
-                      <p className="text-xs text-slate-500">Manage your course runs and schedules</p>
-                    </div>
-                    <Button 
-                      onClick={() => setSessionCreationModalOpen(true)} 
-                      className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-600/20 px-6 font-bold text-xs uppercase tracking-widest transition-all hover:scale-105 active:scale-95"
-                    >
-                      <Plus className="w-4 h-4 mr-2" /> 
-                      New Session Instance
-                    </Button>
-                  </div>
+                  {!viewingLessonsForSession ? (
+                    <>
+                      <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                        <div>
+                          <h2 className="text-lg font-bold text-slate-800 font-sans tracking-tight">Active Courses & Intakes</h2>
+                          <p className="text-xs text-slate-500">Manage your course runs and schedules</p>
+                        </div>
+                        <Button 
+                          onClick={() => setSessionCreationModalOpen(true)} 
+                          className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-600/20 px-6 font-bold text-xs uppercase tracking-widest transition-all hover:scale-105 active:scale-95"
+                        >
+                          <Plus className="w-4 h-4 mr-2" /> 
+                          New Course Instance
+                        </Button>
+                      </div>
 
                   <Card className="shadow-sm">
                     <CardHeader className="flex flex-row items-center justify-between">
                       <div>
-                        <CardTitle>Active Sessions & Intakes</CardTitle>
+                        <CardTitle>Active Courses & Intakes</CardTitle>
                         <CardDescription>Manage your course runs and schedules</CardDescription>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <div className="relative w-full sm:w-64">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                          <Input 
+                            placeholder="Search code, course, instructor, status..." 
+                            className="pl-9 h-8 text-xs focus:ring-blue-500 border-slate-200"
+                            value={courseRunSearchTerm}
+                            onChange={(e) => setCourseRunSearchTerm(e.target.value)}
+                          />
+                        </div>
                         <Button variant="outline" size="sm" onClick={() => handleExportCSV(sessions, 'sessions')} className="gap-2 h-8"><Download className="w-3.5 h-3.5" /> Export</Button>
                       </div>
                     </CardHeader>
@@ -1849,43 +2828,64 @@ export function AdminDashboard() {
                               <TableHead>Code Name</TableHead>
                               <TableHead>Course</TableHead>
                               <TableHead>Instructor</TableHead>
+                              <TableHead>Delivery & Room</TableHead>
                               <TableHead>Enrolled</TableHead>
-                              <TableHead>Classes</TableHead>
                               <TableHead>Status</TableHead>
                               <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {sessions.map(s => {
+                            {sessions.filter(s => {
+                                if (s.sessionStatus === 'cancelled') return false;
+                                const hasCertificates = certificates.some((cert: any) => {
+                                    const reg = regs.find((r: any) => r.id === cert.registrationId);
+                                    return reg?.sessionId === s.id;
+                                });
+                                if (hasCertificates) return false;
+                                
+                                if (courseRunSearchTerm) {
+                                    const course = courses.find((c: any) => c.id === s.courseId);
+                                    const instructor = tutors.find((t: any) => t.id === s.tutorId);
+                                    const term = courseRunSearchTerm.toLowerCase();
+                                    const matchCourseCode = course?.courseCode?.toLowerCase().includes(term);
+                                    const matchSessionName = s.sessionName?.toLowerCase().includes(term);
+                                    const matchCourseTitle = course?.title?.toLowerCase().includes(term);
+                                    const matchInstructor = instructor?.name?.toLowerCase().includes(term);
+                                    const matchStatus = s.sessionStatus?.toLowerCase().includes(term);
+                                    return matchCourseCode || matchSessionName || matchCourseTitle || matchInstructor || matchStatus;
+                                }
+                                return true;
+                            }).map(s => {
                               const course = courses.find(c => c.id === s.courseId);
                               const instructor = tutors.find(t => t.id === s.tutorId);
-                              const sessionLessons = lessons.filter(l => l.sessionId === s.id);
                               return (
                                 <TableRow key={s.id} className="hover:bg-slate-50/50">
                                   <TableCell>
                                     <div className="font-semibold text-slate-800 whitespace-pre-wrap leading-snug">{course?.courseCode || s.sessionName}</div>
                                     <div className="text-[10px] uppercase font-bold text-slate-400 mt-0.5">
-                                      {s.deliveryMode} • {s.startDate || 'No date'} - {s.endDate || 'No date'}
+                                      {s.startDate || 'No date'} - {s.endDate || 'No date'}
                                     </div>
                                   </TableCell>
                                   <TableCell className="text-xs whitespace-pre-wrap max-w-[200px] leading-tight">{course?.title || 'Unknown'}</TableCell>
                                   <TableCell className="text-xs font-medium">{instructor?.name || 'Unassigned'}</TableCell>
                                   <TableCell>
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="font-bold">{s.enrolledCount || 0}</span>
-                                      <span className="text-slate-300">/</span>
-                                      <span className="text-slate-500">{s.quota}</span>
+                                    <div className="flex flex-col gap-1 items-start">
+                                      <span className="bg-slate-100 px-2 py-0.5 rounded uppercase font-black text-[10px] tracking-tight text-slate-600">
+                                        {s.deliveryMode || 'N/A'}
+                                      </span>
+                                      {s.room && (
+                                        <span className="text-[10px] font-bold text-blue-600 flex items-center gap-1">
+                                          <MapPin className="w-3 h-3" /> {s.room}
+                                        </span>
+                                      )}
                                     </div>
                                   </TableCell>
                                   <TableCell>
-                                    <Button 
-                                      variant="ghost" 
-                                      size="sm" 
-                                      className="h-7 text-[10px] text-blue-600 gap-1 px-2 font-bold bg-blue-50 hover:bg-blue-100"
-                                      onClick={() => setViewingLessonsForSession(s)}
-                                    >
-                                      {sessionLessons.length} LESSONS <ExternalLink className="w-2.5 h-2.5" />
-                                    </Button>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-bold">{regs.filter(r => r.sessionId === s.id && r.status === 'verified').length}</span>
+                                      <span className="text-slate-300">/</span>
+                                      <span className="text-slate-500">{s.quota}</span>
+                                    </div>
                                   </TableCell>
                                   <TableCell>
                                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${s.sessionStatus === 'open' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
@@ -1894,10 +2894,8 @@ export function AdminDashboard() {
                                   </TableCell>
                                   <TableCell className="text-right">
                                     <div className="flex justify-end gap-1">
-
-                                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-indigo-600" title="Duplicate" onClick={() => handleDuplicateSession(s)}><Copy className="w-3.5 h-3.5" /></Button>
                                       <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-blue-600" title="Edit" onClick={() => { setSelectedSession(s); setSessionModalOpen(true); }}><Edit2 className="w-3.5 h-3.5" /></Button>
-                                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-300 hover:text-red-600" title="Delete" onClick={() => confirmDelete(s.id, 'session')}>
+                                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-300 hover:text-red-600" title="Delete" onClick={() => confirmDelete(s.id, 'session', s.sessionName || 'Unknown Session')}>
                                         <Trash2 className="w-3.5 h-3.5" />
                                       </Button>
                                     </div>
@@ -2022,16 +3020,15 @@ export function AdminDashboard() {
                                 </div>
                               </div>
                               <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Button variant="ghost" size="sm" className="h-8 px-2 text-[10px] font-bold uppercase tracking-wider text-green-600 hover:text-green-700 hover:bg-green-50 mr-1" title="Attendance" onClick={() => handleOpenAttendanceModal(l)}>
+                                  <ClipboardList className="w-3.5 h-3.5 mr-1" /> Attendance
+                                </Button>
                                 <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50" title="Edit" onClick={() => {
                                   const newDate = prompt("New Date:", l.lesson_date);
                                   if (newDate) handleUpdateLesson(l.id, { lesson_date: newDate });
                                 }}><Edit2 className="w-3.5 h-3.5" /></Button>
-                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-300 hover:text-red-500 hover:bg-red-50" title="Remove" onClick={async () => {
-                                    try {
-                                      await deleteDoc(doc(db, 'lessons', l.id));
-                                      fetchData();
-                                      toast.success("Lesson deleted");
-                                    } catch(e: any) { toast.error(e.message); }
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-300 hover:text-red-500 hover:bg-red-50" title="Remove" onClick={() => {
+                                    confirmDelete(l.id, 'lesson', l.lesson_title || 'Unknown Lesson');
                                 }}><Trash2 className="w-3.5 h-3.5" /></Button>
                               </div>
                             </div>
@@ -2049,6 +3046,81 @@ export function AdminDashboard() {
                   </div>
                 </div>
               )}
+              </>
+            ) : (
+              <Card className="border-none shadow-xl shadow-slate-200/50 bg-white/80 backdrop-blur-sm overflow-hidden">
+                <CardHeader className="border-b border-slate-50 bg-slate-50/30">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <CardTitle className="text-xl font-black text-slate-800 tracking-tight">Session Certificates</CardTitle>
+                      <CardDescription className="text-xs font-medium text-slate-500">Manage attendance sheets and issue certificates by course intake</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader className="bg-slate-50/50">
+                      <TableRow className="hover:bg-transparent border-slate-100">
+                        <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Course / Session</TableHead>
+                        <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Dates</TableHead>
+                        <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Enrollees</TableHead>
+                        <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status</TableHead>
+                        <TableHead className="px-6 py-4 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sessions.map(s => {
+                        const course = courses.find(c => c.id === s.courseId);
+                        const sessionRegs = regs.filter(r => r.sessionId === s.id && r.status === 'verified');
+                        
+                        return (
+                          <TableRow key={s.id} className="group border-slate-50 hover:bg-slate-50/50 transition-colors">
+                            <TableCell className="px-6 py-4">
+                              <div className="font-bold text-slate-800 leading-tight">{course?.title}</div>
+                              <div className="text-[10px] font-mono text-slate-400 mt-0.5">{s.sessionName}</div>
+                            </TableCell>
+                            <TableCell className="px-6 py-4 text-xs font-medium text-slate-600">
+                              {s.startDate} - {s.endDate}
+                            </TableCell>
+                            <TableCell className="px-6 py-4">
+                              <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded border border-indigo-100">
+                                {sessionRegs.length} STUDENTS
+                              </span>
+                            </TableCell>
+                            <TableCell className="px-6 py-4">
+                              <span className={`text-[9px] px-2 py-0.5 rounded font-black uppercase tracking-widest ${
+                                s.sessionStatus === 'completed' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+                              }`}>
+                                {s.sessionStatus}
+                              </span>
+                            </TableCell>
+                            <TableCell className="px-6 py-4 text-right">
+                              <div className="flex justify-end gap-2">
+                                <Button 
+                                  size="sm" 
+                                  variant="outline" 
+                                  className="h-8 text-[10px] font-bold uppercase tracking-wider gap-2 border-slate-200 hover:bg-white" 
+                                  onClick={() => handleExportAttendanceSheet(s, course, sessionRegs)}
+                                >
+                                  <ClipboardList className="w-3 h-3 text-slate-400" /> Attendance
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  className="h-8 text-[10px] font-bold uppercase tracking-wider bg-slate-900 hover:bg-black"
+                                  onClick={() => handleManageCertificates(s)}
+                                >
+                                  <Award className="w-3.5 h-3.5 mr-1.5" /> Manage
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
             </div>
           )}
 
@@ -2273,16 +3345,34 @@ export function AdminDashboard() {
                     <Input 
                       value={schoolInfo.name} 
                       onChange={e => setSchoolInfo({...schoolInfo, name: e.target.value})}
-                      placeholder="e.g. ProTrain Academy"
+                      placeholder="e.g. Training Academy"
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Logo URL</label>
-                    <Input 
-                      value={schoolInfo.logo_url} 
-                      onChange={e => setSchoolInfo({...schoolInfo, logo_url: e.target.value})}
-                      placeholder="https://example.com/logo.png"
-                    />
+                    <label className="text-sm font-medium">School Logo</label>
+                    <div className="flex items-center gap-4">
+                      {schoolInfo.logo_url && (
+                        <div className="w-10 h-10 rounded overflow-hidden shrink-0 bg-slate-100 border border-slate-200 flex items-center justify-center">
+                          <img src={schoolInfo.logo_url} alt="Logo preview" className="max-w-full max-h-full object-contain" />
+                        </div>
+                      )}
+                      <div className="flex-1">
+                        <Input 
+                          type="file"
+                          accept="image/*"
+                          onChange={e => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setSchoolInfo({...schoolInfo, logo_url: reader.result as string});
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Official Address</label>
@@ -2298,6 +3388,14 @@ export function AdminDashboard() {
                       value={schoolInfo.phone} 
                       onChange={e => setSchoolInfo({...schoolInfo, phone: e.target.value})}
                       placeholder="+852 XXXX XXXX"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Sales Email</label>
+                    <Input 
+                      value={schoolInfo.email || ''} 
+                      onChange={e => setSchoolInfo({...schoolInfo, email: e.target.value})}
+                      placeholder="sales@example.com"
                     />
                   </div>
                   <div className="space-y-2">
@@ -2318,6 +3416,17 @@ export function AdminDashboard() {
                     className="min-h-[100px]"
                     placeholder="Enter center fee terms, policies, etc."
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Rooms & Capacity (comma separated)</label>
+                  <Textarea 
+                    value={schoolInfo.rooms || ''} 
+                    onChange={e => setSchoolInfo({...schoolInfo, rooms: e.target.value})}
+                    className="min-h-[100px]"
+                    placeholder="e.g. Room 101 (20), Room 102 (30), Main Hall (100)"
+                  />
+                  <p className="text-xs text-slate-500">List of rooms available for classes with capacity. Separate by commas (e.g. Room A (20), Room B (30)).</p>
                 </div>
                 
                 <div className="flex justify-end">
@@ -2572,7 +3681,7 @@ export function AdminDashboard() {
                             <CardContent className="p-4">
                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                                  <div className="p-3 bg-slate-50 rounded-lg">
-                                   <p className="text-[10px] font-bold text-slate-500 uppercase">Sessions</p>
+                                   <p className="text-[10px] font-bold text-slate-500 uppercase">Courses</p>
                                    <p className="text-lg font-bold text-slate-900">{sessions.filter(s => s.tutorId === selectedUser.id).length}</p>
                                  </div>
                                  <div className="p-3 bg-slate-50 rounded-lg">
@@ -2598,6 +3707,32 @@ export function AdminDashboard() {
                                    </p>
                                  </div>
                                </div>
+                            </CardContent>
+                          </Card>
+
+                          {/* MTM Report Section */}
+                          <Card>
+                            <CardHeader className="py-3 px-4">
+                              <CardTitle className="text-sm font-bold flex items-center gap-2">
+                                <FileText className="w-4 h-4 text-emerald-600" /> Annual MTM Teaching Hours Report
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="p-4 flex items-center gap-4">
+                              <select 
+                                className="h-9 px-3 border border-slate-200 rounded text-sm outline-none bg-white font-medium text-slate-700" 
+                                value={mtmYear} 
+                                onChange={e => setMtmYear(e.target.value)}
+                              >
+                                {(() => {
+                                   const y = new Date().getFullYear();
+                                   return [y, y-1, y-2, y-3].map(yr => (
+                                     <option key={yr} value={yr.toString()}>{yr}</option>
+                                   ));
+                                })()}
+                              </select>
+                              <Button size="sm" onClick={() => generateMTMReport(selectedUser.id, selectedUser.name || 'Instructor', mtmYear)} className="gap-2 h-9 text-[10px] font-bold uppercase tracking-wider bg-emerald-600 hover:bg-emerald-700 text-white shadow-md">
+                                <Download className="w-3.5 h-3.5" /> Export MTM PDF
+                              </Button>
                             </CardContent>
                           </Card>
                        </div>
@@ -2628,7 +3763,7 @@ export function AdminDashboard() {
                               );
                             })}
                             {regs.filter(r => r.studentId === selectedUser.id).length === 0 && (
-                              <p className="text-xs text-slate-400 italic">No course registrations found.</p>
+                              <p className="text-xs text-slate-400 italic">No course payments found.</p>
                             )}
                           </div>
                         </CardContent>
@@ -2742,6 +3877,25 @@ export function AdminDashboard() {
                                   key={t.id}
                                   value={t.name}
                                   onSelect={() => {
+                                    if (!selectedSession.startDate || !selectedSession.endDate) {
+                                      toast.error(<span className="font-bold text-red-600">Please enter Start Date and End Date first before selecting an instructor.</span>);
+                                      return;
+                                    }
+                                    
+                                    const hasOverlap = sessions.some((s: any) => 
+                                      s.id !== selectedSession.id &&
+                                      s.tutorId === t.id && 
+                                      s.startDate && s.endDate &&
+                                      s.startDate <= selectedSession.endDate && 
+                                      s.endDate >= selectedSession.startDate &&
+                                      s.sessionStatus !== 'cancelled'
+                                    );
+
+                                    if (hasOverlap) {
+                                      toast.error(<span className="font-bold text-red-600">This instructor is already assigned to an overlapping course intake! Please choose another instructor or different dates.</span>);
+                                      return;
+                                    }
+
                                     setSelectedSession({
                                       ...selectedSession,
                                       tutorId: t.id
@@ -2780,6 +3934,27 @@ export function AdminDashboard() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Early Bird Price (HKD)</label>
+                    <Input 
+                      type="number"
+                      value={isNaN(selectedSession.earlyBirdPrice) ? '' : selectedSession.earlyBirdPrice} 
+                      onChange={e => setSelectedSession({...selectedSession, earlyBirdPrice: parseFloat(e.target.value) || 0})}
+                      className="h-10 border-slate-200"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Standard Price (HKD)</label>
+                    <Input 
+                      type="number"
+                      value={isNaN(selectedSession.standardPrice) ? '' : selectedSession.standardPrice} 
+                      onChange={e => setSelectedSession({...selectedSession, standardPrice: parseFloat(e.target.value) || 0, price: parseFloat(e.target.value) || 0})}
+                      className="h-10 border-slate-200"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Enrollment Status</label>
                     <select 
                       className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-blue-600/20 outline-none"
@@ -2802,6 +3977,24 @@ export function AdminDashboard() {
                     />
                   </div>
                 </div>
+
+                {(selectedSession.sessionStatus === 'full' || selectedSession.sessionStatus === 'completed') && selectedSession.deliveryMode !== 'online' && (
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-blue-600 flex items-center gap-1">
+                      Choose Room <span className="text-[10px] font-normal text-slate-400 capitalize">(Required for {selectedSession.sessionStatus} courses)</span>
+                    </label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-blue-200 bg-blue-50/30 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-600/20 outline-none"
+                      value={selectedSession.room || ''}
+                      onChange={e => setSelectedSession({...selectedSession, room: e.target.value})}
+                    >
+                      <option value="">-- Select a Room --</option>
+                      {schoolInfo.rooms?.split(',').map(r => r.trim()).filter(Boolean).map((room, idx) => (
+                        <option key={idx} value={room}>{room}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
             )}
             <DialogFooter className="pt-6 border-t border-slate-100 flex gap-2">
@@ -2819,12 +4012,22 @@ export function AdminDashboard() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-600 font-bold">
               <ShieldAlert className="w-5 h-5" /> 
-              {itemToDelete?.type === 'course' ? 'Delete Course Template' : 'Delete Course Session'}
+              {itemToDelete?.type === 'course' ? 'Delete Course Template' 
+                : itemToDelete?.type === 'session' ? 'Delete Course Room' 
+                : itemToDelete?.type === 'lesson' ? 'Delete Lesson'
+                : 'Delete Registration'}
             </DialogTitle>
             <DialogDescription className="text-slate-600">
+              <span className="block mb-2 font-semibold text-slate-800 break-words">
+                Deleting: {itemToDelete?.name}
+              </span>
               {itemToDelete?.type === 'course' 
                 ? "Are you sure you want to delete this course template? This will not affect existing sessions but the template will be permanently removed."
-                : "Are you sure you want to delete this session? All scheduled lessons and data for this run will be permanently removed."}
+                : itemToDelete?.type === 'session' 
+                  ? "Are you sure you want to delete this session? All scheduled lessons and data for this run will be permanently removed."
+                  : itemToDelete?.type === 'lesson'
+                    ? "Are you sure you want to delete this lesson? This action cannot be undone."
+                    : "Are you sure you want to delete this payment record? This action cannot be undone."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-6 flex gap-2 sm:justify-end">
@@ -2870,6 +4073,34 @@ export function AdminDashboard() {
                     <option value="Design">Design</option>
                   </select>
                 </div>
+
+                <div className="space-y-1.5 mt-2">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Supporting Documents (PDF)</label>
+                  <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 h-[140px] flex flex-col items-center justify-center text-center bg-slate-50/30 hover:bg-slate-50 transition-colors">
+                    <FileText className="w-8 h-8 text-slate-400 mb-2" />
+                    <p className="text-xs font-semibold text-slate-600">Course Outline Upload</p>
+                    <label className="mt-3 cursor-pointer bg-white border border-slate-200 px-4 py-2 rounded-md text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-sm transition-all active:scale-95">
+                      SELECT FILE
+                      <input 
+                        type="file" 
+                        accept=".pdf" 
+                        className="hidden" 
+                        onChange={(e) => {
+                           const file = e.target.files?.[0];
+                           if (file) {
+                             setNewCourse({...newCourse, outlineName: file.name});
+                           }
+                        }} 
+                      />
+                    </label>
+                    {newCourse.outlineName && (
+                      <div className="mt-3 flex items-center gap-2 text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
+                        <FileText className="w-3 h-3" />
+                        {newCourse.outlineName}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
               <div className="space-y-4">
                 <div className="space-y-1.5">
@@ -2877,7 +4108,7 @@ export function AdminDashboard() {
                   <textarea 
                     placeholder="Enter full descriptive title..." 
                     value={newCourse.title} 
-                    onChange={e => setNewCourse({...newCourse, title: e.target.value})}
+                    onChange={e => setNewCourse({...newCourse, title: e.target.value, certName: e.target.value})}
                     className="w-full min-h-[80px] rounded-md border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 outline-none transition-all resize-none"
                   />
                 </div>
@@ -2902,7 +4133,7 @@ export function AdminDashboard() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pb-6 border-b border-slate-100">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pb-6 border-b border-slate-100">
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Level</label>
                 <select 
@@ -2946,36 +4177,6 @@ export function AdminDashboard() {
                   onChange={e => setNewCourse({...newCourse, standardPrice: parseFloat(e.target.value) || 0})}
                   className="h-10 bg-slate-50/50 border-slate-200"
                 />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Supporting Documents (PDF)</label>
-                <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 h-[140px] flex flex-col items-center justify-center text-center bg-slate-50/30 hover:bg-slate-50 transition-colors">
-                  <FileText className="w-8 h-8 text-slate-400 mb-2" />
-                  <p className="text-xs font-semibold text-slate-600">Course Outline Upload</p>
-                  <label className="mt-3 cursor-pointer bg-white border border-slate-200 px-4 py-2 rounded-md text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-sm transition-all active:scale-95">
-                    SELECT FILE
-                    <input 
-                      type="file" 
-                      accept=".pdf" 
-                      className="hidden" 
-                      onChange={(e) => {
-                         const file = e.target.files?.[0];
-                         if (file) {
-                           setNewCourse({...newCourse, outlineName: file.name});
-                         }
-                      }} 
-                    />
-                  </label>
-                  {newCourse.outlineName && (
-                    <div className="mt-3 flex items-center gap-2 text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
-                      <FileText className="w-3 h-3" />
-                      {newCourse.outlineName}
-                    </div>
-                  )}
-                </div>
               </div>
             </div>
           </div>
@@ -3024,13 +4225,41 @@ export function AdminDashboard() {
                         <option value="Design">Design</option>
                       </select>
                     </div>
+
+                <div className="space-y-1.5 mt-2">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Supporting Documents (PDF)</label>
+                  <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 h-[140px] flex flex-col items-center justify-center text-center bg-slate-50/30 hover:bg-slate-50 transition-colors">
+                    <FileText className="w-8 h-8 text-slate-400 mb-2" />
+                    <p className="text-xs font-semibold text-slate-600">Course Outline Upload</p>
+                    <label className="mt-3 cursor-pointer bg-white border border-slate-200 px-4 py-2 rounded-md text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-sm transition-all active:scale-95">
+                      SELECT FILE
+                      <input 
+                        type="file" 
+                        accept=".pdf" 
+                        className="hidden" 
+                        onChange={(e) => {
+                           const file = e.target.files?.[0];
+                           if (file) {
+                             setSelectedCourse({...selectedCourse, outlineName: file.name});
+                           }
+                        }} 
+                      />
+                    </label>
+                    {selectedCourse.outlineName && (
+                      <div className="mt-3 flex items-center gap-2 text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
+                        <FileText className="w-3 h-3" />
+                        {selectedCourse.outlineName}
+                      </div>
+                    )}
+                  </div>
+                </div>
                   </div>
                   <div className="space-y-4">
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Full Course Title</label>
                       <textarea 
                         value={selectedCourse.title || ''} 
-                        onChange={e => setSelectedCourse({...selectedCourse, title: e.target.value})}
+                        onChange={e => setSelectedCourse({...selectedCourse, title: e.target.value, certName: e.target.value})}
                         className="w-full min-h-[80px] rounded-md border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 outline-none transition-all resize-none"
                       />
                     </div>
@@ -3054,7 +4283,7 @@ export function AdminDashboard() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pb-6 border-b border-slate-100">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pb-6 border-b border-slate-100">
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Level</label>
                     <select 
@@ -3098,36 +4327,6 @@ export function AdminDashboard() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Supporting Documents (PDF)</label>
-                    <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 h-[140px] flex flex-col items-center justify-center text-center bg-slate-50/30 hover:bg-slate-50 transition-colors">
-                      <FileText className="w-8 h-8 text-slate-400 mb-2" />
-                      <p className="text-xs font-semibold text-slate-600">Course Outline Upload</p>
-                      <label className="mt-3 cursor-pointer bg-white border border-slate-200 px-4 py-2 rounded-md text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-sm transition-all active:scale-95">
-                        SELECT FILE
-                        <input 
-                          type="file" 
-                          accept=".pdf" 
-                          className="hidden" 
-                          onChange={(e) => {
-                             const file = e.target.files?.[0];
-                             if (file) {
-                               setSelectedCourse({...selectedCourse, outlineName: file.name});
-                             }
-                          }} 
-                        />
-                      </label>
-                      {selectedCourse.outlineName && (
-                        <div className="mt-3 flex items-center gap-2 text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
-                          <FileText className="w-3 h-3" />
-                          {selectedCourse.outlineName}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
                 <div className="p-4 bg-amber-50 rounded-lg border border-amber-100">
                   <div className="flex gap-3">
                     <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0" />
@@ -3154,72 +4353,85 @@ export function AdminDashboard() {
         <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-hidden flex flex-col p-0 border-none shadow-2xl">
           <DialogHeader className="p-6 pb-2 bg-slate-50/50 rounded-t-lg border-b border-slate-100">
             <DialogTitle className="text-xl font-bold text-slate-800">
-              {selectedTemplateForIntake ? `New Intake: ${selectedTemplateForIntake.title}` : 'Create Course Session'}
+              {selectedTemplateForIntake ? `New Intake: ${selectedTemplateForIntake.title}` : 'Create Course'}
             </DialogTitle>
             <DialogDescription>Schedule a specific instance of a course template</DialogDescription>
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {!selectedTemplateForIntake && (
-                  <div className="space-y-1.5 col-span-2">
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Target Course Template</label>
-                    <Popover open={isCoursePopoverOpen} onOpenChange={setIsCoursePopoverOpen}>
-                      <PopoverTrigger 
-                        render={
-                          <Button
-                            variant="outline"
-                            role="combobox"
-                            aria-expanded={isCoursePopoverOpen}
-                            className="w-full justify-between h-10 bg-slate-50/50 border-slate-200 font-normal"
-                          >
-                            {newSession.courseId
-                              ? courses.find((c) => c.id === newSession.courseId)?.title
-                              : "-- Search & Choose Template --"}
-                            <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                          </Button>
-                        }
-                      />
-                      <PopoverContent className="w-[--anchor-width] p-0" align="start">
-                        <Command>
-                          <CommandInput placeholder="Search course title or code..." />
-                          <CommandList>
-                            <CommandEmpty>No matching course found.</CommandEmpty>
-                            <CommandGroup>
-                              {courses.map((c) => (
-                                <CommandItem
-                                  key={c.id}
-                                  value={`${c.title} ${c.courseCode}`}
-                                  onSelect={() => {
-                                    setNewSession({
-                                      ...newSession,
-                                      courseId: c.id,
-                                      price: c.standardPrice || 0
-                                    });
-                                    setIsCoursePopoverOpen(false);
-                                  }}
-                                >
-                                  <div className="flex flex-col">
-                                    <span className="font-medium text-[13px]">{c.title}</span>
-                                    <span className="text-[10px] text-slate-400 font-mono tracking-tight">{c.courseCode}</span>
-                                  </div>
-                                  <CheckCircle
-                                    className={cn(
-                                      "ml-auto h-4 w-4 text-blue-600",
-                                      newSession.courseId === c.id ? "opacity-100" : "opacity-0"
-                                    )}
-                                  />
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                )}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Start Date</label>
+            {(() => {
+              const currentCourseTemplate = selectedTemplateForIntake || courses.find(c => c.id === newSession.courseId);
+              return (
+                <>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {!selectedTemplateForIntake && (
+                      <div className="space-y-1.5 col-span-2">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Target Course Template</label>
+                        <Popover open={isCoursePopoverOpen} onOpenChange={setIsCoursePopoverOpen}>
+                          <PopoverTrigger 
+                            render={
+                              <Button
+                                variant="outline"
+                                role="combobox"
+                                aria-expanded={isCoursePopoverOpen}
+                                className="w-full justify-between h-10 bg-slate-50/50 border-slate-200 font-normal"
+                              >
+                                {newSession.courseId
+                                  ? courses.find((c) => c.id === newSession.courseId)?.title
+                                  : "-- Search & Choose Template --"}
+                                <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                              </Button>
+                            }
+                          />
+                          <PopoverContent className="w-[--anchor-width] p-0" align="start">
+                            <Command>
+                              <CommandInput placeholder="Search course title or code..." />
+                              <CommandList>
+                                <CommandEmpty>No matching course found.</CommandEmpty>
+                                <CommandGroup>
+                                  {courses.map((c) => (
+                                    <CommandItem
+                                      key={c.id}
+                                      value={`${c.title} ${c.courseCode}`}
+                                      onSelect={() => {
+                                        setNewSession({
+                                          ...newSession,
+                                          courseId: c.id,
+                                          earlyBirdPrice: c.earlyBirdPrice || 0,
+                                          standardPrice: c.standardPrice || 0
+                                        });
+                                        setIsCoursePopoverOpen(false);
+                                      }}
+                                    >
+                                      <div className="flex flex-col">
+                                        <span className="font-medium text-[13px]">{c.title}</span>
+                                        <span className="text-[10px] text-slate-400 font-mono tracking-tight">{c.courseCode}</span>
+                                      </div>
+                                      <CheckCircle
+                                        className={cn(
+                                          "ml-auto h-4 w-4 text-blue-600",
+                                          newSession.courseId === c.id ? "opacity-100" : "opacity-0"
+                                        )}
+                                      />
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    )}
+                    <div className="space-y-1.5 col-span-2">
+                       {currentCourseTemplate?.day && (
+                         <div className="text-xs bg-blue-50 text-blue-700 p-2 rounded border border-blue-100 mb-2 font-medium flex items-center gap-2">
+                           <Clock className="w-4 h-4" /> Template Duration: {currentCourseTemplate.day} Days
+                         </div>
+                       )}
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Start Date</label>
+
                   <Input 
                     type="date" 
                     value={newSession.startDate} 
@@ -3289,6 +4501,24 @@ export function AdminDashboard() {
                                 key={t.id}
                                 value={t.name}
                                 onSelect={() => {
+                                  if (!newSession.startDate || !newSession.endDate) {
+                                    toast.error(<span className="font-bold text-red-600">Please enter Start Date and End Date first before selecting an instructor.</span>);
+                                    return;
+                                  }
+
+                                  const hasOverlap = sessions.some((s: any) => 
+                                    s.tutorId === t.id && 
+                                    s.startDate && s.endDate &&
+                                    s.startDate <= newSession.endDate && 
+                                    s.endDate >= newSession.startDate &&
+                                    s.sessionStatus !== 'cancelled'
+                                  );
+
+                                  if (hasOverlap) {
+                                    toast.error(<span className="font-bold text-red-600">This instructor is already assigned to an overlapping course intake! Please choose another instructor or different dates.</span>);
+                                    return;
+                                  }
+
                                   setNewSession({
                                     ...newSession,
                                     tutorId: t.id
@@ -3329,11 +4559,20 @@ export function AdminDashboard() {
                   <Input type="number" value={isNaN(newSession.quota) ? '' : newSession.quota} onChange={e => setNewSession({...newSession, quota: parseInt(e.target.value) || 0})} className="h-10 bg-slate-50/50 border-slate-200" />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Final Price (HK$)</label>
-                  <Input type="number" value={isNaN(newSession.price) ? '' : newSession.price} onChange={e => setNewSession({...newSession, price: parseFloat(e.target.value) || 0})} className="h-10 bg-slate-50/50 border-slate-200" />
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Early Bird Price (HKD)</label>
+                  <Input type="number" value={isNaN(newSession.earlyBirdPrice) ? '' : newSession.earlyBirdPrice} onChange={e => setNewSession({...newSession, earlyBirdPrice: parseFloat(e.target.value) || 0})} className="h-10 bg-slate-50/50 border-slate-200" />
+                  {currentCourseTemplate?.earlyBirdPrice ? <p className="text-[9px] text-slate-400">Template Base: ${currentCourseTemplate.earlyBirdPrice}</p> : null}
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Standard Price (HKD)</label>
+                  <Input type="number" value={isNaN(newSession.standardPrice) ? '' : newSession.standardPrice} onChange={e => setNewSession({...newSession, standardPrice: parseFloat(e.target.value) || 0})} className="h-10 bg-slate-50/50 border-slate-200" />
+                  {currentCourseTemplate?.standardPrice ? <p className="text-[9px] text-slate-400">Template Base: ${currentCourseTemplate.standardPrice}</p> : null}
                 </div>
              </div>
-          </div>
+            </>
+          );
+        })()}
+      </div>
 
           <DialogFooter className="p-6 bg-slate-50/50 rounded-b-lg border-t border-slate-100 flex gap-2">
             <Button type="button" variant="ghost" onClick={() => { setSessionCreationModalOpen(false); setSelectedTemplateForIntake(null); }} className="text-slate-500 font-bold text-xs uppercase tracking-widest">Cancel</Button>
@@ -3342,6 +4581,314 @@ export function AdminDashboard() {
               Start Intake
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isCertModalOpen} onOpenChange={setIsCertModalOpen}>
+        <DialogContent className="sm:max-w-[900px] max-h-[85vh] overflow-y-auto p-0 border-none shadow-2xl rounded-2xl overflow-hidden bg-white/95 backdrop-blur-xl">
+          <div className="bg-slate-900 p-8 text-white relative overflow-hidden">
+            <div className="relative z-10">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-3 text-2xl font-black tracking-tight">
+                  <div className="p-2 bg-yellow-400 rounded-lg text-slate-900 shadow-lg shadow-yellow-400/20">
+                    <Award className="w-6 h-6" /> 
+                  </div>
+                  Certificate Management
+                </DialogTitle>
+                <DialogDescription className="text-slate-400 font-medium text-sm mt-2">
+                  Session: <span className="text-white font-bold">{selectedSessionCert?.sessionName}</span> • Course: <span className="text-white font-bold">{courses.find(c => c.id === selectedSessionCert?.courseId)?.title}</span>
+                </DialogDescription>
+              </DialogHeader>
+            </div>
+            {/* Background elements */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-yellow-400/10 rounded-full blur-3xl -mr-32 -mt-32"></div>
+            <div className="absolute bottom-0 right-0 w-32 h-32 bg-blue-400/10 rounded-full blur-2xl mr-10 mb-[-10px]"></div>
+          </div>
+          
+          <div className="p-8">
+            {isCertLoading ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-4">
+                <div className="relative">
+                  <Loader2 className="w-12 h-12 animate-spin text-blue-600" />
+                  <Sparkles className="w-4 h-4 text-yellow-500 absolute top-0 right-0 animate-pulse" />
+                </div>
+                <div className="text-center">
+                  <p className="text-slate-800 font-bold text-lg">Calculating Attendance Rates</p>
+                  <p className="text-slate-400 text-sm italic">Verifying student qualification thresholds...</p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 shadow-sm transition-all hover:shadow-md hover:bg-white group">
+                    <div className="flex items-center gap-3 mb-2">
+                       <div className="p-1.5 bg-blue-100 text-blue-600 rounded-md group-hover:bg-blue-600 group-hover:text-white transition-colors"><CheckCircle className="w-4 h-4"/></div>
+                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Lessons Completed</p>
+                    </div>
+                    <p className="text-3xl font-black text-slate-800 tracking-tighter">{lessons.filter(l => l.sessionId === selectedSessionCert?.id && l.lessonStatus === 'completed').length}</p>
+                    <p className="text-[10px] text-slate-400 font-medium mt-1 italic">Total sessions recorded</p>
+                  </div>
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 shadow-sm transition-all hover:shadow-md hover:bg-white group">
+                    <div className="flex items-center gap-3 mb-2">
+                       <div className="p-1.5 bg-indigo-100 text-indigo-600 rounded-md group-hover:bg-indigo-600 group-hover:text-white transition-colors"><Users className="w-4 h-4"/></div>
+                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Students</p>
+                    </div>
+                    <p className="text-3xl font-black text-slate-800 tracking-tighter">{sessionStudentsData.length}</p>
+                    <p className="text-[10px] text-slate-400 font-medium mt-1 italic">Verified registrations</p>
+                  </div>
+                  <div className="p-4 bg-amber-50 rounded-xl border border-amber-100 shadow-sm transition-all hover:shadow-md hover:bg-white group border-l-4 border-l-amber-400">
+                    <div className="flex items-center gap-3 mb-2">
+                       <div className="p-1.5 bg-amber-100 text-amber-600 rounded-md group-hover:bg-amber-600 group-hover:text-white transition-colors"><ShieldCheck className="w-4 h-4"/></div>
+                       <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest">Passing Criteria</p>
+                    </div>
+                    <p className="text-3xl font-black text-amber-900 tracking-tighter">80%</p>
+                    <p className="text-[10px] text-amber-600 font-bold mt-1 uppercase tracking-tight">Minimum Attendance</p>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                    Enrolled Student Roster
+                    <div className="h-[1px] flex-1 bg-slate-100"></div>
+                  </h4>
+                  <div className="border border-slate-100 rounded-xl overflow-hidden bg-white shadow-sm">
+                    <Table>
+                      <TableHeader className="bg-slate-50/50">
+                        <TableRow className="hover:bg-transparent border-slate-100">
+                          <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Student Identity</TableHead>
+                          <TableHead className="px-6 py-4 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {sessionStudentsData.map(student => {
+                          return (
+                            <TableRow key={student.id} className="border-slate-50 hover:bg-slate-50/30 transition-colors">
+                              <TableCell className="px-6 py-4">
+                                <div className="font-bold text-slate-800">{student.studentName}</div>
+                                <div className="text-[10px] text-slate-400 font-mono italic">{student.studentEmail}</div>
+                              </TableCell>
+                              <TableCell className="px-6 py-4 text-right">
+                                <div className="flex justify-end gap-2">
+                                  {(['am', 'pm'] as const).map(type => {
+                                    const isConfirmed = student[`${type}Confirmed`];
+                                    return (
+                                      <Button
+                                        key={type}
+                                        size="sm"
+                                        onClick={() => handleToggleAttendanceConfirm(student.id, type, isConfirmed)}
+                                        className={`h-8 px-3 text-[10px] font-black uppercase tracking-wider transition-all ${
+                                          isConfirmed 
+                                            ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' 
+                                            : 'bg-white border border-slate-200 hover:bg-slate-50 text-slate-500 shadow-none'
+                                        }`}
+                                      >
+                                        {isConfirmed && <CheckCircle className="w-3 h-3 mr-1" />}
+                                        {type} CONFIRM
+                                      </Button>
+                                    );
+                                  })}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="p-6 bg-slate-50/50 border-t border-slate-100">
+            <Button variant="ghost" onClick={() => setIsCertModalOpen(false)} className="font-bold text-xs uppercase tracking-[0.2em] text-slate-500">Close Manager</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      <Dialog open={isAttendanceModalOpen} onOpenChange={setIsAttendanceModalOpen}>
+        <DialogContent className="sm:max-w-[700px]">
+          <DialogHeader className="p-6 pb-4 border-b border-slate-100">
+            <DialogTitle className="text-xl font-black text-slate-800 tracking-tight">Mark Attendance</DialogTitle>
+            <DialogDescription className="text-slate-500 font-medium">
+              {selectedLessonForAttendance?.lessonTitle} ({selectedLessonForAttendance?.lessonDate})
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto px-6 py-2">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="font-bold text-slate-400 uppercase tracking-widest text-xs">Student</TableHead>
+                  <TableHead className="font-bold text-slate-400 uppercase tracking-widest text-xs">Email</TableHead>
+                  <TableHead className="text-center font-bold text-slate-400 uppercase tracking-widest text-xs">Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {regs.filter(r => r.sessionId === selectedLessonForAttendance?.sessionId && r.status === 'verified').length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={3} className="text-center py-8 text-slate-500 font-medium">No verified students enrolled in this session.</TableCell>
+                  </TableRow>
+                ) : regs.filter(r => r.sessionId === selectedLessonForAttendance?.sessionId && r.status === 'verified').map(r => (
+                  <TableRow key={r.id}>
+                    <TableCell className="font-bold text-slate-700">{r.studentName}</TableCell>
+                    <TableCell className="text-slate-500 text-xs">{r.studentEmail}</TableCell>
+                    <TableCell className="text-center">
+                      <div className="flex justify-center gap-1.5 sm:gap-2">
+                        {['present', 'absent', 'late', 'excused'].map(status => (
+                          <button
+                            key={status}
+                            onClick={() => setAttendanceData(prev => ({ ...prev, [r.studentId]: status }))}
+                            className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all tracking-wider border-2 ${
+                              attendanceData[r.studentId] === status 
+                                ? (status === 'present' ? 'bg-green-600 border-green-600 text-white shadow-md' : 
+                                   status === 'absent' ? 'bg-red-600 border-red-600 text-white shadow-md' :
+                                   status === 'late' ? 'bg-amber-500 border-amber-500 text-white shadow-md' : 'bg-blue-600 border-blue-600 text-white shadow-md')
+                                : 'border-slate-200 text-slate-400 bg-white hover:border-slate-300'
+                            }`}
+                          >
+                            {status}
+                          </button>
+                        ))}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <DialogFooter className="p-6 border-t border-slate-100 flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setIsAttendanceModalOpen(false)}>Cancel</Button>
+            <Button onClick={handleSaveAttendanceAdmin} disabled={submittingAttendance} className="bg-slate-900 text-white hover:bg-slate-800">
+              {submittingAttendance ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-2" />}
+              Save Attendance
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={isSessionAttendanceModalOpen} onOpenChange={setIsSessionAttendanceModalOpen}>
+        <DialogContent className="sm:max-w-[700px]">
+          <DialogHeader className="p-6 pb-4 border-b border-slate-100">
+            <DialogTitle className="text-xl font-black text-slate-800 tracking-tight">Manage Attendance</DialogTitle>
+            <DialogDescription className="text-slate-500 font-medium">
+              Select a class below to mark student attendance.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto px-6 py-2">
+            <div className="space-y-3">
+              {lessons.filter(l => l.sessionId === selectedSessionForAttendance?.id).map((l, idx) => (
+                <div key={l.id} className="p-4 border rounded-xl hover:border-indigo-200 transition-all bg-white shadow-sm flex items-center justify-between group">
+                  <div className="flex items-center gap-4">
+                    <div className="h-10 w-10 shrink-0 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-black text-sm border border-indigo-100">
+                      {idx + 1}
+                    </div>
+                    <div>
+                      <div className="font-bold text-slate-800 text-sm">{l.lessonTitle || `Lesson ${idx + 1}`}</div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
+                          {l.lessonDate}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          {l.startTime} - {l.endTime}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <Button variant="outline" size="sm" className="h-8 px-4 text-xs font-bold uppercase tracking-wider text-indigo-600 border-indigo-200 hover:bg-indigo-50" onClick={() => handleOpenAttendanceModal(l)}>
+                      <ClipboardList className="w-3.5 h-3.5 mr-1.5" /> Mark Attendance
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              {lessons.filter(l => l.sessionId === selectedSessionForAttendance?.id).length === 0 && (
+                <div className="text-center py-12 text-slate-400 text-sm font-medium border border-dashed rounded-xl bg-slate-50">
+                  <p className="mb-4">No classes scheduled for this session yet.</p>
+                  <Button 
+                    variant="default" 
+                    className="bg-indigo-600 hover:bg-indigo-700 font-bold uppercase tracking-wider text-xs"
+                    onClick={() => {
+                      setIsSessionAttendanceModalOpen(false);
+                      setViewingLessonsForSession(selectedSessionForAttendance);
+                      setActiveTab('sessions');
+                    }}
+                  >
+                    Go to Class Scheduler
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter className="p-4 border-t border-slate-100">
+            <Button variant="ghost" onClick={() => setIsSessionAttendanceModalOpen(false)} className="w-full font-bold text-xs uppercase tracking-[0.2em] text-slate-500">Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Manual Hours Modal */}
+      <Dialog open={isManualHoursModalOpen} onOpenChange={setIsManualHoursModalOpen}>
+        <DialogContent className="max-w-md bg-white border-none shadow-2xl p-0 overflow-hidden rounded-2xl">
+          <div className="bg-indigo-600 px-6 py-5 flex items-center justify-between">
+            <div>
+              <DialogTitle className="text-xl font-bold text-white mb-1">Add Part-time Record</DialogTitle>
+              <DialogDescription className="text-indigo-100 text-xs">Record a daily course for a part-time instructor</DialogDescription>
+            </div>
+            <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
+              <Clock className="w-5 h-5 text-indigo-50" />
+            </div>
+          </div>
+          <form onSubmit={handleManualHoursSubmit} className="p-6 space-y-6">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Select Instructor *</label>
+                <select 
+                  className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm bg-white"
+                  value={manualHoursForm.tutorId}
+                  onChange={e => setManualHoursForm({...manualHoursForm, tutorId: e.target.value})}
+                  required
+                >
+                  <option value="">-- Select Instructor --</option>
+                  {tutors.map(t => (
+                    <option key={t.id} value={t.id}>{t.name || t.email}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Date *</label>
+                  <Input 
+                    type="date" 
+                    value={manualHoursForm.date} 
+                    onChange={e => setManualHoursForm({...manualHoursForm, date: e.target.value})}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Course Name *</label>
+                    <select
+                        className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm bg-white"
+                        value={manualHoursForm.course}
+                        onChange={e => setManualHoursForm({...manualHoursForm, course: e.target.value})}
+                        required
+                    >
+                        <option value="">-- Select Course --</option>
+                        {courses.map(c => (
+                            <option key={c.id} value={c.title || c.certName}>{c.title || c.certName}</option>
+                        ))}
+                    </select>
+                </div>
+              </div>
+
+            </div>
+            
+            <div className="pt-4 border-t border-slate-100 flex gap-3">
+              <Button type="button" variant="outline" onClick={() => setIsManualHoursModalOpen(false)} className="flex-1 font-bold text-xs uppercase tracking-wider">
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSubmittingManualHours} className="flex-1 bg-indigo-600 hover:bg-indigo-700 font-bold text-xs uppercase tracking-wider gap-2">
+                {isSubmittingManualHours ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                Add Hours
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

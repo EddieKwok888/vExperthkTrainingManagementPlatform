@@ -18,20 +18,39 @@ export function Home() {
   const [selectedLevel, setSelectedLevel] = useState('');
 
   useEffect(() => {
-    const fetchCourses = async () => {
+    const fetchData = async () => {
       try {
-        const q = query(collection(db, 'courses'), where('status', '==', 'active'));
-        const querySnapshot = await getDocs(q);
-        const fetched = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        fetched.sort((a: any, b: any) => b.createdAt?.toMillis() - a.createdAt?.toMillis());
-        setCourses(fetched);
+        const sq = query(collection(db, 'course_sessions'), where('sessionStatus', '==', 'open'));
+        const sessionSnap = await getDocs(sq);
+        const sessions = sessionSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        const cq = query(collection(db, 'courses'), where('status', '==', 'active'));
+        const courseSnap = await getDocs(cq);
+        const mappedCourses = courseSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
+
+        const combined = sessions.map((session: any) => {
+          const courseRef = mappedCourses.find((c: any) => c.id === session.courseId);
+          return {
+             ...courseRef,
+             ...session,
+             courseTitle: courseRef?.title || 'Unknown Course',
+             sessionId: session.id,
+             courseId: session.courseId
+          };
+        }).filter((item: any) => item.title); // Only keep if course exists and is active
+
+        combined.sort((a: any, b: any) => {
+           if (!a.startDate || !b.startDate) return 0;
+           return a.startDate.localeCompare(b.startDate);
+        });
+        setCourses(combined);
       } catch (error) {
         handleFirestoreError(error, OperationType.LIST, 'courses');
       } finally {
         setLoading(false);
       }
     };
-    fetchCourses();
+    fetchData();
   }, []);
 
   const categories = useMemo(() => Array.from(new Set(courses.map(c => c.category).filter(Boolean))), [courses]);
@@ -50,7 +69,7 @@ export function Home() {
   return (
     <div className="space-y-8">
       <div className="text-center space-y-4 py-16 bg-blue-600 rounded-2xl shadow-sm text-white">
-        <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight">Advance Your Career with ProTrain</h1>
+        <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight">Advance Your Career with Us</h1>
         <p className="text-xl text-blue-100 max-w-2xl mx-auto">Explore our range of professional courses designed to equip you with the skills of tomorrow.</p>
       </div>
 
@@ -93,7 +112,7 @@ export function Home() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredCourses.map(course => (
-              <Card key={course.id} className="flex flex-col shadow-sm border-slate-200 hover:shadow-md transition-shadow">
+              <Card key={course.sessionId} className="flex flex-col shadow-sm border-slate-200 hover:shadow-md transition-shadow">
                 <CardHeader>
                   <div className="flex justify-between items-start mb-2">
                     {course.category && (
@@ -107,16 +126,31 @@ export function Home() {
                       </span>
                     )}
                   </div>
-                  <CardTitle className="text-slate-800 line-clamp-1">{course.title}</CardTitle>
-                  <CardDescription className="line-clamp-2 text-slate-500">{course.description}</CardDescription>
+                  <CardTitle className="text-slate-800 line-clamp-1">{course.courseTitle}</CardTitle>
+                  <CardDescription className="line-clamp-2 text-slate-500 mt-1">
+                    <span className="block font-semibold text-blue-600 tracking-tight text-xs uppercase mb-1">
+                      {course.sessionName} • {course.startDate && course.endDate ? `${course.startDate} to ${course.endDate}` : 'Dates TBD'}
+                    </span>
+                    {course.description}
+                  </CardDescription>
                 </CardHeader>
-                <CardContent className="flex-1 text-sm space-y-1">
-                  {course.duration_hours && <p className="text-slate-500"><span className="font-medium text-slate-700">Duration:</span> {course.duration_hours} hours</p>}
-                  {course.certificate_available && <p className="text-green-600 font-medium">✓ Certificate Available</p>}
-                  <p className="font-semibold text-xl text-blue-600 mt-2">${course.price}</p>
+                <CardContent className="flex-1 text-sm space-y-2">
+                  <div className="flex justify-between items-center text-slate-600">
+                    {course.duration_hours && <span><span className="font-medium text-slate-700">Duration:</span> {course.duration_hours} hours</span>}
+                    {course.deliveryMode && <span className="uppercase text-[10px] font-bold tracking-widest bg-slate-100 px-1.5 py-0.5 rounded">{course.deliveryMode}</span>}
+                  </div>
+                  {course.certificate_available && <p className="text-green-600 text-xs font-bold uppercase tracking-wider">✓ Certificate Available</p>}
+                  
+                  <div className="mt-2">
+                    {(course.earlyBirdPrice && course.earlyBirdPrice < (course.standardPrice || course.price)) ? (
+                      <p className="font-bold text-amber-600 text-2xl">${course.earlyBirdPrice?.toLocaleString()} <span className="text-sm font-normal text-slate-500 line-through ml-1">${(course.standardPrice || course.price)?.toLocaleString()}</span></p>
+                    ) : (
+                      <p className="font-bold text-2xl text-blue-600">${(course.standardPrice || course.price)?.toLocaleString()}</p>
+                    )}
+                  </div>
                 </CardContent>
                 <CardFooter className="flex gap-2">
-                  <Link to={`/course/${course.id}`} className="flex-1">
+                  <Link to={`/course/${course.courseId}`} className="flex-1">
                     <Button className="w-full bg-slate-800 hover:bg-slate-700 text-white">View Details</Button>
                   </Link>
                 </CardFooter>

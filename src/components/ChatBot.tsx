@@ -41,7 +41,7 @@ export function ChatBot() {
            return `INFO [${k.topic}]: ${k.content}`;
         }).join('\n');
 
-        setContextStr(`You are a helpful and professional customer support assistant and AI Learning Path Advisor for ProTrain, a professional training center. 
+        setContextStr(`You are a helpful and professional customer support assistant and AI Learning Path Advisor for a professional training center. 
 Here are the available courses:
 ${coursesInfo}
 
@@ -158,7 +158,7 @@ INSTRUCTIONS:
       <div className="p-4 bg-blue-600 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.8)]"></div>
-          <p className="text-sm font-bold text-white tracking-wide">ProTrain Assistant</p>
+          <p className="text-sm font-bold text-white tracking-wide">School Assistant</p>
         </div>
         <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-blue-100 hover:text-white hover:bg-blue-500 rounded-full" onClick={() => setOpen(false)}>
           <X className="w-4 h-4" />

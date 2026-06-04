@@ -80,6 +80,22 @@ export function RegisterCourse() {
       toast.error('Please select a session');
       return;
     }
+    
+    // Email Validation
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRe.test(formData.studentEmail)) {
+      toast.error('Please enter a valid email address');
+      return;
+    }
+
+    // Phone Validation (must be HK format: 8 digits, maybe with +852 or spaces)
+    const normalizedPhone = formData.studentPhone.replace(/[\s-]/g, '');
+    const phoneRe = /^(?:\+?852)?([2-9]\d{7})$/;
+    if (!phoneRe.test(normalizedPhone)) {
+      toast.error('Please enter a valid Hong Kong phone number');
+      return;
+    }
+
     setSubmitting(true);
     try {
       const existingQ = query(collection(db, 'registrations'), where('studentEmail', '==', formData.studentEmail), where('sessionId', '==', formData.sessionId));
@@ -93,6 +109,11 @@ export function RegisterCourse() {
       const prefix = schoolSettings?.invoice_prefix || 'INV';
       const invoiceNumber = `${prefix}-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
       
+      const s = sessions.find(s => s.id === formData.sessionId);
+      const early = s?.earlyBirdPrice || course.earlyBirdPrice;
+      const std = s?.standardPrice || course.standardPrice || course.price;
+      const finalAmount = (early && early < std) ? early : (std || 0);
+
       const payload = {
         courseId: id,
         sessionId: formData.sessionId,
@@ -105,7 +126,7 @@ export function RegisterCourse() {
         jobTitle: formData.jobTitle,
         remarks: formData.remarks,
         status: 'pending',
-        amount: Number(course.price || course.standardPrice || 0),
+        amount: Number(finalAmount),
         createdAt: serverTimestamp(),
       };
       
@@ -127,14 +148,24 @@ export function RegisterCourse() {
     <div className="max-w-xl mx-auto space-y-6">
       <Card>
         <CardHeader className="bg-slate-50 border-b pb-6">
-          <CardTitle className="text-2xl">Course Registration</CardTitle>
+          <CardTitle className="text-2xl">Course Payment</CardTitle>
           <CardDescription>Fill out your details to secure your spot</CardDescription>
         </CardHeader>
         <CardContent className="pt-6">
           <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg mb-6">
             <p className="text-xs font-bold text-blue-600 uppercase tracking-widest mb-1">Selected Course</p>
             <p className="font-semibold text-lg text-slate-800">{course.title}</p>
-            <p className="font-bold text-blue-700 mt-2 text-xl">${course.price} <span className="text-sm font-normal text-slate-500">Total Fee</span></p>
+            <div className="mt-2 text-xl">
+              {(() => {
+                const s = sessions.find(s => s.id === formData.sessionId);
+                const early = s?.earlyBirdPrice || course.earlyBirdPrice;
+                const std = s?.standardPrice || course.standardPrice || course.price;
+                if (early && early < std) {
+                  return <p className="font-bold text-amber-600">${early?.toLocaleString()} <span className="text-sm font-normal text-slate-500 line-through ml-1">${std?.toLocaleString()}</span> <span className="text-sm font-bold uppercase tracking-widest text-amber-600 ml-2 bg-amber-100 px-2 py-0.5 rounded">Early Bird</span></p>;
+                }
+                return <p className="font-bold text-blue-700">${std?.toLocaleString()} <span className="text-sm font-normal text-slate-500">Total Fee</span></p>;
+              })()}
+            </div>
           </div>
 
           <form onSubmit={handleRegister} className="space-y-4">

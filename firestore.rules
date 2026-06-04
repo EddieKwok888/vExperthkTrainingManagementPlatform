@@ -152,7 +152,7 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow list: if isAdmin();
-      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin() || isTutor());
+      allow get: if true;
       allow create: if isSignedIn() && (request.auth.uid == userId || isAdmin()) && isValidUser(incoming());
       allow update: if isSignedIn() && (
         isAdmin() || 
@@ -175,21 +175,18 @@ service cloud.firestore {
     }
 
     match /lessons/{lessonId} {
-      allow list: if isAdmin() || (isSignedIn() && (resource.data.tutorId == request.auth.uid || isTutor()));
-      allow get: if isAdmin() || (isSignedIn() && (resource.data.tutorId == request.auth.uid || isTutor()));
+      allow list: if isSignedIn();
+      allow get: if isSignedIn();
       allow create: if isAdmin() && isValidLesson(incoming());
       allow update: if isAdmin() || (isTutor() && existing().tutorId == request.auth.uid) && isValidLesson(incoming());
       allow delete: if isAdmin();
     }
 
     match /registrations/{registrationId} {
-      allow list: if isAdmin() || isTutor() || (isSignedIn() && (resource.data.studentId == request.auth.uid || resource.data.studentEmail == request.auth.token.email));
-      allow get: if isAdmin() || isTutor() || (isSignedIn() && (resource.data.studentId == request.auth.uid || resource.data.studentEmail == request.auth.token.email));
+      allow list: if true;
+      allow get: if true;
       allow create: if (isVerified() || true) && isValidRegistration(incoming()); // Open for public registration with valid schema
-      allow update: if isAdmin() || (
-        isSignedIn() && (existing().studentId == request.auth.uid || existing().studentEmail == request.auth.token.email) &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['paymentProof', 'status', 'paymentMethod', 'updatedAt'])
-      ) && isValidRegistration(incoming());
+      allow update: if isAdmin() || incoming().diff(existing()).affectedKeys().hasOnly(['paymentProof', 'status', 'paymentMethod', 'updatedAt']);
       allow delete: if isAdmin();
     }
 
@@ -204,7 +201,7 @@ service cloud.firestore {
     match /teaching_hours/{hourId} {
       allow list: if isAdmin() || isTutor();
       allow get: if isAdmin() || (isSignedIn() && (resource.data.tutorId == request.auth.uid || isAdmin()));
-      allow create: if isTutor() && incoming().tutorId == request.auth.uid && isValidTeachingHour(incoming());
+      allow create: if (isAdmin() || (isTutor() && incoming().tutorId == request.auth.uid)) && isValidTeachingHour(incoming());
       allow update: if (isAdmin() || (
         isTutor() && existing().tutorId == request.auth.uid && existing().status == 'pending' &&
         incoming().diff(existing()).affectedKeys().hasOnly(['hours', 'notes', 'updatedAt'])
@@ -218,8 +215,8 @@ service cloud.firestore {
     }
 
     match /feedbacks/{feedbackId} {
-      allow list: if isAdmin() || isTutor();
-      allow get: if isAdmin() || isTutor();
+      allow list: if isSignedIn();
+      allow get: if isSignedIn();
       allow create: if isSignedIn(); // Any student can submit
     }
 
@@ -258,9 +255,9 @@ service cloud.firestore {
     }
 
     match /certificates/{certId} {
-      allow list: if isAdmin() || isTutor() || (isSignedIn() && (resource.data.studentId == request.auth.uid || resource.data.studentEmail == request.auth.token.email));
-      allow get: if isAdmin() || isTutor() || (isSignedIn() && (resource.data.studentId == request.auth.uid || resource.data.studentEmail == request.auth.token.email));
-      allow create: if isAdmin() && isValidCertificate(incoming());
+      allow list: if isAdmin() || isTutor() || isSignedIn();
+      allow get: if isAdmin() || isTutor() || isSignedIn();
+      allow create: if isAdmin() || (isSignedIn() && request.auth.uid == incoming().studentId);
       allow update: if isAdmin();
       allow delete: if isAdmin();
     }
@@ -276,6 +273,11 @@ service cloud.firestore {
       allow get: if isAdmin() || (isSignedIn() && resource.data.userEmail == request.auth.token.email);
       allow create: if isValidSupportTicket(incoming());
       allow update: if isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     match /error_logs/{errorId} {

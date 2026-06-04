@@ -17,6 +17,7 @@ export function CourseDetail() {
   const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingSessions, setLoadingSessions] = useState(true);
+  const [schoolSettings, setSchoolSettings] = useState<any>(null);
   const { user, role, login } = useContext(AuthContext);
   const navigate = useNavigate();
 
@@ -30,6 +31,12 @@ export function CourseDetail() {
           setCourse({ id: docSnap.id, ...docSnap.data() });
         } else {
           toast.error("Course not found");
+        }
+
+        const settingsRef = doc(db, 'settings', 'school_info');
+        const settingsSnap = await getDoc(settingsRef);
+        if (settingsSnap.exists()) {
+          setSchoolSettings(settingsSnap.data());
         }
       } catch (error) {
         handleFirestoreError(error, OperationType.GET, `courses/${id}`);
@@ -47,7 +54,18 @@ export function CourseDetail() {
           where('sessionStatus', '==', 'open')
         );
         const snap = await getDocs(q);
-        setSessions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const sessionDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+        if (sessionDocs.length > 0) {
+           const regSnap = await getDocs(query(collection(db, 'registrations'), where('courseId', '==', id), where('status', '==', 'verified')));
+           const regs = regSnap.docs.map(d => d.data());
+           
+           sessionDocs.forEach((s: any) => {
+              s.enrolledCount = regs.filter(r => r.sessionId === s.id).length;
+           });
+        }
+        
+        setSessions(sessionDocs);
       } catch (e) {
         console.error(e);
       } finally {
@@ -75,6 +93,15 @@ export function CourseDetail() {
     window.dispatchEvent(event);
   };
 
+  const formatTextWithWarning = (text: string) => {
+    if (!text) return null;
+    const regex = /(warning\b[^\n]*)/i; // match the word warning and the rest of the line
+    const parts = text.split(/(warning\b[^\n]*)/i);
+    return parts.map((part, i) => 
+      part.toLowerCase().startsWith('warning') ? <span key={i} className="text-red-600 font-bold">{part}</span> : <span key={i}>{part}</span>
+    );
+  };
+
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>;
   if (!course) return <div className="text-center py-20 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400">Course not found</div>;
 
@@ -93,6 +120,23 @@ export function CourseDetail() {
               </div>
               <div className="space-y-6 relative z-10">
                 <CardTitle className="text-4xl md:text-5xl font-black leading-tight text-white tracking-tighter italic">{course.title}</CardTitle>
+                <div className="flex flex-wrap items-center gap-3">
+                  {course.courseCode && (
+                    <span className="bg-white/20 text-white px-3 py-1 rounded-[4px] text-xs font-bold uppercase tracking-widest font-mono">
+                      {course.courseCode}
+                    </span>
+                  )}
+                  {course.category && (
+                    <span className="bg-blue-500/30 text-blue-100 px-3 py-1 rounded-[4px] text-xs font-bold uppercase tracking-widest">
+                      {course.category}
+                    </span>
+                  )}
+                  {course.level && (
+                    <span className="bg-emerald-500/30 text-emerald-100 px-3 py-1 rounded-[4px] text-xs font-bold uppercase tracking-widest">
+                      {course.level}
+                    </span>
+                  )}
+                </div>
               </div>
             </CardHeader>
             <CardContent className="py-10 px-8">
@@ -103,7 +147,7 @@ export function CourseDetail() {
                       <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                         <MapPin className="w-3 h-3 text-blue-500" /> Target Audience
                       </h3>
-                      <p className="text-slate-600 text-sm leading-relaxed font-medium">{course.targetAudience}</p>
+                      <p className="text-slate-600 text-sm leading-relaxed font-medium whitespace-pre-wrap">{formatTextWithWarning(course.targetAudience)}</p>
                     </div>
                   )}
                   {course.prerequisites && (
@@ -111,7 +155,7 @@ export function CourseDetail() {
                       <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                         <CheckCircle2 className="w-3 h-3 text-green-500" /> Prerequisites
                       </h3>
-                      <p className="text-slate-600 text-sm leading-relaxed font-medium">{course.prerequisites}</p>
+                      <p className="text-slate-600 text-sm leading-relaxed font-medium whitespace-pre-wrap">{formatTextWithWarning(course.prerequisites)}</p>
                     </div>
                   )}
                 </div>
@@ -123,7 +167,7 @@ export function CourseDetail() {
                   <div className="space-y-6">
                     {course.description && (
                       <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 italic text-slate-600 text-sm leading-relaxed whitespace-pre-wrap">
-                        {course.description}
+                        {formatTextWithWarning(course.description)}
                       </div>
                     )}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -196,6 +240,22 @@ export function CourseDetail() {
                                 </span>
                               </div>
                             )}
+                            {(s.earlyBirdPrice || s.standardPrice || s.price) && (
+                              <div className="flex flex-col col-span-2 pt-2 border-t border-slate-100 mt-2">
+                                {(s.earlyBirdPrice && s.earlyBirdPrice < (s.standardPrice || s.price)) ? (
+                                  <div className="flex flex-wrap items-baseline gap-2">
+                                    <span className="text-[10px] font-black uppercase tracking-widest bg-amber-100 text-amber-800 px-2 py-0.5 rounded-sm">Early Bird</span>
+                                    <span className="text-xl font-bold text-amber-600">HK${s.earlyBirdPrice.toLocaleString()}</span>
+                                    <span className="text-xs font-medium text-slate-400 line-through">HK${(s.standardPrice || s.price).toLocaleString()}</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-baseline gap-2">
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Standard Fee</span>
+                                    <span className="text-lg font-bold text-slate-800">HK${(s.standardPrice || s.price)?.toLocaleString()}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                         <Button 
@@ -215,13 +275,6 @@ export function CourseDetail() {
 
         <div className="space-y-8">
            <Card className="border-0 shadow-2xl shadow-blue-900/10 ring-1 ring-blue-100 overflow-hidden sticky top-8">
-             <CardHeader className="bg-blue-600 pb-8 pt-10 text-white text-center">
-               <CardTitle className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-200 mb-2">Tuition Investment</CardTitle>
-               <div className="flex items-baseline justify-center gap-1">
-                 <span className="text-xs font-black self-start mt-2">HK$</span>
-                 <span className="text-5xl font-black tracking-tighter">{course.price?.toLocaleString()}</span>
-               </div>
-             </CardHeader>
              <CardContent className="pt-8 space-y-8">
                 <div className="space-y-4">
                   <div className="flex items-center gap-3 text-slate-600">
@@ -244,14 +297,17 @@ export function CourseDetail() {
                   <Button className="w-full h-14 text-xs font-black uppercase tracking-[0.2em] shadow-xl shadow-blue-200 bg-blue-600 hover:bg-blue-700" onClick={() => handleEnroll()}>
                     Start Registration
                   </Button>
-                  <Button variant="outline" className="w-full h-14 text-xs font-black uppercase tracking-[0.2em] gap-2 border-slate-200 text-slate-600 hover:bg-slate-50" onClick={handleAskAI}>
-                    <Sparkles className="w-4 h-4 text-blue-500" /> Ask AI Assistant
-                  </Button>
                 </div>
 
                 <p className="text-[9px] text-center text-slate-400 font-bold uppercase tracking-widest leading-relaxed">
                   Need corporate pricing? <br/>
-                  <span className="text-blue-500">Contact our sales team</span>
+                  {schoolSettings?.email ? (
+                    <a href={`mailto:${schoolSettings.email}`} className="text-blue-500 hover:text-blue-600 transition-colors">
+                      Contact our sales team
+                    </a>
+                  ) : (
+                    <span className="text-blue-500">Contact our sales team</span>
+                  )}
                 </p>
              </CardContent>
            </Card>

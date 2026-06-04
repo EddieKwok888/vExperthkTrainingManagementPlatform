@@ -55,6 +55,22 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
+  const [schoolSettings, setSchoolSettings] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const docRef = doc(db, 'settings', 'school_info');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          setSchoolSettings(docSnap.data());
+        }
+      } catch (error) {
+        console.error("Failed to fetch settings", error);
+      }
+    };
+    fetchSettings();
+  }, []);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -168,7 +184,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
       <Dialog open={isLoginModalOpen} onOpenChange={setIsLoginModalOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Welcome to ProTrain AI</DialogTitle>
+            <DialogTitle>Welcome to {schoolSettings?.name || 'School Dashboard'}</DialogTitle>
             <DialogDescription>
               Sign in to manage your training, view courses, and access materials.
             </DialogDescription>
@@ -246,6 +262,25 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
 function Layout() {
   const { user, role, login, logout, loading } = useContext(AuthContext);
   const { t, i18n } = useTranslation();
+  const [schoolSettings, setSchoolSettings] = useState<any>(null);
+  const [loadingSettings, setLoadingSettings] = useState(true);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const docRef = doc(db, 'settings', 'school_info');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          setSchoolSettings(docSnap.data());
+        }
+      } catch (error) {
+        console.error("Failed to fetch settings", error);
+      } finally {
+        setLoadingSettings(false);
+      }
+    };
+    fetchSettings();
+  }, []);
 
   const changeLanguage = (lng: string) => {
     i18n.changeLanguage(lng);
@@ -255,10 +290,16 @@ function Layout() {
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800 overflow-hidden">
       <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shadow-sm z-10 shrink-0">
         <Link to="/" className="font-bold text-xl tracking-tight text-slate-800 flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-            <div className="w-4 h-4 border-2 border-white rounded-full"></div>
-          </div>
-          <span>ProTrain <span className="text-blue-600">AI</span></span>
+          {loadingSettings ? (
+            <div className="w-8 h-8 rounded-lg bg-slate-200 animate-pulse"></div>
+          ) : schoolSettings?.logo_url ? (
+             <img src={schoolSettings.logo_url} alt={schoolSettings.name} className="w-8 h-8 object-contain rounded" />
+          ) : (
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+              <div className="w-4 h-4 border-2 border-white rounded-full"></div>
+            </div>
+          )}
+          <span>{loadingSettings ? <span className="block w-24 h-6 bg-slate-200 animate-pulse rounded"></span> : schoolSettings?.name ? schoolSettings.name : <>School <span className="text-blue-600">Portal</span></>}</span>
         </Link>
         <div className="flex items-center gap-6">
           <DropdownMenu>
@@ -346,7 +387,7 @@ export default function App() {
             <Route path="admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
             <Route path="instructor" element={<ProtectedRoute allowedRoles={['admin', 'tutor']}><InstructorDashboard /></ProtectedRoute>} />
             <Route path="student/registrations" element={<ProtectedRoute allowedRoles={['admin', 'student']}><MyCourses /></ProtectedRoute>} />
-            <Route path="feedback/:id" element={<FeedbackForm />} />
+            <Route path="feedback/:id" element={<ProtectedRoute allowedRoles={['admin', 'tutor', 'student']}><FeedbackForm /></ProtectedRoute>} />
           </Route>
         </Routes>
       </Router>

@@ -8,7 +8,55 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Loader2, Download, CheckCircle, GraduationCap, FileText, Calendar, BookOpen } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { formatHkDate } from '../lib/utils';
+import { formatHkDate, getHkDateString } from '../lib/utils';
+import { jsPDF } from 'jspdf';
+
+const generateCertificatePDF = (cert: any) => {
+  const doc = new jsPDF({ orientation: 'landscape' });
+  
+  // Simple design
+  doc.setFillColor(240, 248, 255);
+  doc.rect(0, 0, 297, 210, 'F');
+  
+  // Border
+  doc.setDrawColor(37, 99, 235);
+  doc.setLineWidth(2);
+  doc.rect(10, 10, 277, 190, 'S');
+
+  doc.setTextColor(30, 58, 138);
+  doc.setFontSize(40);
+  doc.text("Certificate of Completion", 148, 50, { align: 'center' });
+  
+  doc.setTextColor(100, 116, 139);
+  doc.setFontSize(16);
+  doc.text("This is to certify that", 148, 80, { align: 'center' });
+  
+  doc.setTextColor(15, 23, 42);
+  doc.setFontSize(30);
+  doc.text(cert.studentName || "Student Name", 148, 105, { align: 'center' });
+  
+  doc.setTextColor(100, 116, 139);
+  doc.setFontSize(16);
+  doc.text("has successfully completed the course", 148, 130, { align: 'center' });
+  
+  doc.setTextColor(37, 99, 235);
+  doc.setFontSize(24);
+  doc.text(cert.course_title || cert.courseTitle || "Course Title", 148, 150, { align: 'center' });
+  
+  doc.setTextColor(100, 116, 139);
+  doc.setFontSize(12);
+  doc.text(`Issue Date: ${cert.issuedAt ? new Date(cert.issuedAt?.seconds ? cert.issuedAt.seconds * 1000 : cert.issuedAt).toLocaleDateString() : 'N/A'}`, 148, 175, { align: 'center' });
+  doc.text(`Certificate ID: ${cert.id || 'N/A'}`, 148, 182, { align: 'center' });
+  
+  // Ribbon/Seal
+  doc.setFillColor(234, 179, 8); // amber-500
+  doc.circle(148, 195, 12, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(10);
+  doc.text("OFFICIAL", 148, 196, { align: 'center' });
+
+  doc.save(`Certificate-${cert.course_title || cert.courseTitle || 'Course'}.pdf`);
+};
 
 export function MyCourses() {
   const { user, role } = useContext(AuthContext);
@@ -17,6 +65,8 @@ export function MyCourses() {
   const [materials, setMaterials] = useState<any[]>([]);
   const [certificates, setCertificates] = useState<any[]>([]);
   const [recommended, setRecommended] = useState<any[]>([]);
+  const [lessons, setLessons] = useState<any[]>([]);
+  const [feedbacks, setFeedbacks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -28,7 +78,16 @@ export function MyCourses() {
           const regsData = rSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
           setRegs(regsData);
           
+          try {
+             const fq = query(collection(db, 'feedbacks'), where('studentEmail', '==', user.email));
+             const fSnap = await getDocs(fq);
+             setFeedbacks(fSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+          } catch (e) {
+             // Ignore
+          }
+          
           const courseIds = Array.from(new Set(regsData.map((r: any) => r.courseId)));
+          const sessionIds = Array.from(new Set(regsData.map((r: any) => r.sessionId).filter(Boolean)));
 
           // Fetch course template details for titles
           if (courseIds.length > 0) {
@@ -39,6 +98,17 @@ export function MyCourses() {
               courseDocs.push(...cSnap.docs.map(d => ({ id: d.id, ...d.data() })));
             }
             setCourses(courseDocs);
+          }
+
+          if (sessionIds.length > 0) {
+            const lessonDocs: any[] = [];
+            for (let i = 0; i < sessionIds.length; i += 10) {
+              const chunk = sessionIds.slice(i, i + 10);
+              const lSnap = await getDocs(query(collection(db, 'lessons'), where('sessionId', 'in', chunk)));
+              lessonDocs.push(...lSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+            }
+            // Sort lessons chronologically
+            setLessons(lessonDocs.sort((a, b) => (a.lessonDate || '').localeCompare(b.lessonDate || '')));
           }
 
           // Fetch all active courses for recommendations
@@ -94,6 +164,7 @@ export function MyCourses() {
       <Tabs defaultValue="courses">
         <TabsList>
           <TabsTrigger value="courses">My Courses</TabsTrigger>
+          <TabsTrigger value="schedule">Class Schedule</TabsTrigger>
           <TabsTrigger value="materials">Materials</TabsTrigger>
           <TabsTrigger value="certificates">Certificates</TabsTrigger>
           <TabsTrigger value="recommendations" className="text-blue-600">AI Advisory</TabsTrigger>
@@ -176,17 +247,97 @@ export function MyCourses() {
                      <Link to={`/payment-status/${r.id}`} className="w-full">
                        <Button variant="outline" className="w-full bg-slate-50 hover:bg-slate-100 border-slate-200">View Status</Button>
                      </Link>
-                     {r.status === 'verified' && (
-                        <Link to={`/feedback/${r.courseId}`} className="w-full">
-                          <Button variant="secondary" className="w-full bg-blue-50 text-blue-700 hover:bg-blue-100">Submit Feedback</Button>
-                        </Link>
-                     )}
+                     {(() => {
+                        if (r.status !== 'verified') return null;
+
+                        const hasSubmittedFeedback = feedbacks.some(f => f.sessionId === r.sessionId);
+                        const cert = certificates.find(c => c.registrationId === r.id);
+                        
+                        if (!hasSubmittedFeedback && !cert) {
+                          const isFullyAttended = r.amConfirmed && r.pmConfirmed;
+                          
+                          if (!isFullyAttended) {
+                            return (
+                              <Button disabled variant="outline" className="w-full bg-slate-100 text-slate-400 border-slate-200 font-bold uppercase tracking-wider text-[10px] cursor-not-allowed">
+                                <FileText className="w-3.5 h-3.5 mr-1.5" /> Pending Completion
+                              </Button>
+                            );
+                          }
+                          
+                          return (
+                            <Link to={`/feedback/${r.courseId}?session=${r.sessionId}`} className="w-full">
+                              <Button variant="secondary" className="w-full bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 font-bold uppercase tracking-wider text-[10px]">
+                                <FileText className="w-3.5 h-3.5 mr-1.5" /> Submit Feedback
+                              </Button>
+                            </Link>
+                          );
+                        }
+
+                        if (cert) {
+                          return (
+                            <Button 
+                              variant="default" 
+                              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold uppercase tracking-wider text-[10px]"
+                              onClick={() => {
+                                const tabMatch = document.querySelector('[value="certificates"]') as HTMLButtonElement;
+                                if (tabMatch) tabMatch.click();
+                                toast.success("Check the Certificates tab to download your copy!");
+                              }}
+                            >
+                              <Download className="w-3.5 h-3.5 mr-1.5" /> Download Certificate
+                            </Button>
+                          );
+                        }
+                        return null;
+                     })()}
                    </CardFooter>
                  </Card>
                 );
               })}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="schedule" className="pt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>My Class Schedule</CardTitle>
+              <CardDescription>View your upcoming and past lesson dates</CardDescription>
+            </CardHeader>
+            <CardContent>
+               {lessons.length === 0 ? (
+                 <p className="text-slate-500 py-4 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50">No scheduled classes found.</p>
+               ) : (
+                 <div className="space-y-3">
+                   {lessons.map((l: any) => {
+                      const courseName = courses.find(c => c.id === regs.find(r => r.sessionId === l.sessionId)?.courseId)?.title || "Course Session";
+                      const isPast = l.lessonDate && l.lessonDate < getHkDateString();
+                      return (
+                        <div key={l.id} className={`flex items-start md:items-center justify-between p-4 border rounded-xl gap-4 ${isPast ? 'bg-slate-50 border-slate-200 text-slate-500' : 'bg-white border-blue-100 shadow-sm'}`}>
+                          <div className="flex items-center gap-4">
+                            <div className={`w-12 h-12 rounded-full flex flex-col items-center justify-center shrink-0 ${isPast ? 'bg-slate-200 text-slate-500' : 'bg-blue-100 text-blue-600'}`}>
+                               <Calendar className="w-5 h-5 mb-0.5" />
+                               <span className="text-[9px] font-black">{l.lessonDate?.slice(5)}</span>
+                            </div>
+                            <div>
+                               <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">{l.lessonDate} • {l.startTime} - {l.endTime}</div>
+                               <h4 className={`font-bold ${isPast ? 'text-slate-600' : 'text-slate-800'}`}>{courseName}</h4>
+                               <p className="text-sm font-medium mt-0.5">{l.lessonTitle || `Lesson ${l.lessonNumber}`}</p>
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="text-xs text-slate-500">Classroom: <span className="font-semibold text-slate-700">{l.classroom || 'TBA'}</span></div>
+                            {l.meetingLink && (
+                               <a href={l.meetingLink} target="_blank" rel="noreferrer" className="text-xs text-blue-600 font-bold hover:underline mt-1 inline-block">Online Link</a>
+                            )}
+                          </div>
+                        </div>
+                      );
+                   })}
+                 </div>
+               )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="materials" className="pt-4">
@@ -242,7 +393,7 @@ export function MyCourses() {
                          <h4 className="font-bold text-slate-800">{c.course_title || "Course Certificate"}</h4>
                                                    <p className="text-xs text-slate-500 mt-1">Issued: {formatHkDate(c.issuedAt)}</p>
                          <p className="text-xs font-mono text-slate-400 mt-1">ID: {c.id}</p>
-                         <a href={c.file_url} target="_blank" rel="noreferrer" className="inline-block mt-3">
+                         <a onClick={() => generateCertificatePDF(c)} className="inline-block mt-3 cursor-pointer">
                            <Button size="sm" className="gap-2 bg-slate-800 hover:bg-slate-900 text-white"><Download className="w-3 h-3"/> Download PDF</Button>
                          </a>
                        </div>

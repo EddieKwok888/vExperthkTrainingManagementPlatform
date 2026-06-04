@@ -16,6 +16,7 @@ export function PaymentStatus() {
   const [uploading, setUploading] = useState(false);
   const [paymentProofBase64, setPaymentProofBase64] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'fps' | 'payme' | 'paypal'>('fps');
+  const [schoolSettings, setSchoolSettings] = useState<any>(null);
 
   useEffect(() => {
     const fetchReg = async () => {
@@ -23,6 +24,9 @@ export function PaymentStatus() {
       try {
         const snap = await getDoc(doc(db, 'registrations', id));
         if (snap.exists()) setReg({ id: snap.id, ...snap.data() });
+
+        const settingsSnap = await getDoc(doc(db, 'settings', 'school_info'));
+        if (settingsSnap.exists()) setSchoolSettings(settingsSnap.data());
       } catch (e) {
          handleFirestoreError(e, OperationType.GET, `registrations/${id}`);
       } finally {
@@ -98,6 +102,13 @@ export function PaymentStatus() {
       </Link>
       <Card className="text-center">
         <CardHeader>
+          {schoolSettings?.logo_url ? (
+            <img src={schoolSettings.logo_url} alt={schoolSettings?.name} className="mx-auto h-12 mb-2 object-contain" />
+          ) : (
+             <div className="w-12 h-12 bg-blue-600 rounded-xl mx-auto flex items-center justify-center mb-2 shadow-sm">
+                <div className="w-6 h-6 border-2 border-white rounded-full"></div>
+             </div>
+          )}
           <CardTitle>Electronic Bill</CardTitle>
           <CardDescription>Checkout & Payment for your enrollment</CardDescription>
         </CardHeader>

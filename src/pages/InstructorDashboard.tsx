@@ -2,13 +2,14 @@ import React, { useState, useEffect, useContext } from 'react';
 import { db } from '../lib/firebase';
 import { collection, query, where, getDocs, doc, getDoc, setDoc, addDoc, serverTimestamp, orderBy, limit, writeBatch } from 'firebase/firestore';
 import { AuthContext } from '../App';
+import { jsPDF } from 'jspdf';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { Loader2, CheckCircle, XCircle, Clock, Calendar, GraduationCap, ClipboardList, Send, RefreshCw, CreditCard } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, Clock, Calendar, GraduationCap, ClipboardList, Send, RefreshCw, CreditCard, FileText, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { logAudit } from '../lib/services';
 import { formatHkDate, getHkDateString } from '../lib/utils';
@@ -33,10 +34,11 @@ export function InstructorDashboard() {
   
   const [hourForm, setHourForm] = useState({
     date: getHkDateString(),
-    hours: '',
-    notes: ''
+    course: ''
   });
   const [submittingHours, setSubmittingHours] = useState(false);
+  const [mtmYear, setMtmYear] = useState(new Date().getFullYear().toString());
+  const [stats, setStats] = useState({ upcomingSessions: 0, activeStudents: 0, averageRating: 0 });
 
   useEffect(() => {
     if (user?.uid) {
@@ -53,35 +55,100 @@ export function InstructorDashboard() {
         setUserProfile(userDoc.data());
       }
 
-      // Find lessons where instructor is assigned
-      const lessonsSnap = await getDocs(query(collection(db, 'lessons'), where('tutorId', '==', user?.uid), orderBy('lessonDate', 'desc'), limit(50)));
-      const tutorLessons = lessonsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setLessons(tutorLessons);
+      // Step 1: Find sessions assigned to this tutor
+      const sessionsSnap = await getDocs(query(collection(db, 'course_sessions'), where('tutorId', '==', user?.uid)));
+      let sessionDocs = sessionsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-      // Find sessions linked to these lessons
-      const sessionIds = Array.from(new Set(tutorLessons.map((l: any) => l.sessionId)));
+      // Step 2: Also find courses assigned to this tutor directly (in case some sessions inherit from course)
+      const coursesSnap = await getDocs(query(collection(db, 'courses'), where('tutorId', '==', user?.uid)));
+      let templateDocs = coursesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const courseIdsFromCourses = templateDocs.map(c => c.id);
+
+      // Fetch sessions for those courses if not already included
+      if (courseIdsFromCourses.length > 0) {
+        for (let i = 0; i < courseIdsFromCourses.length; i += 10) {
+          const chunk = courseIdsFromCourses.slice(i, i + 10);
+          const courseSessionsSnap = await getDocs(query(collection(db, 'course_sessions'), where('courseId', 'in', chunk)));
+          const additionalSessions = courseSessionsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          additionalSessions.forEach(as => {
+            if (!sessionDocs.find(s => s.id === as.id)) {
+              sessionDocs.push(as);
+            }
+          });
+        }
+      }
+
+      const sessionIds = sessionDocs.map(s => s.id);
+      let tutorLessons: any[] = [];
+      let feedbacksDocs: any[] = [];
+      let enrolledStudents: any[] = [];
+
       if (sessionIds.length > 0) {
-        const sessionDocs: any[] = [];
-        // Firebase 'in' is limited to 10
+        // Fetch lessons for these sessions
+        const chunkedLessons: any[] = [];
         for (let i = 0; i < sessionIds.length; i += 10) {
           const chunk = sessionIds.slice(i, i + 10);
-          const sessionsSnap = await getDocs(query(collection(db, 'course_sessions'), where('__name__', 'in', chunk)));
-          sessionDocs.push(...sessionsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+          const lessonsSnap = await getDocs(query(collection(db, 'lessons'), where('sessionId', 'in', chunk)));
+          chunkedLessons.push(...lessonsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+          
+          const regSnap = await getDocs(query(collection(db, 'registrations'), where('sessionId', 'in', chunk), where('status', '==', 'verified')));
+          enrolledStudents.push(...regSnap.docs.map(d => ({ id: d.id, ...d.data() })));
         }
+        
+        // Find lessons directly assigned to tutor just in case
+        const directLessonsSnap = await getDocs(query(collection(db, 'lessons'), where('tutorId', '==', user?.uid)));
+        directLessonsSnap.docs.forEach(d => {
+           if (!chunkedLessons.find(l => l.id === d.id)) {
+              chunkedLessons.push({ id: d.id, ...d.data() });
+           }
+        });
+
+        tutorLessons = chunkedLessons.sort((a, b) => {
+           const dateA = a.lessonDate || '';
+           const dateB = b.lessonDate || '';
+           return dateB.localeCompare(dateA); // desc
+        });
+        
+        setLessons(tutorLessons);
         setSessions(sessionDocs);
         
-        // Fetch templates
-        const courseIds = Array.from(new Set(sessionDocs.map(s => s.courseId)));
-        if (courseIds.length > 0) {
-          const templateDocs: any[] = [];
-          for (let i = 0; i < courseIds.length; i += 10) {
-            const chunk = courseIds.slice(i, i + 10);
+        // Fetch courses for the sessions if we need more
+        const courseIdsToFetch = Array.from(new Set(sessionDocs.map(s => (s as any).courseId).filter(id => !templateDocs.find(t => t.id === id))));
+        if (courseIdsToFetch.length > 0) {
+          for (let i = 0; i < courseIdsToFetch.length; i += 10) {
+            const chunk = courseIdsToFetch.slice(i, i + 10);
             const templateSnap = await getDocs(query(collection(db, 'courses'), where('__name__', 'in', chunk)));
             templateDocs.push(...templateSnap.docs.map(d => ({ id: d.id, ...d.data() })));
           }
-          setCourses(templateDocs);
         }
+        setCourses(templateDocs);
+
+        // Fetch feedbacks
+        const finalCourseIds = templateDocs.map(t => t.id);
+        if (finalCourseIds.length > 0) {
+          for (let i = 0; i < finalCourseIds.length; i += 10) {
+             const chunk = finalCourseIds.slice(i, i + 10);
+             const feedbackSnap = await getDocs(query(collection(db, 'feedbacks'), where('courseId', 'in', chunk)));
+             feedbacksDocs.push(...feedbackSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+          }
+        }
+      } else {
+        // Fallback if no sessions
+        setLessons([]);
+        setSessions([]);
+        setCourses(templateDocs);
       }
+
+      const today = getHkDateString();
+      const upcomingSessionsCount = tutorLessons.filter((l: any) => l.lessonDate >= today).length;
+      const uniqueStudents = new Set(enrolledStudents.map(s => s.studentId).filter(Boolean)).size;
+      const avgRating = feedbacksDocs.length > 0 ? feedbacksDocs.reduce((acc, curr) => acc + (parseFloat(curr.rating || curr.overallCourseScore) || 0), 0) / feedbacksDocs.length : 0;
+      
+      setStats({
+          upcomingSessions: upcomingSessionsCount,
+          activeStudents: uniqueStudents,
+          averageRating: avgRating
+      });
 
       // Get work hours history
       const hoursSnap = await getDocs(query(collection(db, 'teaching_hours'), where('tutorId', '==', user?.uid), orderBy('createdAt', 'desc'), limit(50)));
@@ -153,10 +220,113 @@ export function InstructorDashboard() {
     }
   };
 
+  const generateMTMReport = async () => {
+    if (!user?.uid) return;
+    try {
+      const tutorLessons = lessons.filter(l => {
+          const session = sessions.find(s => s.id === l.sessionId || s.id === l.session_id);
+          const course = courses.find(c => c.id === session?.courseId);
+          const isMicrosoft = course?.category === 'Microsoft' || course?.category?.toLowerCase() === 'microsoft';
+          const tid = l.tutorId || l.tutor_id || session?.tutorId || session?.tutor_id;
+          const inYear = (l.lessonDate || l.lesson_date || '').startsWith(mtmYear);
+          return tid === user.uid && inYear && isMicrosoft;
+      }).sort((a,b) => (a.lessonDate || a.lesson_date || '').localeCompare(b.lessonDate || b.lesson_date || ''));
+
+      const calculateHours = (start: string, end: string) => {
+          if (!start || !end) return 0;
+          const [sh, sm] = start.split(':').map(Number);
+          const [eh, em] = end.split(':').map(Number);
+          const diff = ((eh * 60 + em) - (sh * 60 + sm)) / 60;
+          return diff > 0 ? diff : 0;
+      };
+
+      let yearlyRecords = tutorLessons.map(l => {
+          const session = sessions.find(s => s.id === l.sessionId || s.id === l.session_id);
+          const course = courses.find(c => c.id === session?.courseId);
+          const startTime = l.startTime || session?.startTime;
+          const endTime = l.endTime || session?.endTime;
+          const hrs = calculateHours(startTime, endTime);
+          return {
+              date: l.lessonDate || l.lesson_date,
+              notes: (course?.title || session?.sessionName || 'Course') + ' (' + (startTime || 'TBC') + ' - ' + (endTime || 'TBC') + ')',
+              hours: hrs
+          };
+      });
+
+      const hoursSnap = await getDocs(query(collection(db, 'teaching_hours'), where('tutorId', '==', user.uid)));
+      const allHours = hoursSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+      const manualMsHours = allHours.filter(h => {
+          if (!h.isManual) return false;
+          if (!h.date || !h.date.startsWith(mtmYear)) return false;
+          
+          let isMicrosoft = false;
+          if (h.course) {
+              const courseObj = courses.find(c => c.title === h.course || c.certName === h.course);
+              if (courseObj && (courseObj.category === 'Microsoft' || courseObj.category?.toLowerCase() === 'microsoft')) isMicrosoft = true;
+              if (h.course.toLowerCase().includes('microsoft') || h.course.toLowerCase().match(/ms-|az-|dp-|ai-|sc-|pl-|mb-/)) isMicrosoft = true;
+          }
+          
+          return isMicrosoft;
+      }).map(h => ({
+          date: h.date,
+          notes: h.notes || (h.course),
+          hours: h.hours
+      }));
+
+      yearlyRecords = [...yearlyRecords, ...manualMsHours].sort((a,b) => (a.date || '').localeCompare(b.date || ''));
+
+
+      const totalHours = yearlyRecords.reduce((acc, curr) => acc + (curr.hours || 0), 0);
+
+      const doc = new jsPDF();
+      
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      doc.text(`Instructor Teaching Hours (MTM Report)`, 105, 20, { align: 'center' });
+      
+      doc.setFontSize(12);
+      doc.text(`Instructor: ${user.displayName || user.email || 'Instructor'}`, 20, 35);
+      doc.text(`Report Year: ${mtmYear}`, 20, 42);
+      doc.text(`Total Teaching Hours: ${totalHours} hrs`, 20, 49);
+
+      doc.setLineWidth(0.5);
+      doc.line(20, 53, 190, 53);
+
+      doc.setFontSize(10);
+      doc.text("Date", 20, 60);
+      doc.text("Description / Notes", 60, 60);
+      doc.text("Hours", 170, 60);
+      
+      doc.setLineWidth(0.2);
+      doc.line(20, 63, 190, 63);
+
+      doc.setFont("helvetica", "normal");
+      let y = 70;
+      
+      yearlyRecords.forEach(h => {
+         if (y > 270) {
+            doc.addPage();
+            y = 20;
+         }
+         doc.text(h.date || 'N/A', 20, y);
+         const splitNotes = doc.splitTextToSize(h.notes?.replace(/\n/g, ' ') || 'No description provided', 100);
+         doc.text(splitNotes, 60, y);
+         doc.text(String(h.hours || 0), 170, y);
+         
+         y += (splitNotes.length * 5) + 3;
+      });
+
+      doc.save(`MTM_Report_${(user.displayName || 'Instructor').replace(/\s+/g,'_')}_${mtmYear}.pdf`);
+      toast.success("MTM Report generated successfully");
+    } catch (error: any) {
+      toast.error(error.message);
+    }
+  };
+
   const handleSubmitHours = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!hourForm.hours || isNaN(parseFloat(hourForm.hours))) {
-      return toast.error("Please enter valid hours");
+    if (!hourForm.course) {
+      return toast.error("Please enter Course Name");
     }
     
     setSubmittingHours(true);
@@ -165,14 +335,15 @@ export function InstructorDashboard() {
         tutorId: user?.uid,
         tutorName: user?.displayName || user?.email,
         date: hourForm.date,
-        hours: parseFloat(hourForm.hours),
-        notes: hourForm.notes,
+        course: hourForm.course,
+        hours: 0,
+        notes: hourForm.course,
         status: 'pending',
         createdAt: serverTimestamp()
       });
       
-      toast.success("Hours submitted successfully");
-      setHourForm({ ...hourForm, hours: '', notes: '' });
+      toast.success("Record submitted successfully");
+      setHourForm({ ...hourForm, course: '' });
       fetchTutorData();
     } catch (error: any) {
       toast.error(error.message);
@@ -209,6 +380,42 @@ export function InstructorDashboard() {
               <GraduationCap className="w-4 h-4 text-blue-600" /> {user?.displayName || user?.email?.split('@')[0]}
             </div>
           </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <Card className="border-none shadow-xl shadow-blue-900/5 bg-gradient-to-br from-blue-600 to-indigo-700 text-white">
+            <CardContent className="p-6">
+              <div className="flex justify-between items-start">
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-blue-100/80">Upcoming Sessions</p>
+                  <p className="text-4xl font-black tracking-tight">{stats.upcomingSessions}</p>
+                </div>
+                <div className="p-3 bg-white/10 rounded-xl"><Calendar className="w-5 h-5 text-blue-50" /></div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-none shadow-xl shadow-emerald-900/5 bg-gradient-to-br from-emerald-500 to-teal-600 text-white">
+            <CardContent className="p-6">
+              <div className="flex justify-between items-start">
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-emerald-100/80">Active Students</p>
+                  <p className="text-4xl font-black tracking-tight">{stats.activeStudents}</p>
+                </div>
+                <div className="p-3 bg-white/10 rounded-xl"><GraduationCap className="w-5 h-5 text-emerald-50" /></div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-none shadow-xl shadow-amber-900/5 bg-gradient-to-br from-amber-500 to-orange-600 text-white">
+            <CardContent className="p-6">
+              <div className="flex justify-between items-start">
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-amber-100/80">Avg. Rating</p>
+                  <p className="text-4xl font-black tracking-tight">{stats.averageRating.toFixed(1)} <span className="text-lg opacity-70">/ 5.0</span></p>
+                </div>
+                <div className="p-3 bg-white/10 rounded-xl"><CheckCircle className="w-5 h-5 text-amber-50" /></div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -254,7 +461,7 @@ export function InstructorDashboard() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg text-indigo-800">
-                  <Clock className="w-5 h-5 text-indigo-600" /> Log Teaching Hours
+                  <Clock className="w-5 h-5 text-indigo-600" /> Log Part-time Record
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -269,12 +476,8 @@ export function InstructorDashboard() {
                     }} className="h-10" />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">{t('tutor.hours')}</label>
-                    <Input type="number" step="0.5" placeholder="e.g. 3.5" value={isNaN(parseFloat(hourForm.hours)) ? '' : hourForm.hours} onChange={e => setHourForm({...hourForm, hours: e.target.value})} className="h-10" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">{t('tutor.description')}</label>
-                    <Textarea placeholder="Course/Lesson name and details..." value={hourForm.notes} onChange={e => setHourForm({...hourForm, notes: e.target.value})} className="h-20 resize-none text-sm border-slate-200" />
+                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Course Name</label>
+                    <Input placeholder="e.g. MS-900" value={hourForm.course} onChange={e => setHourForm({...hourForm, course: e.target.value})} className="h-10" />
                   </div>
                   <Button type="submit" disabled={submittingHours} className="w-full bg-indigo-600 hover:bg-indigo-700 gap-2 font-black uppercase tracking-[0.1em] text-[10px] h-11 shadow-lg shadow-indigo-100">
                     {submittingHours ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
@@ -323,6 +526,34 @@ export function InstructorDashboard() {
                     <div className="bg-white/10 px-2 py-1 rounded-md border border-white/10">Appr: {approvedHours}Hrs</div>
                     <div className="bg-white/10 px-2 py-1 rounded-md border border-white/10">Rate: HK${hourlyRate}/H</div>
                  </div>
+               </CardContent>
+            </Card>
+
+            <Card className="border border-green-200 shadow-md">
+               <CardHeader className="pb-2 bg-green-50/50">
+                 <CardTitle className="text-[10px] text-emerald-800 font-black uppercase tracking-widest flex items-center gap-2">
+                   <FileText className="w-3 h-3" /> Annual MTM Report
+                 </CardTitle>
+               </CardHeader>
+               <CardContent className="pt-4 space-y-3">
+                  <p className="text-xs text-slate-500 font-medium">Export your Microsoft MTM annual teaching hours report.</p>
+                  <div className="flex items-center gap-2">
+                    <select 
+                      className="h-9 px-3 border border-slate-200 rounded text-sm outline-none bg-white flex-1" 
+                      value={mtmYear} 
+                      onChange={e => setMtmYear(e.target.value)}
+                    >
+                      {(() => {
+                         const y = new Date().getFullYear();
+                         return [y, y-1, y-2].map(yr => (
+                           <option key={yr} value={yr.toString()}>{yr}</option>
+                         ));
+                      })()}
+                    </select>
+                    <Button onClick={generateMTMReport} className="h-9 px-3 bg-emerald-600 hover:bg-emerald-700 text-[10px] font-black uppercase tracking-wider gap-2">
+                       <Download className="w-3.5 h-3.5" /> PDF
+                    </Button>
+                  </div>
                </CardContent>
             </Card>
           </div>
