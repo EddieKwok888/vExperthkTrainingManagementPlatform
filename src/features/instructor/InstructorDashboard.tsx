@@ -1,0 +1,1261 @@
+import React, { useState, useEffect, useContext } from 'react';
+import { db } from '../../lib/firebase';
+import { collection, query, where, getDocs, doc, getDoc, setDoc, addDoc, serverTimestamp, orderBy, limit, writeBatch } from 'firebase/firestore';
+import { AuthContext } from '../../App';
+import { jsPDF } from 'jspdf';
+import { useTranslation } from 'react-i18next';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
+import { Textarea } from '../../components/ui/textarea';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
+import { 
+  Loader2, CheckCircle, XCircle, Clock, Calendar, GraduationCap, 
+  ClipboardList, Send, RefreshCw, CreditCard, FileText, Download, 
+  Search, Star, Check, Sparkles, BookOpen, MessageSquare, 
+  Award, TrendingUp, Filter, AlertCircle, LayoutDashboard, CheckSquare, ShieldAlert,
+  MapPin, ExternalLink
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { logAudit } from '../../lib/services';
+import { formatHkDate, getHkDateString } from '../../lib/utils';
+import { isWeekendOrHoliday } from '../../lib/holidays';
+
+export function InstructorDashboard() {
+  const { user } = useContext(AuthContext);
+  const { t } = useTranslation();
+  
+  // Tab control
+  const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'hours' | 'reports'>('overview');
+  
+  // DB states
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [courses, setCourses] = useState<any[]>([]);
+  const [registrations, setRegistrations] = useState<any[]>([]);
+  const [allSessionRegistrations, setAllSessionRegistrations] = useState<any[]>([]);
+  const [hours, setHours] = useState<any[]>([]);
+  const [shifts, setShifts] = useState<any[]>([]);
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  
+  // Attendance states
+  const [lessons, setLessons] = useState<any[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState<string>('');
+  const [selectedLesson, setSelectedLesson] = useState<any>(null);
+  const [attendanceData, setAttendanceData] = useState<Record<string, string>>({});
+  const [submittingAttendance, setSubmittingAttendance] = useState(false);
+  const [lessonSearch, setLessonSearch] = useState('');
+  const [studentSearch, setStudentSearch] = useState('');
+
+  // Whenever selectedSessionId changes, find its lessons and load its data
+  useEffect(() => {
+    if (!selectedSessionId) return;
+    
+    // Find lessons for this session
+    const sessionLessons = lessons.filter(l => l.sessionId === selectedSessionId || l.session_id === selectedSessionId);
+    if (sessionLessons.length > 0) {
+      // If we don't have a selectedLesson from this session currently, select the first one
+      const isCurrentLessonInSession = selectedLesson && (selectedLesson.sessionId === selectedSessionId || selectedLesson.session_id === selectedSessionId);
+      if (!isCurrentLessonInSession) {
+        handleSelectLesson(sessionLessons[0]);
+      }
+    } else {
+      // No lessons for this session yet, load verified registrations directly
+      setSelectedLesson(null);
+      const loadRegistrationsOnly = async () => {
+        try {
+          const regsSnap = await getDocs(query(collection(db, 'registrations'), where('sessionId', '==', selectedSessionId), where('status', '==', 'verified')));
+          setRegistrations(regsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+          setAttendanceData({});
+        } catch (err: any) {
+          console.error(err);
+        }
+      };
+      loadRegistrationsOnly();
+    }
+  }, [selectedSessionId, lessons]);
+  
+  // Work hour states
+  const [hourForm, setHourForm] = useState({
+    date: getHkDateString(),
+    course: '',
+    hours: '2',
+    notes: ''
+  });
+  const [submittingHours, setSubmittingHours] = useState(false);
+  const [hoursFilter, setHoursFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  
+  const [mtmYear, setMtmYear] = useState(new Date().getFullYear().toString());
+  const [stats, setStats] = useState({ upcomingSessions: 0, activeStudents: 0, averageRating: 0 });
+
+  useEffect(() => {
+    if (user?.uid) {
+      fetchTutorData();
+    }
+  }, [user]);
+
+  const fetchTutorData = async () => {
+    setLoading(true);
+    try {
+      // Fetch user profile
+      const userDoc = await getDoc(doc(db, 'users', user?.uid));
+      if (userDoc.exists()) {
+        setUserProfile(userDoc.data());
+      }
+
+      // Step 1: Find sessions assigned to this tutor
+      const sessionsSnap = await getDocs(query(collection(db, 'course_sessions'), where('tutorId', '==', user?.uid)));
+      let sessionDocs = sessionsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      // Step 2: Also find courses assigned to this tutor directly (in case some sessions inherit from course)
+      const coursesSnap = await getDocs(query(collection(db, 'courses'), where('tutorId', '==', user?.uid)));
+      let templateDocs = coursesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const courseIdsFromCourses = templateDocs.map(c => c.id);
+
+      // Fetch sessions for those courses if not already included
+      if (courseIdsFromCourses.length > 0) {
+        for (let i = 0; i < courseIdsFromCourses.length; i += 10) {
+          const chunk = courseIdsFromCourses.slice(i, i + 10);
+          const courseSessionsSnap = await getDocs(query(collection(db, 'course_sessions'), where('courseId', 'in', chunk)));
+          const additionalSessions = courseSessionsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          additionalSessions.forEach(as => {
+            if (!sessionDocs.find(s => s.id === as.id)) {
+              sessionDocs.push(as);
+            }
+          });
+        }
+      }
+
+      // Step 3: Find lessons directly assigned to tutor just in case
+      const directLessonsSnap = await getDocs(query(collection(db, 'lessons'), where('tutorId', '==', user?.uid)));
+      const directLessonsData: any[] = directLessonsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      // Extract unique session IDs from direct lessons
+      const directSessionIds = Array.from(new Set(
+        directLessonsData
+          .map(l => (l.sessionId || l.session_id))
+          .filter(Boolean)
+      ));
+
+      // Fetch sessions for these direct lessons if not already included
+      const missingSessionIds = directSessionIds.filter(id => !sessionDocs.find(s => s.id === id));
+      if (missingSessionIds.length > 0) {
+        for (let i = 0; i < missingSessionIds.length; i += 10) {
+          const chunk = missingSessionIds.slice(i, i + 10);
+          const extraSessionsSnap = await getDocs(query(collection(db, 'course_sessions'), where('__name__', 'in', chunk)));
+          extraSessionsSnap.docs.forEach(d => {
+            const sd = { id: d.id, ...d.data() };
+            if (!sessionDocs.find(s => s.id === sd.id)) {
+              sessionDocs.push(sd);
+            }
+          });
+        }
+      }
+
+      const sessionIds = sessionDocs.map(s => s.id);
+      let tutorLessons: any[] = [];
+      let feedbacksDocs: any[] = [];
+      let enrolledStudents: any[] = [];
+
+      if (sessionIds.length > 0 || directLessonsData.length > 0) {
+        const chunkedLessons: any[] = [];
+        
+        // Fetch lessons and registrations for these sessions
+        if (sessionIds.length > 0) {
+          for (let i = 0; i < sessionIds.length; i += 10) {
+            const chunk = sessionIds.slice(i, i + 10);
+            const lessonsSnap = await getDocs(query(collection(db, 'lessons'), where('sessionId', 'in', chunk)));
+            chunkedLessons.push(...lessonsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+            
+            const regSnap = await getDocs(query(collection(db, 'registrations'), where('sessionId', 'in', chunk)));
+            enrolledStudents.push(...regSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+          }
+        }
+        
+        // Always include direct lessons
+        directLessonsData.forEach(d => {
+           if (!chunkedLessons.find(l => l.id === d.id)) {
+              chunkedLessons.push(d);
+           }
+        });
+
+        tutorLessons = chunkedLessons.sort((a, b) => {
+           const dateA = a.lessonDate || '';
+           const dateB = b.lessonDate || '';
+           return dateB.localeCompare(dateA); // desc
+        });
+        
+        setLessons(tutorLessons);
+        setSessions(sessionDocs);
+        setAllSessionRegistrations(enrolledStudents);
+        const confirmedSecs = sessionDocs.filter((s: any) => {
+          const statusLower = (s?.sessionStatus || '').toLowerCase();
+          return statusLower === 'full' || statusLower === 'confirmed';
+        });
+        if (confirmedSecs.length > 0) {
+          setSelectedSessionId(confirmedSecs[0].id);
+        }
+        
+        // Fetch courses for the sessions if we need more
+        const courseIdsToFetch = Array.from(new Set(sessionDocs.map(s => (s as any).courseId).filter(id => !templateDocs.find(t => t.id === id))));
+        if (courseIdsToFetch.length > 0) {
+          for (let i = 0; i < courseIdsToFetch.length; i += 10) {
+            const chunk = courseIdsToFetch.slice(i, i + 10);
+            const templateSnap = await getDocs(query(collection(db, 'courses'), where('__name__', 'in', chunk)));
+            templateDocs.push(...templateSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+          }
+        }
+        setCourses(templateDocs);
+
+        // Fetch feedbacks
+        const finalCourseIds = templateDocs.map(t => t.id);
+        if (finalCourseIds.length > 0) {
+          for (let i = 0; i < finalCourseIds.length; i += 10) {
+             const chunk = finalCourseIds.slice(i, i + 10);
+             const feedbackSnap = await getDocs(query(collection(db, 'feedbacks'), where('courseId', 'in', chunk)));
+             feedbacksDocs.push(...feedbackSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+          }
+        }
+      } else {
+        // Fallback if no sessions and no direct lessons
+        setLessons([]);
+        setSessions([]);
+        setCourses(templateDocs);
+        setAllSessionRegistrations([]);
+      }
+
+      const today = getHkDateString();
+      const upcomingSessionsCount = tutorLessons.filter((l: any) => l.lessonDate >= today).length;
+      const uniqueStudents = new Set(enrolledStudents.filter((s: any) => s.status === 'verified').map(s => s.studentId).filter(Boolean)).size;
+      const avgRating = feedbacksDocs.length > 0 ? feedbacksDocs.reduce((acc, curr) => acc + (parseFloat(curr.rating || curr.overallCourseScore) || 0), 0) / feedbacksDocs.length : 0;
+      
+      setStats({
+          upcomingSessions: upcomingSessionsCount,
+          activeStudents: uniqueStudents,
+          averageRating: avgRating
+      });
+
+      // Get work hours history
+      const hoursSnap = await getDocs(query(collection(db, 'teaching_hours'), where('tutorId', '==', user?.uid), orderBy('createdAt', 'desc'), limit(50)));
+      setHours(hoursSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      
+      // Get shifts
+      const shiftsSnap = await getDocs(query(collection(db, 'tutor_shifts'), where('tutorId', '==', user?.uid), orderBy('date', 'desc'), limit(20)));
+      setShifts(shiftsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSelectLesson = async (lesson: any) => {
+    setSelectedLesson(lesson);
+    setStudentSearch('');
+    try {
+      // Get verified registrations for the SESSION of this lesson
+      const regsSnap = await getDocs(query(collection(db, 'registrations'), where('sessionId', '==', lesson.sessionId), where('status', '==', 'verified')));
+      const enrolledStudents = regsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setRegistrations(enrolledStudents);
+      
+      // Get attendance for THIS LESSON
+      const attendanceSnap = await getDocs(query(collection(db, 'attendance'), where('lessonId', '==', lesson.id)));
+      const existingAttendance: Record<string, string> = {};
+      attendanceSnap.docs.forEach(d => {
+        existingAttendance[d.data().studentId] = d.data().status;
+      });
+      
+      const mergedData: Record<string, string> = {};
+      enrolledStudents.forEach((s: any) => {
+        // use studentId as key for attendance
+        mergedData[s.studentId] = existingAttendance[s.studentId] || 'present';
+      });
+      setAttendanceData(mergedData);
+    } catch (error: any) {
+      toast.error(error.message);
+    }
+  };
+
+  const handleSaveAttendance = async () => {
+    if (!selectedLesson) return;
+    setSubmittingAttendance(true);
+    try {
+      const batch = writeBatch(db);
+      for (const studentId of Object.keys(attendanceData)) {
+        const attendanceId = `${selectedLesson.id}_${studentId}`;
+        const attRef = doc(db, 'attendance', attendanceId);
+        batch.set(attRef, {
+          lessonId: selectedLesson.id,
+          sessionId: selectedLesson.sessionId,
+          studentId: studentId,
+          status: attendanceData[studentId],
+          recordedAt: serverTimestamp(),
+          recordedBy: user?.uid
+        });
+      }
+      await batch.commit();
+      
+      await logAudit(user?.uid || 'instructor', user?.email || '', 'INSTRUCTOR_MARK_ATTENDANCE', 'attendance', selectedLesson.id, { students: Object.keys(attendanceData).length });
+      toast.success(t('instructor.save_attendance'));
+      
+      // Update completion stats in lesson visually
+      setSelectedLesson((prev: any) => ({ ...prev, attendanceCompleted: true }));
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setSubmittingAttendance(false);
+    }
+  };
+
+  // Bulk operation to mark everyone
+  const handleBulkMarkAttendance = (status: 'present' | 'absent' | 'late' | 'excused' | 'present_am' | 'present_pm') => {
+    if (registrations.length === 0) return;
+    const updated = { ...attendanceData };
+    registrations.forEach(r => {
+      updated[r.studentId] = status;
+    });
+    setAttendanceData(updated);
+    const label = status === 'present_am' ? 'AM Present' : status === 'present_pm' ? 'PM Present' : status.toUpperCase();
+    toast.success(`Marked all as ${label}`);
+  };
+
+  const generateMTMReport = async () => {
+    if (!user?.uid) return;
+    try {
+      const tutorLessons = lessons.filter(l => {
+          const session = sessions.find(s => s.id === l.sessionId || s.id === l.session_id);
+          const course = courses.find(c => c.id === session?.courseId);
+          const isMicrosoft = course?.category === 'Microsoft' || course?.category?.toLowerCase() === 'microsoft';
+          const tid = l.tutorId || l.tutor_id || session?.tutorId || session?.tutor_id;
+          const inYear = (l.lessonDate || l.lesson_date || '').startsWith(mtmYear);
+          return tid === user.uid && inYear && isMicrosoft;
+      }).sort((a,b) => (a.lessonDate || a.lesson_date || '').localeCompare(b.lessonDate || b.lesson_date || ''));
+
+      const calculateHours = (start: string, end: string) => {
+          if (!start || !end) return 0;
+          const [sh, sm] = start.split(':').map(Number);
+          const [eh, em] = end.split(':').map(Number);
+          const diff = ((eh * 60 + em) - (sh * 60 + sm)) / 60;
+          return diff > 0 ? diff : 0;
+      };
+
+      let yearlyRecords = tutorLessons.map(l => {
+          const session = sessions.find(s => s.id === l.sessionId || s.id === l.session_id);
+          const course = courses.find(c => c.id === session?.courseId);
+          const startTime = l.startTime || session?.startTime;
+          const endTime = l.endTime || session?.endTime;
+          const hrs = calculateHours(startTime, endTime);
+          return {
+              date: l.lessonDate || l.lesson_date,
+              notes: (course?.title || session?.sessionName || 'Course') + ' (' + (startTime || 'TBC') + ' - ' + (endTime || 'TBC') + ')',
+              hours: hrs
+          };
+      });
+
+      const hoursSnap = await getDocs(query(collection(db, 'teaching_hours'), where('tutorId', '==', user.uid)));
+      const allHours = hoursSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+      const manualMsHours = allHours.filter(h => {
+          if (!h.isManual) return false;
+          if (!h.date || !h.date.startsWith(mtmYear)) return false;
+          
+          let isMicrosoft = false;
+          if (h.course) {
+              const courseObj = courses.find(c => c.title === h.course || c.certName === h.course);
+              if (courseObj && (courseObj.category === 'Microsoft' || courseObj.category?.toLowerCase() === 'microsoft')) isMicrosoft = true;
+              if (h.course.toLowerCase().includes('microsoft') || h.course.toLowerCase().match(/ms-|az-|dp-|ai-|sc-|pl-|mb-/)) isMicrosoft = true;
+          }
+          
+          return isMicrosoft;
+      }).map(h => ({
+          date: h.date,
+          notes: h.notes || (h.course),
+          hours: h.hours
+      }));
+
+      yearlyRecords = [...yearlyRecords, ...manualMsHours].sort((a,b) => (a.date || '').localeCompare(b.date || ''));
+      const totalHours = yearlyRecords.reduce((acc, curr) => acc + (curr.hours || 0), 0);
+
+      const pdfDoc = new jsPDF();
+      
+      pdfDoc.setFont("helvetica", "bold");
+      pdfDoc.setFontSize(18);
+      pdfDoc.text(`Instructor Teaching Hours (MTM Report)`, 105, 20, { align: 'center' });
+      
+      pdfDoc.setFontSize(12);
+      pdfDoc.text(`Instructor: ${user.displayName || user.email || 'Instructor'}`, 20, 35);
+      pdfDoc.text(`Report Year: ${mtmYear}`, 20, 42);
+      pdfDoc.text(`Total Teaching Hours: ${totalHours} hrs`, 20, 49);
+
+      pdfDoc.setLineWidth(0.5);
+      pdfDoc.line(20, 53, 190, 53);
+
+      pdfDoc.setFontSize(10);
+      pdfDoc.text("Date", 20, 60);
+      pdfDoc.text("Description / Notes", 60, 60);
+      pdfDoc.text("Hours", 170, 60);
+      
+      pdfDoc.setLineWidth(0.2);
+      pdfDoc.line(20, 63, 190, 63);
+
+      pdfDoc.setFont("helvetica", "normal");
+      let y = 70;
+      
+      yearlyRecords.forEach(h => {
+         if (y > 270) {
+            pdfDoc.addPage();
+            y = 20;
+         }
+         pdfDoc.text(h.date || 'N/A', 20, y);
+         const splitNotes = pdfDoc.splitTextToSize(h.notes?.replace(/\n/g, ' ') || 'No description provided', 100);
+         pdfDoc.text(splitNotes, 60, y);
+         pdfDoc.text(String(h.hours || 0), 170, y);
+         
+         y += (splitNotes.length * 5) + 3;
+      });
+
+      pdfDoc.save(`MTM_Report_${(user.displayName || 'Instructor').replace(/\s+/g,'_')}_${mtmYear}.pdf`);
+      toast.success("MTM Report generated successfully");
+    } catch (error: any) {
+      toast.error(error.message);
+    }
+  };
+
+  const handleSubmitHours = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!hourForm.course) {
+      return toast.error("Please select or enter a course name");
+    }
+    
+    setSubmittingHours(true);
+    try {
+      await addDoc(collection(db, 'teaching_hours'), {
+        tutorId: user?.uid,
+        tutorName: user?.displayName || user?.email,
+        date: hourForm.date,
+        course: hourForm.course,
+        hours: Number(hourForm.hours) || 0,
+        notes: hourForm.notes || hourForm.course,
+        status: 'pending',
+        isManual: true,
+        createdAt: serverTimestamp()
+      });
+      
+      toast.success("Work record submitted successfully for approval");
+      setHourForm({
+        date: getHkDateString(),
+        course: '',
+        hours: '2',
+        notes: ''
+      });
+      fetchTutorData();
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setSubmittingHours(false);
+    }
+  };
+
+  // Compute stats metrics dynamically
+  const approvedHours = hours.filter(h => h.status === 'approved').reduce((acc, curr) => acc + (parseFloat(curr.hours) || 0), 0);
+  const hourlyRate = userProfile?.tutorProfile?.hourlyRate || userProfile?.hourlyRate || 0;
+  const estimatedPayout = approvedHours * hourlyRate;
+  
+  // Filtering hours list
+  const filteredHours = hours.filter(h => {
+    if (hoursFilter === 'all') return true;
+    return h.status === hoursFilter;
+  });
+
+  // Filtering lessons list
+  const filteredLessons = lessons.filter(l => {
+    if (!lessonSearch) return true;
+    const term = lessonSearch.toLowerCase();
+    const course = courses.find(c => c.id === sessions.find(s => s.id === l.sessionId || s.id === l.session_id)?.courseId);
+    return (
+      (l.lessonTitle || '').toLowerCase().includes(term) ||
+      (course?.title || '').toLowerCase().includes(term) ||
+      (l.lessonDate || '').includes(term)
+    );
+  });
+
+  // Filtering student registration list
+  const filteredRegistrations = registrations.filter(r => {
+    if (!studentSearch) return true;
+    const term = studentSearch.toLowerCase();
+    return (
+      (r.studentName || '').toLowerCase().includes(term) ||
+      (r.studentEmail || '').toLowerCase().includes(term)
+    );
+  });
+
+  // Filter out completed courses, and put confirmed/full courses first
+  const visibleSessions = sessions
+    .filter(s => {
+      const statusLower = (s?.sessionStatus || '').toLowerCase();
+      return statusLower !== 'completed';
+    })
+    .sort((a, b) => {
+      const aStatus = (a?.sessionStatus || '').toLowerCase();
+      const bStatus = (b?.sessionStatus || '').toLowerCase();
+      const aIsConfirmed = aStatus === 'confirmed' || aStatus === 'full';
+      const bIsConfirmed = bStatus === 'confirmed' || bStatus === 'full';
+      if (aIsConfirmed && !bIsConfirmed) return -1;
+      if (!aIsConfirmed && bIsConfirmed) return 1;
+      return 0;
+    });
+
+  // Filtering upcoming lectures for the instructor dashboard list (today or future + session open/full/confirmed)
+  const todayStr = getHkDateString();
+  const upcomingLectures = lessons.filter(l => {
+    const session = sessions.find(s => s.id === l.sessionId || s.id === l.session_id);
+    const statusLower = (session?.sessionStatus || '').toLowerCase();
+    const isSessionActive = !session || (
+      statusLower === 'open' || 
+      statusLower === 'full' || 
+      statusLower === 'confirmed'
+    );
+    const isUpcoming = l.lessonDate >= todayStr;
+    return isSessionActive && isUpcoming;
+  }).sort((a, b) => (a.lessonDate || '').localeCompare(b.lessonDate || ''));
+
+  // Quick class click helper
+  const handleQuickMarkClass = (lesson: any) => {
+    handleSelectLesson(lesson);
+    setActiveTab('attendance');
+  };
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-[70vh]">
+        <div className="space-y-4 text-center">
+          <Loader2 className="w-10 h-10 animate-spin text-indigo-600 mx-auto" />
+          <p className="text-sm font-semibold tracking-wide text-slate-500 animate-pulse">Syncing working data and rosters...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 bg-slate-50/50 min-h-screen overflow-y-auto p-4 md:p-8">
+      <div className="max-w-7xl mx-auto space-y-8">
+        
+        {/* Banner with Greeting and Context */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">
+                {t('tutor.portal_title')}
+              </h1>
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold tracking-wide ${
+                userProfile?.role === 'tutor' 
+                  ? 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-700/10' 
+                  : 'bg-indigo-50/80 text-slate-600 ring-1 ring-slate-400/10'
+              }`}>
+                {userProfile?.role === 'tutor' ? 'Full-Time Instructor' : 'Part-Time Instructor'}
+              </span>
+            </div>
+            <p className="text-sm text-slate-500 font-medium">
+              Manage class attendance, log teaching hours, and download audit reports.
+            </p>
+          </div>
+          
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={fetchTutorData} 
+              className="gap-2 text-slate-600 bg-white shadow-sm border-slate-200 h-10 px-4 hover:border-indigo-400 hover:text-indigo-600 transition-all rounded-xl"
+            >
+              <RefreshCw className="w-4 h-4 text-indigo-600" />
+              <span>Sync DB</span>
+            </Button>
+            <div className="flex items-center gap-2.5 text-sm font-semibold text-slate-700 bg-gradient-to-r from-slate-100 to-slate-50 border border-slate-200 px-4 h-10 rounded-xl shadow-inner">
+              <GraduationCap className="w-4.5 h-4.5 text-indigo-500" />
+              <span>{user?.displayName || user?.email?.split('@')[0]}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Bento Statistics Showcase */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          
+          {/* Upcoming sessions */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between group hover:border-indigo-200 transition-all">
+            <div className="space-y-1">
+              <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">Scheduled Sessions</p>
+              <p className="text-3xl font-extrabold text-slate-800 tracking-tight group-hover:text-indigo-600 transition-colors">
+                {stats.upcomingSessions}
+              </p>
+              <p className="text-[10px] text-slate-400">Assigned future lessons</p>
+            </div>
+            <div className="p-3.5 bg-indigo-50 rounded-xl text-indigo-600">
+              <Calendar className="w-6 h-6 animate-pulse" />
+            </div>
+          </div>
+
+          {/* Active students */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between group hover:border-emerald-200 transition-all">
+            <div className="space-y-1">
+              <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">Total Enrolled</p>
+              <p className="text-3xl font-extrabold text-slate-800 tracking-tight group-hover:text-emerald-600 transition-colors">
+                {stats.activeStudents}
+              </p>
+              <p className="text-[10px] text-slate-400">Active students in intakes</p>
+            </div>
+            <div className="p-3.5 bg-emerald-50 rounded-xl text-emerald-600">
+              <CheckSquare className="w-6 h-6" />
+            </div>
+          </div>
+
+          {/* Average satisfaction */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between group hover:border-amber-200 transition-all">
+            <div className="space-y-1">
+              <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">Student Rating</p>
+              <div className="flex items-center gap-1.5">
+                <span className="text-3xl font-extrabold text-slate-800 tracking-tight">
+                  {stats.averageRating > 0 ? stats.averageRating.toFixed(1) : 'N/A'}
+                </span>
+                {stats.averageRating > 0 && <span className="text-[11px] text-slate-400 font-bold">/ 5.0</span>}
+              </div>
+              <div className="flex items-center gap-0.5 mt-0.5">
+                {stats.averageRating > 0 ? (
+                  [...Array(5)].map((_, i) => (
+                    <Star 
+                      key={i} 
+                      className={`w-3.5 h-3.5 ${
+                        i < Math.round(stats.averageRating) 
+                          ? 'text-amber-500 fill-amber-400' 
+                          : 'text-slate-200'
+                      }`} 
+                    />
+                  ))
+                ) : (
+                  <span className="text-[10px] text-slate-400">No evaluations received</span>
+                )}
+              </div>
+            </div>
+            <div className="p-3.5 bg-amber-50 rounded-xl text-amber-600">
+              <Award className="w-6 h-6" />
+            </div>
+          </div>
+
+        </div>
+
+        {/* Modular Tabs Selector */}
+        <div className="flex items-center gap-1 border-b border-slate-200 pb-px overflow-x-auto overflow-y-hidden hide-scrollbar">
+          {[
+            { id: 'overview', label: 'Dashboard Overview', icon: LayoutDashboard },
+            { id: 'attendance', label: 'Attendance Management', icon: CheckSquare },
+            { id: 'hours', label: 'Course History', icon: GraduationCap }
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`flex items-center gap-2 px-5 py-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all relative ${
+                  isActive 
+                    ? 'border-indigo-600 text-indigo-600' 
+                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+                }`}
+              >
+                <Icon className={`w-4 h-4 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} />
+                <span>{tab.label}</span>
+                {isActive && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-t-full shadow" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Tab content renders */}
+        <div className="space-y-6">
+
+          {/* 1. OVERVIEW TAB */}
+          {activeTab === 'overview' && (
+            <div className="space-y-6">
+              
+              {/* Assigned Intakes & Student Roster */}
+                <Card className="border-slate-100 shadow-sm rounded-2xl overflow-hidden">
+                  <CardHeader className="bg-slate-50/50 border-b border-slate-100">
+                    <div className="flex justify-between items-center bg-transparent">
+                      <div>
+                        <CardTitle className="text-base font-bold text-slate-800">My Assigned Intakes (Course Runs)</CardTitle>
+                        <CardDescription className="text-xs text-slate-400 font-medium">
+                          Overview of all course runs assigned to you and their currently registered students directory.
+                        </CardDescription>
+                      </div>
+                      <span className="text-[10px] font-black uppercase bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full">{visibleSessions.length} Intakes</span>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-4 space-y-4">
+                    {visibleSessions.length > 0 ? (
+                      visibleSessions.map((s) => {
+                        const course = courses.find(c => c.id === s.courseId);
+                        const sessionRegistrations = allSessionRegistrations.filter(r => r.sessionId === s.id);
+                        
+                        return (
+                          <div key={s.id} className="p-4 rounded-xl border border-slate-100 bg-white hover:border-indigo-100 hover:shadow-sm transition-all space-y-4">
+                            
+                            {/* Session Info Header */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-slate-100">
+                              <div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <h4 className="font-extrabold text-slate-800 text-sm">{s.sessionName || course?.courseCode}</h4>
+                                  <span className={`px-2 py-0.5 rounded text-[8px] font-extrabold uppercase tracking-widest ${
+                                    s.sessionStatus === 'open' ? 'bg-green-100 text-green-700' : 
+                                    (s.sessionStatus === 'full' || s.sessionStatus === 'confirmed') ? 'bg-amber-100 text-amber-700 font-extrabold' :
+                                    s.sessionStatus === 'completed' ? 'bg-slate-800 text-white' :
+                                    'bg-slate-100 text-slate-600'
+                                  }`}>
+                                    {(s.sessionStatus === 'full' || s.sessionStatus === 'confirmed') ? 'Confirmed' : s.sessionStatus}
+                                  </span>
+                                  {s.deliveryMode && (
+                                    <span className="bg-indigo-50 text-indigo-600 text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded tracking-wide">
+                                      {s.deliveryMode}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-slate-500 font-bold mt-1">
+                                  {course?.title || 'Course Template'}
+                                </p>
+                              </div>
+                              
+                              <div className="text-left sm:text-right text-xs">
+                                <p className="text-slate-400 font-medium">
+                                  {s.startDate || 'N/A'} ~ {s.endDate || 'N/A'}
+                                </p>
+                                {(s.room || s.classroom) && (
+                                  <p className="text-[10px] font-bold text-indigo-600 mt-0.5 flex items-center justify-start sm:justify-end gap-1">
+                                    <MapPin className="w-3 h-3" /> {(s.room || s.classroom)}
+                                  </p>
+                                )}
+                                {s.meetingLink && (
+                                  <a href={s.meetingLink} target="_blank" rel="noreferrer" className="text-[10px] font-bold text-blue-600 mt-0.5 flex items-center justify-start sm:justify-end gap-0.5 hover:underline">
+                                    Join Room <ExternalLink className="w-2.5 h-2.5" />
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                            
+                            {/* Students List */}
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                <span>Enrolled Students Roster ({sessionRegistrations.length})</span>
+                                <span>Cap: {s.quota}</span>
+                              </div>
+                              
+                              {sessionRegistrations.length > 0 ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-1.5">
+                                  {sessionRegistrations.map((reg) => (
+                                    <div key={reg.id} className="p-3 bg-slate-50/50 rounded-xl border border-slate-100 flex items-center justify-between gap-3">
+                                      <div className="flex items-center gap-2.5 min-w-0">
+                                        <div className="w-8 h-8 rounded-full bg-indigo-100/60 text-indigo-700 flex items-center justify-center font-bold text-xs shrink-0">
+                                          {reg.studentName ? reg.studentName.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase() : '?'}
+                                        </div>
+                                        <div className="min-w-0">
+                                          <p className="font-extrabold text-xs text-slate-800 truncate">{reg.studentName}</p>
+                                          <p className="text-[10px] text-slate-404 font-mono truncate">{reg.studentEmail}</p>
+                                          {reg.studentPhone && (
+                                            <p className="text-[9px] text-slate-400 font-medium truncate mt-0.5">{reg.studentPhone}</p>
+                                          )}
+                                        </div>
+                                      </div>
+                                      
+                                      <span className={`px-2 py-0.5 rounded text-[8px] font-extrabold uppercase tracking-wider shrink-0 ${
+                                        reg.status === 'verified' 
+                                          ? 'bg-green-100/75 text-green-700' 
+                                          : reg.status === 'pending' || reg.status === 'pending_verification'
+                                          ? 'bg-amber-100/75 text-amber-700' 
+                                          : 'bg-rose-100/75 text-rose-700'
+                                      }`}>
+                                        {reg.status}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-center py-4 bg-slate-50/30 rounded-xl border border-dashed border-slate-100 text-xs text-slate-400 italic">
+                                  No registered students found for this intake.
+                                </div>
+                              )}
+                            </div>
+                            
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="text-center py-10 text-slate-400 italic bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                        <GraduationCap className="w-8 h-8 mx-auto mb-1.5 opacity-40 text-slate-300" />
+                        <p className="text-xs font-semibold tracking-wide">No assigned intakes found.</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+            </div>
+          )}
+
+          {/* 2. ATTENDANCE TAB */}
+          {activeTab === 'attendance' && (() => {
+            const confirmedSessions = sessions.filter(s => {
+              const statusLower = (s?.sessionStatus || '').toLowerCase();
+              return statusLower === 'full' || statusLower === 'confirmed';
+            });
+
+            const searchedConfirmedSessions = confirmedSessions.filter(s => {
+              if (!lessonSearch) return true;
+              const term = lessonSearch.toLowerCase();
+              const course = courses.find(c => c.id === s.courseId);
+              return (
+                (s.sessionName || '').toLowerCase().includes(term) ||
+                (course?.title || '').toLowerCase().includes(term) ||
+                (course?.courseCode || '').toLowerCase().includes(term)
+              );
+            });
+
+            return (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                {/* Confirmed Course Runs left column */}
+                <div className="lg:col-span-1 space-y-4">
+                  <Card className="border-slate-100 shadow-sm rounded-2xl overflow-hidden">
+                    <div className="p-4 border-b border-slate-100 space-y-3 bg-slate-50/50">
+                      <CardTitle className="text-sm font-extrabold text-slate-800">Confirmed Course Runs</CardTitle>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-2.5 w-4.5 h-4.5 text-slate-400" />
+                        <Input
+                          type="text"
+                          placeholder="Search course run or code..."
+                          value={lessonSearch}
+                          onChange={e => setLessonSearch(e.target.value)}
+                          className="pl-9 h-10 bg-white border-slate-200 rounded-xl"
+                        />
+                      </div>
+                    </div>
+                    <CardContent className="p-3 space-y-2 overflow-y-auto max-h-[500px]">
+                      {searchedConfirmedSessions.length > 0 ? (
+                        searchedConfirmedSessions.map(s => {
+                          const course = courses.find(c => c.id === s.courseId);
+                          const isSelected = selectedSessionId === s.id;
+                          const sessionRegistrations = allSessionRegistrations.filter(r => r.sessionId === s.id && r.status === 'verified');
+                          
+                          return (
+                            <div
+                              key={s.id}
+                              onClick={() => setSelectedSessionId(s.id)}
+                              className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                                isSelected 
+                                  ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-100 ring-2 ring-indigo-500/20' 
+                                  : 'bg-white border-slate-100 hover:border-slate-200 hover:bg-slate-50/80'
+                              }`}
+                            >
+                              <p className={`font-bold text-xs line-clamp-2 ${isSelected ? 'text-white' : 'text-slate-800'}`}>
+                                {s.sessionName || course?.title || 'Unknown Course Run'}
+                              </p>
+                              <p className={`text-[9px] font-black uppercase mt-1 ${isSelected ? 'text-indigo-200' : 'text-slate-450 tracking-wider'}`}>
+                                {course?.courseCode || 'No Code'} • {sessionRegistrations.length} students
+                              </p>
+                              <div className="flex items-center justify-between mt-2">
+                                <span className={`text-[9px] font-mono ${isSelected ? 'text-indigo-100' : 'text-slate-400'}`}>
+                                  {s.startDate} {s.endDate ? `to ${s.endDate}` : ''}
+                                </span>
+                                <span className={`px-2 py-0.5 rounded text-[8px] font-extrabold uppercase tracking-widest ${
+                                  isSelected 
+                                    ? 'bg-white/20 text-white' 
+                                    : 'bg-amber-100 text-amber-700 font-extrabold'
+                                }`}>
+                                  Confirmed
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="p-8 text-center text-slate-400 italic text-xs">
+                          No confirmed course runs found.
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Roster & Attendance checklist details */}
+                <div className="lg:col-span-2">
+                  {selectedSessionId ? (
+                    (() => {
+                      const session = sessions.find(s => s.id === selectedSessionId);
+                      const course = courses.find(c => c.id === session?.courseId);
+                      const sessionLessons = lessons.filter(l => l.sessionId === selectedSessionId || l.session_id === selectedSessionId);
+                      
+                      return (
+                        <Card className="border-indigo-100 shadow-xl shadow-indigo-900/5 rounded-2xl ring-1 ring-indigo-50/50 relative">
+                          
+                          {/* Selected session header */}
+                          <div className="p-6 border-b border-indigo-100 bg-gradient-to-r from-slate-50 to-indigo-50/30">
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-transparent">
+                              <div className="space-y-1.5">
+                                <div className="flex items-center gap-2">
+                                  <span className="px-2 py-0.5 bg-indigo-600 text-white text-[9px] font-black uppercase tracking-widest rounded-md">
+                                    Course Intake Run
+                                  </span>
+                                  <span className="text-[10px] font-bold text-slate-450 tracking-wider uppercase">
+                                    {session?.sessionName || course?.courseCode}
+                                  </span>
+                                </div>
+                                
+                                <CardTitle className="text-lg font-extrabold text-slate-800 tracking-tight">
+                                  {course?.title || 'Course Details'}
+                                </CardTitle>
+                                
+                                <p className="text-xs text-slate-500 font-medium">
+                                  Tutor: {userProfile?.name || 'Instructor'} • Mode: <span className="font-bold text-indigo-600">{session?.deliveryMode || 'Normal'}</span> {session?.room ? `• Room: ${session.room}` : ''}
+                                </p>
+                              </div>
+
+                              {selectedLesson && (
+                                <Button
+                                  onClick={handleSaveAttendance}
+                                  disabled={submittingAttendance}
+                                  className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider h-11 px-5 shadow-lg shadow-emerald-100 transition-all rounded-xl gap-2"
+                                >
+                                  {submittingAttendance ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4.5 h-4.5" />}
+                                  <span>Save Changes</span>
+                                </Button>
+                              )}
+                            </div>
+
+                            {/* Dropdown for specific lesson Selection */}
+                            {sessionLessons.length > 0 ? (
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mt-4 bg-white/70 backdrop-blur-sm p-3 rounded-xl border border-indigo-100/50">
+                                <span className="text-[10px] font-black uppercase text-indigo-700 tracking-widest flex items-center gap-1">
+                                  <Clock className="w-3.5 h-3.5" /> Select Class/Lecture Date:
+                                </span>
+                                <select
+                                  value={selectedLesson?.id || ''}
+                                  onChange={(e) => {
+                                    const chosen = sessionLessons.find(l => l.id === e.target.value);
+                                    if (chosen) handleSelectLesson(chosen);
+                                  }}
+                                  className="h-8 text-xs font-bold rounded-lg border border-slate-200 bg-white px-2.5 focus:ring-2 focus:ring-indigo-500/20 text-slate-700 outline-none cursor-pointer text-ellipsis max-w-full"
+                                >
+                                  {sessionLessons.map((l, lIdx) => (
+                                    <option key={l.id} value={l.id}>
+                                      Lecture {sessionLessons.length - lIdx}: {l.lessonDate} ({l.startTime || 'No Time'}) - {l.lessonTitle}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            ) : null}
+                          </div>
+
+                          {/* Progress checklist & Bulk controls */}
+                          {selectedLesson && (
+                            <div className="p-4 bg-slate-50 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                              
+                              {/* Search student filter */}
+                              <div className="relative w-full md:w-64">
+                                <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                                <Input
+                                  type="text"
+                                  placeholder="Filter student profile..."
+                                  value={studentSearch}
+                                  onChange={e => setStudentSearch(e.target.value)}
+                                  className="pl-9 h-9 border-slate-200 bg-white rounded-xl text-xs"
+                                />
+                              </div>
+
+                              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right hidden md:block">
+                                Use the floating toolbar to bulk mark attendance
+                              </div>
+
+                            </div>
+                          )}
+
+                          {/* Floating Persistent Toolbar for Quick Actions */}
+                          {selectedLesson && (
+                            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 md:gap-5 bg-white/95 backdrop-blur-md shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-slate-200/80 rounded-full px-4 md:px-6 py-3 ring-1 ring-slate-900/5 animate-in slide-in-from-bottom-8 fade-in flex-wrap justify-center w-[95%] md:w-max">
+                              <div className="hidden md:flex items-center gap-2 pr-5 border-r border-slate-200/80">
+                                <div className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center border border-indigo-100">
+                                  <Sparkles className="w-4 h-4 text-indigo-600" />
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 leading-tight">Class Session</span>
+                                  <span className="text-xs font-bold text-slate-800 tracking-tight leading-tight">Quick Actions</span>
+                                </div>
+                              </div>
+                              
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => handleBulkMarkAttendance('present_am')}
+                                  className="bg-emerald-50 border border-emerald-250 hover:border-emerald-400 hover:bg-emerald-100 text-emerald-700 text-[10px] md:text-xs font-extrabold uppercase px-3 md:px-5 py-2 md:py-2.5 rounded-full transition-all cursor-pointer shadow-sm hover:shadow-md hover:-translate-y-0.5"
+                                >
+                                  AM 一鍵點名
+                                </button>
+                                <button
+                                  onClick={() => handleBulkMarkAttendance('present_pm')}
+                                  className="bg-indigo-50 border border-indigo-250 hover:border-indigo-400 hover:bg-indigo-100 text-indigo-700 text-[10px] md:text-xs font-extrabold uppercase px-3 md:px-5 py-2 md:py-2.5 rounded-full transition-all cursor-pointer shadow-sm hover:shadow-md hover:-translate-y-0.5"
+                                >
+                                  PM 一鍵點名
+                                </button>
+                                <button
+                                  onClick={() => handleBulkMarkAttendance('absent')}
+                                  className="bg-red-50 border border-red-250 hover:border-red-400 hover:bg-red-100 text-red-700 text-[10px] md:text-xs font-extrabold uppercase px-3 md:px-5 py-2 md:py-2.5 rounded-full transition-all cursor-pointer shadow-sm hover:shadow-md hover:-translate-y-0.5 hidden sm:block"
+                                >
+                                  All Absent
+                                </button>
+                              </div>
+                              
+                              <div className="pl-3 md:pl-5 border-l border-slate-200/80">
+                                <Button
+                                  onClick={handleSaveAttendance}
+                                  disabled={submittingAttendance}
+                                  className="bg-slate-900 hover:bg-slate-800 text-white rounded-full font-bold text-[10px] md:text-xs uppercase tracking-wider h-8 md:h-10 px-4 md:px-6 shadow-lg transition-all gap-2"
+                                >
+                                  {submittingAttendance ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4.5 h-4.5" />}
+                                  <span className="hidden sm:inline">Save Changes</span>
+                                  <span className="sm:hidden">Save</span>
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Student records list */}
+                          <div className="p-0 overflow-x-auto min-h-[300px] mb-20 relative">
+                            <Table>
+                              <TableHeader>
+                                <TableRow className="bg-slate-50/60 hover:bg-slate-50/60 border-b border-slate-100">
+                                  <TableHead className="pl-6 h-11 text-[10px] font-black uppercase tracking-widest text-slate-400">STUDENT INFORMATION</TableHead>
+                                  <TableHead className="text-center h-11 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                    {selectedLesson ? "ATTENDANCE LOG STATUS" : "REGISTRATION DETAILS"}
+                                  </TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {filteredRegistrations.map(r => {
+                                  const currentStatus = attendanceData[r.studentId] || 'present';
+                                  return (
+                                    <TableRow key={r.id} className="hover:bg-slate-50/40 transition-colors border-b border-slate-50">
+                                      <TableCell className="pl-6 py-4.5">
+                                        <div className="flex items-center gap-3">
+                                          <div className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 text-slate-600 font-extrabold flex items-center justify-center text-xs shadow-sm">
+                                            {r.studentName ? r.studentName.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase() : '?'}
+                                          </div>
+                                          <div>
+                                            <p className="font-extrabold text-sm text-slate-800 tracking-tight">{r.studentName}</p>
+                                            <p className="text-xs text-slate-400 font-medium font-mono">{r.studentEmail}</p>
+                                          </div>
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="text-center">
+                                        {selectedLesson ? (
+                                          <div className="flex justify-center gap-1 sm:gap-1.5">
+                                            {[
+                                              { id: 'present_am', label: 'AM Present', color: 'bg-emerald-600 border-emerald-600' },
+                                              { id: 'present_pm', label: 'PM Present', color: 'bg-indigo-600 border-indigo-600' },
+                                              { id: 'absent', label: 'Absent', color: 'bg-red-650 border-red-655' },
+                                              { id: 'late', label: 'Late', color: 'bg-amber-500 border-amber-500' },
+                                              { id: 'excused', label: 'EXC', color: 'bg-slate-500 border-slate-505' }
+                                            ].map(item => {
+                                              const isMarked = currentStatus === item.id || (item.id === 'present_am' && currentStatus === 'present');
+                                              return (
+                                                <button
+                                                  key={item.id}
+                                                  onClick={() => setAttendanceData(prev => ({ ...prev, [r.studentId]: item.id }))}
+                                                  className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all border ${
+                                                    isMarked 
+                                                      ? `${item.color} text-white shadow-sm font-black animate-scaleIn` 
+                                                      : 'bg-white border-slate-200 hover:border-slate-300 text-slate-400 hover:text-slate-700'
+                                                  }`}
+                                                >
+                                                  {item.label}
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
+                                        ) : (
+                                          <span className="text-xs px-2.5 py-1 rounded-full bg-green-50 text-green-700 border border-green-200 font-bold uppercase tracking-wider">
+                                            {r.status || 'Verified Student'}
+                                          </span>
+                                        )}
+                                      </TableCell>
+                                    </TableRow>
+                                  );
+                                })}
+                                
+                                {filteredRegistrations.length === 0 && (
+                                  <TableRow>
+                                    <TableCell colSpan={2} className="text-center py-20 text-slate-350">
+                                      <div className="space-y-2">
+                                        <ClipboardList className="w-12 h-12 opacity-20 mx-auto animate-bounce" />
+                                        <p className="italic font-bold text-sm text-slate-400">No verified student registrations matched.</p>
+                                        <p className="text-xs text-slate-400">This course run might not have registered students yet.</p>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </TableBody>
+                            </Table>
+                          </div>
+
+                        </Card>
+                      );
+                    })()
+                  ) : (
+                    <div className="h-96 flex flex-col items-center justify-center border border-dashed border-slate-250 bg-white rounded-2xl text-slate-400 gap-4 p-8 transition-colors hover:bg-slate-50/50">
+                      <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center shadow-inner border border-slate-100">
+                        <ClipboardList className="w-8 h-8 text-slate-300" />
+                      </div>
+                      <div className="text-center">
+                        <p className="font-extrabold text-slate-700 uppercase tracking-widest text-xs animate-pulse">Awaiting Course Selection</p>
+                        <p className="text-xs text-slate-450 mt-1 max-w-sm leading-relaxed">
+                          Select a confirmed course run from the left panel to display student registration records.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            );
+          })()}
+
+          {/* 3. COURSE COMPLETED HISTORY TAB */}
+          {activeTab === 'hours' && (() => {
+            const completedSessions = sessions.filter(s => (s?.sessionStatus || '').toLowerCase() === 'completed');
+            
+            return (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 space-y-6">
+                  <Card className="border-slate-100 shadow-sm rounded-2xl overflow-hidden">
+                  <CardHeader className="bg-slate-50/50 border-b border-slate-100">
+                    <div>
+                      <CardTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
+                        <GraduationCap className="w-5 h-5 text-indigo-600" />
+                        <span>Course History</span>
+                      </CardTitle>
+                      <CardDescription className="text-xs text-slate-500 font-medium">Live list of course runs completed and logged by academic registry.</CardDescription>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-slate-50/50 hover:bg-slate-50/50 border-b border-slate-100">
+                            <TableHead className="pl-6 h-11 text-[10px] font-black uppercase tracking-widest text-slate-400">Course Run / Intake Name</TableHead>
+                            <TableHead className="h-11 text-[10px] font-black uppercase tracking-widest text-slate-400">Associated Course Template</TableHead>
+                            <TableHead className="h-11 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Schedule Period</TableHead>
+                            <TableHead className="h-11 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Enrolled Students</TableHead>
+                            <TableHead className="h-11 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Delivery Mode</TableHead>
+                            <TableHead className="pr-6 h-11 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {completedSessions.map(s => {
+                            const course = courses.find(c => c.id === s.courseId);
+                            const totalRegs = allSessionRegistrations.filter(r => r.sessionId === s.id && r.status === 'verified').length;
+                            return (
+                              <TableRow key={s.id} className="hover:bg-slate-50/30 transition-colors border-b border-slate-55">
+                                <TableCell className="pl-6 py-4.5 font-bold text-sm text-slate-800">
+                                  {s.sessionName || 'Untitled Run'}
+                                </TableCell>
+                                <TableCell className="font-semibold text-slate-700 text-xs">
+                                  {course?.title || 'Course Template'}
+                                </TableCell>
+                                <TableCell className="text-center text-xs font-semibold font-mono text-indigo-700">
+                                  {s.startDate || 'N/A'} {s.endDate ? `to ${s.endDate}` : ''}
+                                </TableCell>
+                                <TableCell className="text-center font-extrabold text-sm text-slate-800">
+                                  {totalRegs} student{totalRegs !== 1 ? 's' : ''}
+                                </TableCell>
+                                <TableCell className="text-center text-xs font-semibold text-slate-650">
+                                  {s.deliveryMode || 'Normal'}
+                                </TableCell>
+                                <TableCell className="pr-6 text-right">
+                                  <span className="px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider bg-slate-800 text-white shadow-sm ring-1 ring-slate-900/10">
+                                    Completed
+                                  </span>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                          
+                          {completedSessions.length === 0 && (
+                            <TableRow>
+                              <TableCell colSpan={6} className="text-center py-20 text-slate-300">
+                                <GraduationCap className="w-12 h-12 mx-auto opacity-20 mb-2" />
+                                <p className="italic font-bold text-xs text-slate-450">No completed course history found.</p>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Microsoft Certification Annual Audit report */}
+              <div className="space-y-6">
+                <Card className="border-emerald-100 shadow-xl shadow-emerald-950/5 rounded-2xl overflow-hidden ring-1 ring-emerald-500/10">
+                  <div className="p-6 bg-gradient-to-r from-emerald-50 to-teal-50/10 border-b border-emerald-100 flex flex-col gap-4 bg-transparent">
+                    <div className="space-y-1">
+                      <CardTitle className="text-base font-extrabold text-emerald-850 flex items-center gap-2">
+                        <Award className="w-5 h-5 text-emerald-600" />
+                        <span>Annual Microsoft MTM Teaching Report</span>
+                      </CardTitle>
+                      <CardDescription className="text-xs text-slate-500 font-medium leading-relaxed">Export audit sheets containing certified teaching classes for annual submission.</CardDescription>
+                    </div>
+                    
+                    <div className="flex flex-col xl:flex-row items-stretch xl:items-center gap-2 w-full">
+                      <select 
+                        className="h-10 px-3 border border-slate-200 rounded-xl text-sm outline-none bg-white font-semibold text-slate-700 shadow-sm w-full xl:w-auto" 
+                        value={mtmYear} 
+                        onChange={e => setMtmYear(e.target.value)}
+                      >
+                        {(() => {
+                           const currentYr = new Date().getFullYear();
+                           return [currentYr, currentYr-1].map(yr => (
+                             <option key={yr} value={yr.toString()}>{yr} Year</option>
+                           ));
+                        })()}
+                      </select>
+                      
+                      <Button 
+                        onClick={generateMTMReport} 
+                        className="h-10 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold uppercase tracking-wider text-[10px] rounded-xl shadow-lg shadow-emerald-100 gap-2 w-full xl:w-auto"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span>Download PDF</span>
+                      </Button>
+                    </div>
+                  </div>
+
+                  <CardContent className="p-5 space-y-4">
+                    <div className="p-4 bg-slate-50 border border-slate-150 rounded-xl space-y-3">
+                      <p className="text-xs font-bold text-slate-700 uppercase tracking-wide">Report Scope Guidelines & Rules:</p>
+                      <ul className="text-xs text-slate-500 list-disc list-inside space-y-1.5 leading-relaxed font-medium">
+                        <li>Automatically compiles historical lectures under Microsoft certification templates (Azure, AZ, MS, AI, PL, SC codes).</li>
+                        <li>Syncs directly with physical schedules recorded in class timetables.</li>
+                        <li>Retrieves approved and submitted custom manually validated hours matching Microsoft courses.</li>
+                        <li>Produces legal jsPDF audit logs containing timestamps, description, and tutor name signing line.</li>
+                      </ul>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+            </div>
+            );
+          })()}
+
+        </div>
+
+      </div>
+    </div>
+  );
+}

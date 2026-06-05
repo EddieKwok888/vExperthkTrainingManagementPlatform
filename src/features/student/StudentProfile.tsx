@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { db, auth } from '../lib/firebase';
+import { db, auth } from '../../lib/firebase';
 import { doc, getDoc, collection, query, where, getDocs, orderBy } from 'firebase/firestore';
-import { AuthContext } from '../App';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
-import { Button } from '../components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
+import { AuthContext } from '../../App';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { Loader2, ArrowLeft, BookOpen, CreditCard, Award, MessageSquare, User as UserIcon, Calendar, CheckCircle2, XCircle, FileText, Download, Mail, Phone } from 'lucide-react';
 import { toast } from 'sonner';
-import { formatHkDate } from '../lib/utils';
+import { formatHkDate } from '../../lib/utils';
 import { jsPDF } from 'jspdf';
 
 export function StudentProfile() {
@@ -51,7 +51,7 @@ export function StudentProfile() {
       // 2. Fetch Registrations (Courses & Payment Records)
       const regQ = query(collection(db, 'registrations'), where('studentId', '==', targetId));
       const regSnap = await getDocs(regQ);
-      const regList = regSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const regList = regSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
       setRegistrations(regList);
 
       // Collect unique session, course, and tutor IDs
@@ -137,7 +137,7 @@ export function StudentProfile() {
   const getAttendanceRate = (sessionId: string) => {
      const sessionAtts = attendance.filter(a => a.sessionId === sessionId);
      if (sessionAtts.length === 0) return 0;
-     const present = sessionAtts.filter(a => a.status === 'present').length;
+     const present = sessionAtts.filter(a => a.status === 'present' || a.status === 'present_am' || a.status === 'present_pm' || a.status === 'AM' || a.status === 'PM').length;
      return Math.round((present / sessionAtts.length) * 100);
   };
 
@@ -217,7 +217,7 @@ export function StudentProfile() {
   const activeRegistrations = registrations.filter(r => r.status === 'verified');
 
   return (
-    <div className="space-y-6 w-full max-w-6xl mx-auto pb-12">
+    <div className="space-y-6 w-full max-w-full pb-12">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" onClick={() => navigate('/admin')} className="rounded-full shadow-sm bg-white border border-slate-200">
           <ArrowLeft className="w-5 h-5"/>
@@ -315,9 +315,9 @@ export function StudentProfile() {
                           <TableCell>
                             <span className={`px-2 py-1 rounded text-xs font-medium border ${
                                session?.sessionStatus === 'completed' ? 'text-green-600 border-green-200 bg-green-50' : 
-                               session?.sessionStatus === 'open' ? 'text-blue-600 border-blue-200 bg-blue-50' : 'text-slate-600 border-slate-200 bg-slate-50'
+                               session?.sessionStatus === 'open' ? 'text-blue-600 border-blue-200 bg-blue-50' : (session?.sessionStatus === 'full' || session?.sessionStatus === 'confirmed') ? 'text-amber-600 border-amber-200 bg-amber-50' : 'text-slate-600 border-slate-200 bg-slate-50'
                             }`}>
-                              {session?.sessionStatus || 'active'}
+                              {(session?.sessionStatus === 'full' || session?.sessionStatus === 'confirmed') ? 'Confirmed' : (session?.sessionStatus || 'active')}
                             </span>
                           </TableCell>
                           <TableCell className="text-center">

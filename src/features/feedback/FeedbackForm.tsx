@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { db } from '../lib/firebase';
+import { db } from '../../lib/firebase';
 import { doc, getDoc, getDocs, collection, addDoc, query, where, serverTimestamp } from 'firebase/firestore';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { getHkDateString } from '../lib/utils';
-import { AuthContext } from '../App';
+import { getHkDateString } from '../../lib/utils';
+import { AuthContext } from '../../App';
 import { jsPDF } from 'jspdf';
 
 const generateCertificatePDF = (cert: any) => {

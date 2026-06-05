@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs, increment } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
 import { Loader2, ArrowLeft, UploadCloud, CheckCircle, QrCode, CreditCard } from 'lucide-react';
-import { handleFirestoreError, OperationType } from '../lib/error';
+import { handleFirestoreError, OperationType } from '../../lib/error';
 import { toast } from 'sonner';
 
 export function PaymentStatus() {
@@ -18,12 +18,49 @@ export function PaymentStatus() {
   const [paymentMethod, setPaymentMethod] = useState<'fps' | 'payme' | 'paypal'>('fps');
   const [schoolSettings, setSchoolSettings] = useState<any>(null);
 
+  // Course Details State
+  const [course1, setCourse1] = useState<any>(null);
+  const [session1, setSession1] = useState<any>(null);
+  const [course2, setCourse2] = useState<any>(null);
+  const [session2, setSession2] = useState<any>(null);
+
   useEffect(() => {
     const fetchReg = async () => {
       if (!id) return;
       try {
         const snap = await getDoc(doc(db, 'registrations', id));
-        if (snap.exists()) setReg({ id: snap.id, ...snap.data() });
+        if (snap.exists()) {
+          const regData = { id: snap.id, ...snap.data() } as any;
+          setReg(regData);
+
+          // Fetch Course 1 and Session 1 details
+          if (regData.courseId) {
+            const courseSnap = await getDoc(doc(db, 'courses', regData.courseId));
+            if (courseSnap.exists()) {
+              setCourse1({ id: courseSnap.id, ...courseSnap.data() });
+            }
+          }
+          if (regData.sessionId) {
+            const sessionSnap = await getDoc(doc(db, 'course_sessions', regData.sessionId));
+            if (sessionSnap.exists()) {
+              setSession1({ id: sessionSnap.id, ...sessionSnap.data() });
+            }
+          }
+
+          // Fetch Course 2 and Session 2 details (for 2-Course Bundle)
+          if (regData.peerCourseId) {
+            const courseSnap = await getDoc(doc(db, 'courses', regData.peerCourseId));
+            if (courseSnap.exists()) {
+              setCourse2({ id: courseSnap.id, ...courseSnap.data() });
+            }
+          }
+          if (regData.peerSessionId) {
+            const sessionSnap = await getDoc(doc(db, 'course_sessions', regData.peerSessionId));
+            if (sessionSnap.exists()) {
+              setSession2({ id: sessionSnap.id, ...sessionSnap.data() });
+            }
+          }
+        }
 
         const settingsSnap = await getDoc(doc(db, 'settings', 'school_info'));
         if (settingsSnap.exists()) setSchoolSettings(settingsSnap.data());
@@ -55,12 +92,45 @@ export function PaymentStatus() {
     }
   };
 
+  const generateInvoiceNumber = async (regData: any) => {
+    const prefix = schoolSettings?.invoice_prefix || 'INV';
+    let datePart = 'unknown';
+    
+    if (regData?.sessionId) {
+      const sSnap = await getDoc(doc(db, 'course_sessions', regData.sessionId));
+      if (sSnap.exists()) {
+        const sessionData = sSnap.data();
+        if (sessionData?.startDate) {
+          datePart = sessionData.startDate.replace(/[\s-]/g, '');
+        }
+      }
+    }
+    
+    if (datePart === 'unknown') {
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      datePart = `${yyyy}${mm}${dd}`;
+    }
+    
+    const startPrefix = `${prefix}-${datePart}-`;
+    const regsSnap = await getDocs(query(
+      collection(db, 'registrations'),
+      where('invoiceNumber', '>=', startPrefix),
+      where('invoiceNumber', '<=', startPrefix + '\uf8ff')
+    ));
+    
+    const count = regsSnap.size;
+    const seq = String(count + 1).padStart(3, '0');
+    return `${startPrefix}${seq}`;
+  };
+
   const handleSubmitProof = async () => {
     if (!id || !paymentProofBase64) return;
     setUploading(true);
     try {
-      const prefix = schoolSettings?.invoice_prefix || 'INV';
-      const invoiceNumber = `${prefix}-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
+      const invoiceNumber = await generateInvoiceNumber(reg);
 
       await updateDoc(doc(db, 'registrations', id), {
         paymentProof: paymentProofBase64,
@@ -68,6 +138,21 @@ export function PaymentStatus() {
         invoiceNumber,
         status: 'pending_verification'
       });
+
+      // Synchronously update linked bundle peer registration
+      if (reg?.peerRegistrationId) {
+        try {
+          await updateDoc(doc(db, 'registrations', reg.peerRegistrationId), {
+            paymentProof: paymentProofBase64,
+            paymentMethod: paymentMethod,
+            invoiceNumber,
+            status: 'pending_verification'
+          });
+        } catch (peerErr) {
+          console.error("Failed to update child registration synchronously:", peerErr);
+        }
+      }
+
       toast.success("Payment proof uploaded successfully!");
       setReg((prev: any) => ({ ...prev, status: 'pending_verification', paymentProof: paymentProofBase64, paymentMethod: paymentMethod, invoiceNumber }));
     } catch (e: any) {
@@ -82,14 +167,36 @@ export function PaymentStatus() {
     if (!id) return;
     setUploading(true);
     try {
-      const prefix = schoolSettings?.invoice_prefix || 'INV';
-      const invoiceNumber = `${prefix}-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
+      const invoiceNumber = await generateInvoiceNumber(reg);
 
       await updateDoc(doc(db, 'registrations', id), {
         paymentMethod: 'paypal',
         invoiceNumber,
         status: 'verified'
       });
+
+      // Synchronously verify linked child registration
+      if (reg?.peerRegistrationId) {
+        try {
+          await updateDoc(doc(db, 'registrations', reg.peerRegistrationId), {
+            paymentMethod: 'paypal',
+            invoiceNumber,
+            status: 'verified'
+          });
+        } catch (peerErr) {
+          console.error("Failed to verify child registration on PayPal payment:", peerErr);
+        }
+      }
+
+      if (reg?.promoId) {
+        try {
+          await updateDoc(doc(db, 'promotions', reg.promoId), {
+            usageCount: increment(1)
+          });
+        } catch (promoErr) {
+          console.error("Failed to increment promotion usage count:", promoErr);
+        }
+      }
       toast.success("PayPal payment successful!");
       setReg((prev: any) => ({ ...prev, status: 'verified', paymentMethod: 'paypal', invoiceNumber }));
     } catch (e: any) {
@@ -147,6 +254,29 @@ export function PaymentStatus() {
               <span className="font-medium">Email:</span>
               <span>{reg.studentEmail}</span>
             </div>
+
+            {/* Registered Courses Section */}
+            <div className="border-b border-slate-200 pb-3 mt-1 space-y-2">
+              <span className="font-bold text-xs uppercase text-indigo-700 tracking-wider block">Registered Courses</span>
+              {reg.isBundleParent ? (
+                <div className="space-y-2">
+                  <div className="bg-indigo-50/50 border border-indigo-100 p-2.5 rounded-lg text-xs leading-relaxed">
+                     <p className="font-bold text-slate-800">1. {course1?.title || 'Loading course...'}</p>
+                     <p className="text-slate-500 font-medium mt-0.5">Session: {session1?.sessionName || 'Loading session...'}</p>
+                  </div>
+                  <div className="bg-indigo-50/50 border border-indigo-100 p-2.5 rounded-lg text-xs leading-relaxed">
+                     <p className="font-bold text-slate-800">2. {course2?.title || 'Loading course...'}</p>
+                     <p className="text-slate-500 font-medium mt-0.5">Session: {session2?.sessionName || 'Loading session...'}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-blue-50/40 border border-blue-100 p-2.5 rounded-lg text-xs leading-relaxed">
+                   <p className="font-bold text-slate-800">{course1?.title || 'Loading course...'}</p>
+                   <p className="text-slate-500 font-medium mt-0.5">Session: {session1?.sessionName || 'Loading session...'}</p>
+                </div>
+              )}
+            </div>
+
             <div className="flex justify-between pt-2">
               <span className="font-medium text-lg text-slate-800">Total Due:</span>
               <span className="font-bold text-xl text-blue-600">HKD ${reg.amount}</span>

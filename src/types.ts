@@ -1,5 +1,5 @@
 
-export type UserRole = 'admin' | 'tutor' | 'tutor_pt' | 'student';
+export type UserRole = 'admin' | 'tutor' | 'tutor_pt' | 'staff' | 'student';
 export type UserStatus = 'active' | 'inactive' | 'suspended';
 export type EmploymentType = 'full_time' | 'part_time' | 'freelance';
 export type SkillLevel = 'beginner' | 'intermediate' | 'advanced' | 'expert';
@@ -22,8 +22,11 @@ export interface User {
   role: UserRole;
   name: string;
   phone?: string;
+  company?: string;
   status: UserStatus;
   remarks?: string;
+  qualifiedCourses?: string[];
+  qualifiedCategories?: string[];
   createdAt: any;
   lastLoginAt?: any;
   tutorProfile?: TutorProfile;

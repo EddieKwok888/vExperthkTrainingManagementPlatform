@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { db } from '../lib/firebase';
+import { db } from '../../lib/firebase';
 import { collection, query, getDocs, where } from 'firebase/firestore';
-import { AuthContext } from '../App';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '../components/ui/card';
-import { Button } from '../components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { AuthContext } from '../../App';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Loader2, Download, CheckCircle, GraduationCap, FileText, Calendar, BookOpen } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { formatHkDate, getHkDateString } from '../lib/utils';
+import { formatHkDate, getHkDateString } from '../../lib/utils';
 import { jsPDF } from 'jspdf';
 
 const generateCertificatePDF = (cert: any) => {
@@ -155,7 +155,7 @@ export function MyCourses() {
     <div className="space-y-6">
       <div className="flex justify-between items-center bg-blue-600 text-white p-6 rounded-xl shadow-sm mb-8">
         <div>
-           <h1 className="text-3xl font-bold">Student Portal</h1>
+           <h1 className="text-3xl font-bold">My Learning Workspace</h1>
            <p className="opacity-80">Welcome back, {user?.displayName || user?.email}!</p>
         </div>
         <GraduationCap className="w-12 h-12 opacity-50" />

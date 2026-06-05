@@ -1,32 +1,42 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import { useTranslation } from 'react-i18next';
-import { db, auth } from '../lib/firebase';
-import { collection, query, getDocs, doc, setDoc, updateDoc, serverTimestamp, orderBy, writeBatch, where, addDoc, limit, deleteDoc } from 'firebase/firestore';
-import { sendPasswordResetEmail } from 'firebase/auth';
-import { AuthContext } from '../App';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { Textarea } from '../components/ui/textarea';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
-import { MonitorPlay, Loader2, Plus, Database, ExternalLink, LayoutDashboard, BookOpen, Calendar as CalendarIcon, Users, CreditCard, Clock, MessageSquare, CheckCircle, XCircle, Download, FileText, Upload, GraduationCap, BarChart2, BarChart3, TrendingUp, ShieldAlert, Building2, MapPin, CalendarRange, Share2, ArrowLeftRight, ClipboardList, Search, UserPlus, Mail, Phone, Award, ShieldCheck, Briefcase, KeyRound, Copy, Edit2, Trash2, ChevronLeft, Sparkles } from 'lucide-react';
+import { db, auth, app } from '../../lib/firebase';
+import { collection, query, getDocs, doc, setDoc, updateDoc, serverTimestamp, orderBy, writeBatch, where, addDoc, limit, deleteDoc, increment } from 'firebase/firestore';
+import { sendPasswordResetEmail, getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+import { initializeApp, deleteApp } from 'firebase/app';
+import { AuthContext } from '../../App';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
+import { Label } from '../../components/ui/label';
+import { Textarea } from '../../components/ui/textarea';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../components/ui/dialog';
+import { MonitorPlay, Loader2, Plus, Database, ExternalLink, LayoutDashboard, BookOpen, Calendar as CalendarIcon, Users, CreditCard, Clock, MessageSquare, CheckCircle, XCircle, Download, FileText, Upload, GraduationCap, BarChart2, BarChart3, TrendingUp, ShieldAlert, Building2, MapPin, CalendarRange, Share2, ArrowLeftRight, ClipboardList, Search, UserPlus, Mail, Phone, Award, ShieldCheck, Briefcase, KeyRound, Copy, Edit2, Trash2, ChevronLeft, ChevronDown, Sparkles, Star, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { jsPDF } from 'jspdf';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { logAudit, updateRecord, createRecord } from '../lib/services';
-import { isWeekendOrHoliday } from '../lib/holidays';
-import { formatHkDate } from '../lib/utils';
+import { logAudit, updateRecord, createRecord } from '../../lib/services';
+import { isWeekendOrHoliday } from '../../lib/holidays';
+import { formatHkDate } from '../../lib/utils';
 import { Calendar, dateFnsLocalizer, Views } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { enUS } from 'date-fns/locale/en-US';
-import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '../components/ui/command';
-import { cn } from '../lib/utils';
-import { User, TutorCertification, TutorExpertise, UserRole, UserStatus, SkillLevel, CourseLevel, CertificationStatus } from '../types';
+import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '../../components/ui/command';
+import { cn } from '../../lib/utils';
+import { User, TutorCertification, TutorExpertise, UserRole, UserStatus, SkillLevel, CourseLevel, CertificationStatus } from '../../types';
+const PermissionsTab = React.lazy(() => import('./components/PermissionsTab').then(m => ({ default: m.PermissionsTab })));
+const LogsTab = React.lazy(() => import('./components/LogsTab').then(m => ({ default: m.LogsTab })));
+const PromotionsTab = React.lazy(() => import('./components/PromotionsTab').then(m => ({ default: m.PromotionsTab })));
+import { PROMO_CATEGORIES, PROMO_CATEGORY_MAP } from './components/PromotionsTab';
+const SettingsTab = React.lazy(() => import('./components/SettingsTab').then(m => ({ default: m.SettingsTab })));
+const FeedbackTab = React.lazy(() => import('./components/FeedbackTab').then(m => ({ default: m.FeedbackTab })));
+const CoursesTab = React.lazy(() => import('./components/CoursesTab').then(m => ({ default: m.CoursesTab })));
+const TutorsTab = React.lazy(() => import('./components/TutorsTab').then(m => ({ default: m.TutorsTab })));
+const FinanceTab = React.lazy(() => import('./components/FinanceTab').then(m => ({ default: m.FinanceTab })));
 
 const locales = {
   'en-US': enUS,
@@ -53,6 +63,31 @@ const COMMON_CERTS = [
 
 import { signInWithEmailAndPassword } from 'firebase/auth';
 
+// Shared memory Cache to handle Firestore Queries Caching
+let adminDataCache: {
+  timestamp: number;
+  data: {
+    courses: any[];
+    regs: any[];
+    sessions: any[];
+    lessons: any[];
+    tutors: any[];
+    feedbacks: any[];
+    hours: any[];
+    allUsers: any[];
+    certs: any[];
+    expertise: any[];
+    certificates: any[];
+    globalAttendance: any[];
+    auditLogs: any[];
+    branches: any[];
+    tutorShifts: any[];
+    promotions: any[];
+    schoolInfo: any;
+  }
+} | null = null;
+const CACHE_TTL = 30000; // 30 seconds
+
 export function AdminDashboard() {
   const { role, user } = useContext(AuthContext);
   const { t } = useTranslation();
@@ -67,12 +102,14 @@ export function AdminDashboard() {
   const [lessons, setLessons] = useState<any[]>([]);
   const [tutors, setTutors] = useState<any[]>([]);
   const [feedbacks, setFeedbacks] = useState<any[]>([]);
+  const [selectedFeedbackCourse, setSelectedFeedbackCourse] = useState<any>(null);
   const [hours, setHours] = useState<any[]>([]);
   const navigate = useNavigate();
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [certs, setCerts] = useState<TutorCertification[]>([]);
   const [expertise, setExpertise] = useState<TutorExpertise[]>([]);
   const [certificates, setCertificates] = useState<any[]>([]);
+  const [globalAttendance, setGlobalAttendance] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [branches, setBranches] = useState<any[]>([]);
   const [tutorShifts, setTutorShifts] = useState<any[]>([]);
@@ -110,8 +147,10 @@ export function AdminDashboard() {
   // User Management Modals
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [isUserViewModalOpen, setIsUserViewModalOpen] = useState(false);
+  const [isDeleteUserModalOpen, setIsDeleteUserModalOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<any>(null);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [userForm, setUserForm] = useState<Partial<User>>({
+  const [userForm, setUserForm] = useState<Partial<User> & { password?: string }>({
     role: 'student',
     status: 'active',
   });
@@ -121,6 +160,15 @@ export function AdminDashboard() {
   const [certSearchTerm, setCertSearchTerm] = useState('');
   const [certDateTerm, setCertDateTerm] = useState('');
   const [courseRunSearchTerm, setCourseRunSearchTerm] = useState('');
+  const [showCompletedRuns, setShowCompletedRuns] = useState(false);
+  const [runsStartDate, setRunsStartDate] = useState('');
+  const [runsEndDate, setRunsEndDate] = useState('');
+
+  const [sessionCertSearchTerm, setSessionCertSearchTerm] = useState('');
+  const [showCompletedSessionCerts, setShowCompletedSessionCerts] = useState(false);
+  const [sessionCertsStartDate, setSessionCertsStartDate] = useState('');
+  const [sessionCertsEndDate, setSessionCertsEndDate] = useState('');
+
   const [courseRunsActiveTab, setCourseRunsActiveTab] = useState<'runs' | 'attendance'>('runs');
   const [scheduleTab, setScheduleTab] = useState<'trainer-daily' | 'trainer-monthly' | 'room-daily' | 'room-monthly' | 'tech-daily'>('trainer-daily');
   const [scheduleDate, setScheduleDate] = useState(new Date().toISOString().split('T')[0]);
@@ -167,6 +215,7 @@ export function AdminDashboard() {
     name: '',
     code: '',
     type: 'code',
+    category: 'seminar',
     discountType: 'fixed',
     discountValue: 0,
     status: 'active',
@@ -177,6 +226,134 @@ export function AdminDashboard() {
     endDate: '',
     adminPassword: ''
   });
+  const [promoCategoryFilter, setPromoCategoryFilter] = useState('all');
+
+  // Permissions & Granular Access Control States
+  const [selectedAccessRole, setSelectedAccessRole] = useState('ops_manager');
+  const [simulatedRole, setSimulatedRole] = useState('ops_manager');
+  const [activeAccessSection, setActiveAccessSection] = useState<'matrix' | 'details' | 'sim' | 'docs'>('matrix');
+  const [customRolePermissions, setCustomRolePermissions] = useState<any[]>([
+    {
+      roleId: 'admin',
+      name: 'Super Admin',
+      desc: 'Full authorization. Controls system configuration, backups, high-level approvals, and staff permissions.',
+      maxAuthAmount: 'Unlimited',
+      restrictions: 'None',
+      permissions: {
+        overview: 'full',
+        courses: 'full',
+        sessions: 'full',
+        finance: 'full',
+        certificates: 'full',
+        scheduling: 'full',
+        tutors: 'full',
+        feedback: 'full',
+        logs: 'full',
+        promotions: 'full',
+        settings: 'full'
+      }
+    },
+    {
+      roleId: 'ops_manager',
+      name: 'Operations Manager',
+      desc: 'Manages core course setups, scheduling, teacher allocations, syllabus templates, and staff coordinate checks.',
+      maxAuthAmount: 'HKD 50,000 / tx',
+      restrictions: 'Restricted from core config like updating billing prefixes or admin passwords.',
+      permissions: {
+        overview: 'full',
+        courses: 'full',
+        sessions: 'full',
+        finance: 'view',
+        certificates: 'full',
+        scheduling: 'full',
+        tutors: 'full',
+        feedback: 'full',
+        logs: 'view',
+        promotions: 'full',
+        settings: 'none'
+      }
+    },
+    {
+      roleId: 'finance_staff',
+      name: 'Finance Specialist',
+      desc: 'Handles fee collection, processes tutor payroll, audits classroom expenses, and reconciles school ledger entries.',
+      maxAuthAmount: 'Unlimited (Finance only)',
+      restrictions: 'Restricted from managing course runs, attendance tracking, scheduling, or certificate issuance.',
+      permissions: {
+        overview: 'view',
+        courses: 'none',
+        sessions: 'view',
+        finance: 'full',
+        certificates: 'none',
+        scheduling: 'none',
+        tutors: 'view',
+        feedback: 'none',
+        logs: 'view',
+        promotions: 'view',
+        settings: 'none'
+      }
+    },
+    {
+      roleId: 'instructor_ft',
+      name: 'Senior Instructor (FT)',
+      desc: 'Standard full-time lecturer. Writes and views system syllabuses and carries out class session management.',
+      maxAuthAmount: 'N/A',
+      restrictions: 'Cannot view financial ledgers outside of assigned students, or hourly rates of other instructors.',
+      permissions: {
+        overview: 'none',
+        courses: 'view',
+        sessions: 'view',
+        finance: 'none',
+        certificates: 'view',
+        scheduling: 'view',
+        tutors: 'view',
+        feedback: 'full',
+        logs: 'none',
+        promotions: 'none',
+        settings: 'none'
+      }
+    },
+    {
+      roleId: 'instructor_pt',
+      name: 'Part-Time Tutor',
+      desc: 'Hourly pay teacher. Read-only schedules, can take attendance and report hours within 24h of class window.',
+      maxAuthAmount: 'N/A',
+      restrictions: 'Restricted to personal teaching schedule, class attendance sheet, and individual self-claims only.',
+      permissions: {
+        overview: 'none',
+        courses: 'none',
+        sessions: 'none',
+        finance: 'none',
+        certificates: 'none',
+        scheduling: 'view',
+        tutors: 'none',
+        feedback: 'view',
+        logs: 'none',
+        promotions: 'none',
+        settings: 'none'
+      }
+    },
+    {
+      roleId: 'cs_staff',
+      name: 'Customer Support / Front Desk',
+      desc: 'Handles student registrations, processes course session queries, and manages certificate disbursements.',
+      maxAuthAmount: 'HKD 2,000 / tx',
+      restrictions: 'Restricted from re-assigning instructors, deleting historical records, or viewing tutor salaries.',
+      permissions: {
+        overview: 'none',
+        courses: 'view',
+        sessions: 'view',
+        finance: 'view',
+        certificates: 'full',
+        scheduling: 'view',
+        tutors: 'view',
+        feedback: 'full',
+        logs: 'none',
+        promotions: 'view',
+        settings: 'none'
+      }
+    }
+  ]);
 
   // New Course Form
   const [newCourse, setNewCourse] = useState({ 
@@ -195,8 +372,57 @@ export function AdminDashboard() {
     requiredCertifications: [] as string[]
   });
 
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchData = async (forceRefresh = true) => {
+    const nowTime = Date.now();
+    
+    // Check if we can load fresh-cached data instantly
+    if (!forceRefresh && adminDataCache && (nowTime - adminDataCache.timestamp < CACHE_TTL)) {
+      const cached = adminDataCache.data;
+      setCourses(cached.courses);
+      setRegs(cached.regs);
+      setSessions(cached.sessions);
+      setLessons(cached.lessons);
+      setTutors(cached.tutors);
+      setFeedbacks(cached.feedbacks);
+      setHours(cached.hours);
+      setAllUsers(cached.allUsers);
+      setCerts(cached.certs);
+      setExpertise(cached.expertise);
+      setCertificates(cached.certificates);
+      setGlobalAttendance(cached.globalAttendance);
+      setAuditLogs(cached.auditLogs);
+      setBranches(cached.branches);
+      setTutorShifts(cached.tutorShifts);
+      setPromotions(cached.promotions);
+      if (cached.schoolInfo) setSchoolInfo(cached.schoolInfo);
+      setLoading(false);
+      return;
+    }
+
+    // SVR (Stale While Revalidate): If cache exists, apply it immediately, then fetch updates silently in the background
+    if (adminDataCache) {
+      const cached = adminDataCache.data;
+      setCourses(cached.courses);
+      setRegs(cached.regs);
+      setSessions(cached.sessions);
+      setLessons(cached.lessons);
+      setTutors(cached.tutors);
+      setFeedbacks(cached.feedbacks);
+      setHours(cached.hours);
+      setAllUsers(cached.allUsers);
+      setCerts(cached.certs);
+      setExpertise(cached.expertise);
+      setCertificates(cached.certificates);
+      setGlobalAttendance(cached.globalAttendance);
+      setAuditLogs(cached.auditLogs);
+      setBranches(cached.branches);
+      setTutorShifts(cached.tutorShifts);
+      setPromotions(cached.promotions);
+      if (cached.schoolInfo) setSchoolInfo(cached.schoolInfo);
+    } else {
+      setLoading(true);
+    }
+
     try {
       const fetchCollection = async (collectionName: string, queryConstraint?: any) => {
         try {
@@ -211,7 +437,7 @@ export function AdminDashboard() {
         }
       };
 
-      const [cSnap, rSnap, sSnap, lSnap, tSnap, fSnap, hSnap, certSnap, auditSnap, schoolSnap, bSnap, tsSnap, uSnap, tCertSnap, tExpSnap, kbSnap, ticketSnap, promoSnap] = await Promise.all([
+      const [cSnap, rSnap, sSnap, lSnap, tSnap, fSnap, hSnap, certSnap, auditSnap, schoolSnap, bSnap, tsSnap, uSnap, tCertSnap, tExpSnap, kbSnap, ticketSnap, promoSnap, attSnap] = await Promise.all([
         fetchCollection('courses', [orderBy('createdAt', 'desc'), limit(100)]),
         fetchCollection('registrations', [orderBy('createdAt', 'desc'), limit(200)]),
         fetchCollection('course_sessions', [orderBy('createdAt', 'desc'), limit(200)]), 
@@ -220,7 +446,7 @@ export function AdminDashboard() {
         fetchCollection('feedbacks', [orderBy('createdAt', 'desc'), limit(100)]),
         fetchCollection('teaching_hours', [orderBy('createdAt', 'desc'), limit(100)]),
         fetchCollection('certificates', [limit(100)]),
-        fetchCollection('audit_logs', [orderBy('createdAt', 'desc'), limit(100)]),
+        fetchCollection('audit_logs', [orderBy('createdAt', 'desc'), limit(1000)]),
         fetchCollection('settings', [limit(1)]),
         fetchCollection('branches', [orderBy('name', 'asc')]),
         fetchCollection('tutor_shifts', [limit(500)]),
@@ -229,27 +455,118 @@ export function AdminDashboard() {
         fetchCollection('tutor_expertise', [limit(500)]),
         fetchCollection('knowledge_base', [limit(500)]),
         fetchCollection('support_tickets', [limit(500)]),
-        fetchCollection('promotions', [orderBy('createdAt', 'desc'), limit(200)])
+        fetchCollection('promotions', [orderBy('createdAt', 'desc'), limit(200)]),
+        fetchCollection('attendance', [limit(2000)])
       ]);
       
-      setCourses(cSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setRegs(rSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setSessions(sSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setLessons(lSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setTutors(tSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setFeedbacks(fSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setHours(hSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setAllUsers(uSnap.docs.map(d => ({ id: d.id, ...d.data() } as User)));
-      setCerts(tCertSnap.docs.map(d => ({ id: d.id, ...d.data() } as TutorCertification)));
-      setExpertise(tExpSnap.docs.map(d => ({ id: d.id, ...d.data() } as TutorExpertise)));
-      setCertificates(certSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setAuditLogs(auditSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setBranches(bSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setTutorShifts(tsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setPromotions(promoSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const coursesRes = cSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const regsRes = rSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const fetchedSessions = sSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const now = new Date();
+      now.setHours(0, 0, 0, 0); // normalize today to midnight
+      
+      const updatedSessionsList = await Promise.all(fetchedSessions.map(async (session: any) => {
+        let changed = false;
+        let newStatus = session.sessionStatus;
+        const sessionRegsCount = rSnap.docs.filter(d => d.data().sessionId === session.id).length;
 
+        // Auto 'completed' 1 day after end date
+        if (session.endDate && newStatus !== 'completed' && newStatus !== 'cancelled') {
+          const endDateVal = new Date(session.endDate);
+          endDateVal.setDate(endDateVal.getDate() + 1);
+          endDateVal.setHours(0, 0, 0, 0);
+          
+          if (now >= endDateVal) {
+            newStatus = 'completed';
+            changed = true;
+          }
+        }
+        
+        // Auto 'cancelled' and 'full' based on start date
+        if (session.startDate && !changed && newStatus !== 'completed' && newStatus !== 'cancelled') {
+          const startDateVal = new Date(session.startDate);
+          startDateVal.setHours(0, 0, 0, 0);
+          
+          const oneDayBefore = new Date(startDateVal);
+          oneDayBefore.setDate(oneDayBefore.getDate() - 1);
+          oneDayBefore.setHours(0, 0, 0, 0);
+
+          if (now >= startDateVal && sessionRegsCount === 0) {
+            newStatus = 'cancelled';
+            changed = true;
+          } else if (now >= oneDayBefore && newStatus === 'open') {
+            newStatus = 'full';
+            changed = true;
+          }
+        }
+
+        if (changed) {
+          try {
+            await updateDoc(doc(db, 'course_sessions', session.id), { sessionStatus: newStatus });
+            return { ...session, sessionStatus: newStatus };
+          } catch (err) {
+            console.error('Auto status update failed:', err);
+          }
+        }
+        return session;
+      }));
+
+      const lessonsRes = lSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const tutorsRes = tSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const feedbacksRes = fSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const hoursRes = hSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const allUsersRes = uSnap.docs.map(d => ({ id: d.id, ...d.data() } as User));
+      const certsRes = tCertSnap.docs.map(d => ({ id: d.id, ...d.data() } as TutorCertification));
+      const expertiseRes = tExpSnap.docs.map(d => ({ id: d.id, ...d.data() } as TutorExpertise));
+      const certificatesRes = certSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const attendanceRes = attSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const auditRes = auditSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const branchesRes = bSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const tutorShiftsRes = tsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const promotionsRes = promoSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       const sData = schoolSnap.docs.find(d => d.id === 'school_info')?.data();
+
+      setCourses(coursesRes);
+      setRegs(regsRes);
+      setSessions(updatedSessionsList);
+      setLessons(lessonsRes);
+      setTutors(tutorsRes);
+      setFeedbacks(feedbacksRes);
+      setHours(hoursRes);
+      setAllUsers(allUsersRes);
+      setCerts(certsRes);
+      setExpertise(expertiseRes);
+      setCertificates(certificatesRes);
+      setGlobalAttendance(attendanceRes);
+      setAuditLogs(auditRes);
+      setBranches(branchesRes);
+      setTutorShifts(tutorShiftsRes);
+      setPromotions(promotionsRes);
       if (sData) setSchoolInfo(sData as any);
+
+      // Save to query cache
+      adminDataCache = {
+        timestamp: Date.now(),
+        data: {
+          courses: coursesRes,
+          regs: regsRes,
+          sessions: updatedSessionsList,
+          lessons: lessonsRes,
+          tutors: tutorsRes,
+          feedbacks: feedbacksRes,
+          hours: hoursRes,
+          allUsers: allUsersRes,
+          certs: certsRes,
+          expertise: expertiseRes,
+          certificates: certificatesRes,
+          globalAttendance: attendanceRes,
+          auditLogs: auditRes,
+          branches: branchesRes,
+          tutorShifts: tutorShiftsRes,
+          promotions: promotionsRes,
+          schoolInfo: sData || schoolInfo
+        }
+      };
     } catch (e: any) {
       console.error('Admin Fetch Error:', e);
       toast.error("Failed to load admin data: " + (e.message || "Unknown error"));
@@ -259,7 +576,7 @@ export function AdminDashboard() {
   };
 
   useEffect(() => {
-    if (role === 'admin') fetchData();
+    if (role === 'admin') fetchData(false);
   }, [role]);
 
   // New Session Form State
@@ -383,7 +700,7 @@ export function AdminDashboard() {
     e.preventDefault();
     if (!selectedSession) return;
 
-    if ((selectedSession.sessionStatus === 'full' || selectedSession.sessionStatus === 'completed') && selectedSession.deliveryMode !== 'online' && !selectedSession.room) {
+    if ((selectedSession.sessionStatus === 'full' || selectedSession.sessionStatus === 'confirmed' || selectedSession.sessionStatus === 'completed') && selectedSession.deliveryMode !== 'online' && !selectedSession.room) {
       toast.error(<span className="font-bold text-red-600">Please choose a room for {selectedSession.sessionStatus} courses.</span>);
       return;
     }
@@ -589,6 +906,35 @@ export function AdminDashboard() {
         updatedAt: serverTimestamp(),
         updatedBy: user?.email || 'system'
       });
+      const foundReg = regs.find(r => r.id === id);
+      if (status === 'verified') {
+        if (foundReg?.promoId) {
+          try {
+            await updateDoc(doc(db, 'promotions', foundReg.promoId), {
+              usageCount: increment(1)
+            });
+          } catch (promoErr) {
+            console.error("Failed to increment promotion usage count: ", promoErr);
+          }
+        }
+      }
+      
+      // Update peer bundle registration status synchronously in Firestore 
+      if (foundReg) {
+        const peerId = foundReg.peerRegistrationId || foundReg.parentRegistrationId;
+        if (peerId) {
+          try {
+            await updateDoc(doc(db, 'registrations', peerId), {
+              status,
+              updatedAt: serverTimestamp(),
+              updatedBy: user?.email || 'system'
+            });
+          } catch (peerErr) {
+            console.error("Failed to update peer bundle registration status synchronously: ", peerErr);
+          }
+        }
+      }
+
       await logAudit(user?.uid || 'system', user?.email || 'system', 'UPDATE_REGISTRATION_STATUS', 'registrations', id, { status });
       toast.success(`Registration ${status}!`);
       fetchData();
@@ -678,6 +1024,9 @@ export function AdminDashboard() {
   };
 
   const filteredUsers = allUsers.filter(u => {
+    if (activeTab === 'staff' && u.role === 'student') return false;
+    if (activeTab === 'students' && u.role !== 'student') return false;
+
     const matchesSearch = (u.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) || 
                           (u.email?.toLowerCase() || '').includes(searchTerm.toLowerCase());
     const matchesRole = roleFilter === 'all' || u.role === roleFilter;
@@ -695,8 +1044,18 @@ export function AdminDashboard() {
     e.preventDefault();
     if (!userForm.email || !userForm.name) return;
     setLoading(true);
+    let tempApp;
     try {
-      const userId = `user_${Date.now()}`;
+      let userId = `user_${Date.now()}`;
+      
+      if (userForm.password) {
+        // Use a secondary app to create the user in Firebase Auth without signing out the current admin
+        tempApp = initializeApp(app.options, "SecondaryApp");
+        const tempAuth = getAuth(tempApp);
+        const userCredential = await createUserWithEmailAndPassword(tempAuth, userForm.email, userForm.password);
+        userId = userCredential.user.uid;
+      }
+      
       const newUser: User = {
         id: userId,
         email: userForm.email!,
@@ -704,6 +1063,9 @@ export function AdminDashboard() {
         role: userForm.role as UserRole || 'student',
         status: userForm.status as UserStatus || 'active',
         phone: userForm.phone || '',
+        company: userForm.company || '',
+        qualifiedCategories: userForm.role === 'tutor' || userForm.role === 'tutor_pt' ? (userForm.qualifiedCategories || []) : [],
+        remarks: userForm.remarks || '',
         createdAt: serverTimestamp(),
       };
       
@@ -717,20 +1079,53 @@ export function AdminDashboard() {
     } catch (e: any) {
       toast.error(e.message);
     } finally {
+      if (tempApp) {
+        await deleteApp(tempApp);
+      }
       setLoading(false);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!userToDelete) return;
+
+    if (userToDelete.email === 'system.admin@vexperthk.com' || userToDelete.role === 'admin') {
+      toast.error("Administrators cannot be deleted.");
+      setIsDeleteUserModalOpen(false);
+      setUserToDelete(null);
+      return;
+    }
+
+    try {
+      await deleteDoc(doc(db, 'users', userToDelete.id));
+      await logAudit(user?.uid || 'admin', user?.email || 'admin', 'DELETE_USER', 'users', userToDelete.id, {});
+      toast.success("User deleted successfully");
+      setIsDeleteUserModalOpen(false);
+      setUserToDelete(null);
+      fetchData();
+    } catch (e: any) {
+      toast.error(e.message);
     }
   };
 
   const handleEditUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedUser) return;
+    
+    if (selectedUser.email === 'system.admin@vexperthk.com' && userForm.status !== 'active') {
+      toast.error("Administrators cannot be deactivated");
+      return;
+    }
+
     setLoading(true);
     try {
       const updates = {
         name: userForm.name,
-        phone: userForm.phone,
-        status: userForm.status,
-        remarks: userForm.remarks,
+        phone: userForm.phone || '',
+        company: userForm.company || '',
+        qualifiedCategories: userForm.role === 'tutor' || userForm.role === 'tutor_pt' ? (userForm.qualifiedCategories || []) : [],
+        status: selectedUser.email === 'system.admin@vexperthk.com' ? 'active' : userForm.status,
+        remarks: userForm.remarks || '',
         role: userForm.role,
       };
       
@@ -805,6 +1200,26 @@ export function AdminDashboard() {
         });
       }
       await batch.commit();
+
+      setGlobalAttendance(prev => {
+        const newAtt = [...prev];
+        for (const studentId of Object.keys(attendanceData)) {
+           const id = `${selectedLessonForAttendance.id}_${studentId}`;
+           const existsIdx = newAtt.findIndex(a => a.id === id);
+           if (existsIdx >= 0) {
+             newAtt[existsIdx].status = attendanceData[studentId];
+           } else {
+             newAtt.push({
+               id,
+               lessonId: selectedLessonForAttendance.id,
+               sessionId: selectedLessonForAttendance.sessionId,
+               studentId: studentId,
+               status: attendanceData[studentId]
+             });
+           }
+        }
+        return newAtt;
+      });
       
       await logAudit(user?.uid || 'admin', user?.email || '', 'ADMIN_MARK_ATTENDANCE', 'attendance', selectedLessonForAttendance.id, { students: Object.keys(attendanceData).length });
       
@@ -1130,7 +1545,7 @@ export function AdminDashboard() {
           where('sessionId', '==', session.id), 
           where('studentId', '==', student.studentId)
         ));
-        const attendedCount = attSnap.docs.filter(d => d.data().status === 'present').length;
+        const attendedCount = attSnap.docs.filter(d => d.data().status === 'present' || d.data().status === 'present_am' || d.data().status === 'present_pm' || d.data().status === 'AM' || d.data().status === 'PM').length;
         const totalPossible = sessionLessons.length;
         const rate = totalPossible > 0 ? (attendedCount / totalPossible) * 100 : 0;
         
@@ -1173,8 +1588,8 @@ export function AdminDashboard() {
   const handleIssueCertificateDirectly = async (studentData: any) => {
     try {
       const course = courses.find(c => c.id === studentData.courseId);
-      const certRef = doc(collection(db, 'certificates'));
-      const certId = certRef.id;
+      const certId = studentData.invoiceNumber || studentData.invoice_number || doc(collection(db, 'certificates')).id;
+      const certRef = doc(db, 'certificates', certId);
       const certData = {
         studentId: studentData.studentId || 'N/A',
         studentName: studentData.studentName,
@@ -1350,13 +1765,23 @@ export function AdminDashboard() {
 
   const handleIssueCertificate = async (reg: any) => {
     try {
-      // First update the registration to 'completed'
+      // First update the registration to 'completed' / verified
       await updateDoc(doc(db, 'registrations', reg.id), { status: 'verified', updatedAt: serverTimestamp() });
+      if (reg?.promoId) {
+        try {
+          await updateDoc(doc(db, 'promotions', reg.promoId), {
+            usageCount: increment(1)
+          });
+        } catch (promoErr) {
+          console.error("Failed to increment promotion usage count: ", promoErr);
+        }
+      }
       
       const relatedCourse = courses.find(c => c.id === reg.courseId);
       
       // Create the certificate record
-      const certRef = doc(collection(db, 'certificates'));
+      const certId = reg.invoiceNumber || reg.invoice_number || doc(collection(db, 'certificates')).id;
+      const certRef = doc(db, 'certificates', certId);
       await setDoc(certRef, {
         studentId: reg.studentId || '',
         studentEmail: reg.studentEmail,
@@ -1480,6 +1905,7 @@ export function AdminDashboard() {
         name: promoForm.name,
         code: promoForm.type === 'code' ? promoForm.code.toUpperCase() : null,
         type: promoForm.type,
+        category: promoForm.category || 'seminar',
         discountType: 'fixed',
         discountValue: Number(promoForm.discountValue),
         status: promoForm.status,
@@ -1514,6 +1940,81 @@ export function AdminDashboard() {
     }
   };
 
+  const feedbacksByCourse = useMemo(() => {
+    const groups: Record<string, any> = {};
+    feedbacks.forEach(f => {
+       if (!groups[f.courseId]) {
+         const course = courses.find(c => c.id === f.courseId);
+         groups[f.courseId] = {
+           courseId: f.courseId,
+           courseName: course?.title || f.courseName || 'Unknown Course',
+           feedbacks: [],
+           avgRating: 0
+         };
+       }
+       groups[f.courseId].feedbacks.push(f);
+    });
+    
+    Object.values(groups).forEach((g: any) => {
+      const totalRating = g.feedbacks.reduce((acc: number, curr: any) => acc + (parseFloat(curr.rating || curr.overallCourseScore) || 0), 0);
+      g.avgRating = g.feedbacks.length > 0 ? (totalRating / g.feedbacks.length).toFixed(1) : 0;
+    });
+    
+    return Object.values(groups);
+  }, [feedbacks, courses]);
+
+  const [logSearchTerm, setLogSearchTerm] = useState('');
+  const [logMonth, setLogMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [isDeleteLogsModalOpen, setIsDeleteLogsModalOpen] = useState(false);
+  const [logDeleteDate, setLogDeleteDate] = useState('');
+  const [adminPasswordForLogDelete, setAdminPasswordForLogDelete] = useState('');
+
+  const handleDeleteLogsByDate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (adminPasswordForLogDelete !== 'admin123') { // Very basic password check, you can change logic
+      toast.error('Incorrect admin password');
+      return;
+    }
+    if (!logDeleteDate) {
+      toast.error('Please select a date');
+      return;
+    }
+    try {
+      setLoading(true);
+      const tzOffset = new Date().getTimezoneOffset() * 60000; 
+      const startOfDay = new Date(new Date(logDeleteDate).getTime() - tzOffset);
+      startOfDay.setUTCHours(0,0,0,0);
+      const endOfDay = new Date(startOfDay.getTime() + 86400000);
+      
+      const logsRef = collection(db, 'audit_logs');
+      const q = query(logsRef, where('createdAt', '>=', startOfDay), where('createdAt', '<', endOfDay));
+      const snap = await getDocs(q);
+      const batch = writeBatch(db);
+      snap.docs.forEach(doc => {
+        batch.delete(doc.ref);
+      });
+      await batch.commit();
+      
+      toast.success(`Deleted ${snap.size} logs for ${logDeleteDate}`);
+      
+      // refresh table
+      const auditSnap = await getDocs(query(collection(db, 'audit_logs'), orderBy('createdAt', 'desc'), limit(1000)));
+      setAuditLogs(auditSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      
+      setIsDeleteLogsModalOpen(false);
+      setLogDeleteDate('');
+      setAdminPasswordForLogDelete('');
+    } catch (error) {
+      console.error('Failed to delete logs', error);
+      toast.error('Failed to delete logs');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (role !== 'admin') return <div className="text-center py-20">Access Denied</div>;
 
   const NavigationMenu = () => (
@@ -1529,8 +2030,10 @@ export function AdminDashboard() {
         { id: 'tutors', label: t('nav.tutors'), icon: Clock },
         { id: 'feedback', label: t('nav.feedback'), icon: MessageSquare },
         { id: 'logs', label: t('nav.logs'), icon: ShieldAlert },
-        { id: 'users', label: t('nav.users'), icon: Users },
+        { id: 'staff', label: 'Staff Directory', icon: Briefcase },
+        { id: 'students', label: 'Student Directory', icon: Users },
         { id: 'promotions', label: 'Promotions', icon: Sparkles },
+        { id: 'permissions', label: 'Access Control', icon: ShieldCheck },
         { id: 'settings', label: t('nav.settings'), icon: Upload }
       ].map(tab => (
         <button
@@ -1542,14 +2045,6 @@ export function AdminDashboard() {
           {tab.label}
         </button>
       ))}
-      <hr className="my-2 border-slate-100" />
-      <Link
-        to="/instructor"
-        className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-indigo-600 hover:bg-indigo-50 transition-colors border border-indigo-100"
-      >
-        <GraduationCap className="w-4 h-4" />
-        {t('tutor.portal_title')}
-      </Link>
     </div>
   );
 
@@ -1563,9 +2058,6 @@ export function AdminDashboard() {
       
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-2">
         <h1 className="text-2xl md:text-3xl font-bold text-slate-800">{t('admin.dashboard_title')}</h1>
-        <Button variant="outline" size="sm" onClick={handleSeedData} disabled={seeding} className="gap-2 text-slate-600 w-full sm:w-auto">
-          {seeding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />} Seed Sample Data
-        </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-[240px_1fr] gap-6">
@@ -1576,19 +2068,40 @@ export function AdminDashboard() {
         {/* Mobile Nav */}
         <div className="md:hidden overflow-x-auto pb-2">
            <div className="flex gap-2 min-w-max">
-             {['overview', 'courses', 'sessions', 'scheduling', 'finance', 'certificates', 'tutors', 'feedback', 'logs', 'users', 'settings'].map(tab => (
+             {[
+               { id: 'overview', label: t('nav.overview') },
+               { id: 'courses', label: 'Templates' },
+               { id: 'sessions', label: 'Courses' },
+               { id: 'finance', label: t('nav.finance') },
+               { id: 'certificates', label: t('nav.certificates') },
+               { id: 'scheduling', label: t('nav.scheduling') },
+               { id: 'tutors', label: t('nav.tutors') },
+               { id: 'feedback', label: t('nav.feedback') },
+               { id: 'logs', label: t('nav.logs') },
+               { id: 'staff', label: 'Staff' },
+               { id: 'students', label: 'Students' },
+               { id: 'promotions', label: 'Promotions' },
+               { id: 'permissions', label: 'Access Control' },
+               { id: 'settings', label: t('nav.settings') }
+             ].map(tab => (
                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`px-4 py-2 rounded-full text-sm font-medium capitalize whitespace-nowrap ${activeTab === tab ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${activeTab === tab.id ? 'bg-indigo-600 text-white shadow' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}
                >
-                 {t(`nav.${tab}`)}
+                 {tab.label}
                </button>
              ))}
            </div>
         </div>
 
         <main className="flex-1 space-y-6">
+          <React.Suspense fallback={
+            <div className="flex flex-col items-center justify-center p-24 text-slate-400 gap-3 font-sans font-medium bg-white/50 border border-slate-100 rounded-2xl shadow-sm">
+              <Loader2 className="w-8 h-8 animate-spin text-blue-600"/>
+              <span>Loading tab panel...</span>
+            </div>
+          }>
           {activeTab === 'overview' && (() => {
             // Analytics computations
             const verifiedRegs = regs.filter(r => r.status === 'verified');
@@ -1701,238 +2214,22 @@ export function AdminDashboard() {
 
 
           {activeTab === 'finance' && (
-            <div className="space-y-6">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                <div>
-                  <h2 className="text-xl font-bold text-slate-800 tracking-tight">Financial Reports & Payments</h2>
-                  <p className="text-sm text-slate-500">Track revenue and verify student payments</p>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                    <Input
-                      placeholder="Search Invoice #, Email, Phone..."
-                      className="pl-10 w-full sm:w-[350px] h-10 border-slate-200 focus:ring-blue-500"
-                      value={regSearchTerm}
-                      onChange={(e) => setRegSearchTerm(e.target.value)}
-                    />
-                  </div>
-                  <Button variant="outline" onClick={() => handleExportCSV(regs.map((r:any) => ({ Invoice: r.invoiceNumber, Student: r.studentName, Amount: r.amount, Method: r.paymentMethod, Status: r.status, Date: formatHkDate(r.createdAt, true) })), 'financial_report')} className="gap-2 h-10 border-slate-200 font-bold text-[10px] uppercase tracking-widest">
-                    <Download className="w-4 h-4" /> Export Report
-                  </Button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="bg-gradient-to-br from-indigo-50/50 via-white to-white border-indigo-100 shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-indigo-600">Total Verified Revenue</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-extrabold text-slate-900 tracking-tighter">
-                      ${regs.filter((r:any) => r.status === 'verified').reduce((sum: number, r:any) => sum + (r.amount || 0), 0).toLocaleString()}
-                    </div>
-                    <div className="flex items-center gap-1 mt-1 text-slate-400">
-                      <TrendingUp className="w-3 h-3 text-green-500" />
-                      <span className="text-[10px] font-medium">Verified payments</span>
-                    </div>
-                  </CardContent>
-                </Card>
-                
-                <Card className="bg-gradient-to-br from-amber-50/50 via-white to-white border-amber-100 shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-amber-600">Pending Verification</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-extrabold text-slate-900 tracking-tighter">
-                      ${regs.filter((r:any) => r.status === 'pending' || r.status === 'pending_verification').reduce((sum: number, r:any) => sum + (r.amount || 0), 0).toLocaleString()}
-                    </div>
-                    <div className="flex items-center gap-1 mt-1 text-slate-400">
-                      <Clock className="w-3 h-3 text-amber-500" />
-                      <span className="text-[10px] font-medium">Awaiting approval</span>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-gradient-to-br from-slate-50/50 via-white to-white border-slate-100 shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Total Transactions</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-extrabold text-slate-900 tracking-tighter">
-                      {regs.length}
-                    </div>
-                    <div className="flex items-center gap-1 mt-1 text-slate-400">
-                      <BarChart3 className="w-3 h-3 text-slate-400" />
-                      <span className="text-[10px] font-medium tracking-wide">All historical records</span>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              <Card className="border-slate-200 shadow-sm overflow-hidden">
-                <CardHeader className="bg-slate-50/30 border-b border-slate-100 pb-4">
-                  <CardTitle className="text-sm font-bold text-slate-800">Payment Transactions</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader className="bg-slate-50/50">
-                        <TableRow>
-                          <TableHead className="py-4 px-6 text-[10px] font-bold uppercase tracking-wider text-slate-500">Invoice No.</TableHead>
-                          <TableHead className="py-4 px-6 text-[10px] font-bold uppercase tracking-wider text-slate-500">Student Info</TableHead>
-                          <TableHead className="py-4 px-6 text-[10px] font-bold uppercase tracking-wider text-slate-500">Method</TableHead>
-                          <TableHead className="py-4 px-6 text-[10px] font-bold uppercase tracking-wider text-slate-500">Amount</TableHead>
-                          <TableHead className="py-4 px-6 text-[10px] font-bold uppercase tracking-wider text-slate-500">Proof</TableHead>
-                          <TableHead className="py-4 px-6 text-[10px] font-bold uppercase tracking-wider text-slate-500">Date</TableHead>
-                          <TableHead className="py-4 px-6 text-[10px] font-bold uppercase tracking-wider text-slate-500">Status</TableHead>
-                          <TableHead className="py-4 px-6 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {regs
-                          .filter(r => {
-                            const searchLower = regSearchTerm.toLowerCase();
-                            return (
-                              (r.invoiceNumber || '').toLowerCase().includes(searchLower) ||
-                              (r.studentName || '').toLowerCase().includes(searchLower) ||
-                              (r.studentEmail || '').toLowerCase().includes(searchLower) ||
-                              (r.studentPhone || '').toLowerCase().includes(searchLower)
-                            );
-                          })
-                          .map((r: any) => (
-                           <TableRow key={r.id} className="hover:bg-slate-50/50 transition-colors">
-                             <TableCell className="px-6 font-mono text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
-                                {r.invoiceNumber || r.id?.slice(0,8)}
-                             </TableCell>
-                             <TableCell className="px-6">
-                               <div className="font-bold text-slate-800">{r.studentName}</div>
-                               <div className="text-[10px] text-slate-500 font-medium">{r.studentEmail}</div>
-                               <div className="text-[10px] text-slate-400 italic mt-0.5">{r.studentPhone}</div>
-                             </TableCell>
-                             <TableCell className="px-6">
-                               {r.paymentMethod ? (
-                                  <span className="text-[10px] font-bold bg-slate-100 px-2 py-1 rounded text-slate-600 border border-slate-200 uppercase tracking-wide">{r.paymentMethod}</span>
-                               ) : <span className="text-slate-300">-</span>}
-                             </TableCell>
-                             <TableCell className="px-6 font-extrabold text-slate-900 tracking-tighter">${r.amount}</TableCell>
-                             <TableCell className="px-6">
-                               {r.paymentProof ? (
-                                 <Button variant="ghost" size="sm" className="h-8 text-blue-600 gap-1 px-2 border border-blue-100 bg-blue-50/50 hover:bg-blue-50" onClick={() => setPreviewImage(r.paymentProof)}>
-                                   <ExternalLink className="w-3 h-3" /> View
-                                 </Button>
-                               ) : <span className="text-[10px] text-slate-300 italic">No proof</span>}
-                             </TableCell>
-                             <TableCell className="px-6 text-[10px] font-bold text-slate-500 uppercase">{formatHkDate(r.createdAt)}</TableCell>
-                             <TableCell className="px-6">
-                                <div className="flex flex-col gap-1">
-                                  <span className={`text-[10px] px-2 py-1 rounded-md font-bold uppercase tracking-wider border w-max block text-center ${
-                                    r.status === 'verified' 
-                                      ? 'bg-green-50 text-green-700 border-green-100' 
-                                      : r.status === 'pending' || r.status === 'pending_verification'
-                                        ? 'bg-blue-50 text-blue-700 border-blue-100 animate-pulse' 
-                                        : 'bg-yellow-50 text-yellow-700 border-yellow-100'
-                                  }`}>
-                                    {r.status === 'pending_verification' ? (
-                                      <span className="flex flex-col leading-none py-0.5">
-                                        <span>Pending</span>
-                                        <span>Verification</span>
-                                      </span>
-                                    ) : r.status?.replace('_', ' ')}
-                                  </span>
-                                  {r.updatedBy && (
-                                    <div className="text-[9px] text-slate-400 font-medium leading-tight break-words max-w-[120px]">
-                                      By: {r.updatedBy.split('@')[0]}
-                                      <br/>
-                                      {formatHkDate(r.updatedAt, true)}
-                                    </div>
-                                  )}
-                                </div>
-                             </TableCell>
-                             <TableCell className="px-6 text-right">
-                                <div className="flex justify-end items-center gap-2">
-                                  {r.status === 'verified' && (
-                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors" onClick={() => handleGenerateInvoice(r)} title="Download Receipt">
-                                      <FileText className="w-4 h-4" />
-                                    </Button>
-                                  )}
-                                  {(r.status === 'pending_verification' || r.status === 'pending') && (
-                                    <Button size="sm" variant="outline" onClick={() => handleUpdateRegStatus(r.id, 'verified')} className="h-8 border-green-200 text-green-600 hover:bg-green-50 text-[10px] font-bold uppercase tracking-widest px-4">
-                                      Verify
-                                    </Button>
-                                  )}
-                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50" onClick={() => { setEditingReg(r); setIsEditRegOpen(true); }} title="Edit Record">
-                                    <Edit2 className="w-4 h-4" />
-                                  </Button>
-                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50" onClick={() => confirmDelete(r.id, 'registration', `${r.studentName || 'Student'} - ${r.invoiceNumber || 'No Invoice'}`)} title="Delete Record">
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                </div>
-                             </TableCell>
-                           </TableRow>
-                        ))}
-                        {regs.length === 0 && (
-                          <TableRow><TableCell colSpan={7} className="text-center py-16">
-                            <div className="flex flex-col items-center gap-2 text-slate-300">
-                               <BarChart3 className="w-12 h-12" />
-                               <span className="text-sm font-medium">No financial transactions found</span>
-                            </div>
-                          </TableCell></TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Dialog open={isEditRegOpen} onOpenChange={setIsEditRegOpen}>
-                <DialogContent className="sm:max-w-[500px]">
-                  <DialogHeader>
-                    <DialogTitle>Edit Payment Record</DialogTitle>
-                    <DialogDescription>Manually correct registration details</DialogDescription>
-                  </DialogHeader>
-                  <form onSubmit={handleUpdateRegistration} className="space-y-4 py-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Student Name</Label>
-                        <Input value={editingReg?.studentName || ''} onChange={e => setEditingReg({...editingReg, studentName: e.target.value})} required />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Phone</Label>
-                        <Input value={editingReg?.studentPhone || ''} onChange={e => setEditingReg({...editingReg, studentPhone: e.target.value})} />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Email</Label>
-                      <Input value={editingReg?.studentEmail || ''} onChange={e => setEditingReg({...editingReg, studentEmail: e.target.value})} type="email" />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Amount ($)</Label>
-                        <Input value={editingReg?.amount || 0} onChange={e => setEditingReg({...editingReg, amount: Number(e.target.value)})} type="number" />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Status</Label>
-                        <select 
-                          className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                          value={editingReg?.status || ''} 
-                          onChange={e => setEditingReg({...editingReg, status: e.target.value})}
-                        >
-                          <option value="pending">Pending</option>
-                          <option value="pending_verification">Pending Verification</option>
-                          <option value="verified">Verified</option>
-                          <option value="rejected">Rejected</option>
-                        </select>
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button type="button" variant="outline" onClick={() => setIsEditRegOpen(false)}>Cancel</Button>
-                      <Button type="submit">Save Changes</Button>
-                    </DialogFooter>
-                  </form>
-                </DialogContent>
-              </Dialog>
-            </div>
+            <FinanceTab
+              regSearchTerm={regSearchTerm}
+              setRegSearchTerm={setRegSearchTerm}
+              regs={regs}
+              handleExportCSV={handleExportCSV}
+              formatHkDate={formatHkDate}
+              setPreviewImage={setPreviewImage}
+              handleGenerateInvoice={handleGenerateInvoice}
+              handleUpdateRegStatus={handleUpdateRegStatus}
+              editingReg={editingReg}
+              setEditingReg={setEditingReg}
+              isEditRegOpen={isEditRegOpen}
+              setIsEditRegOpen={setIsEditRegOpen}
+              handleUpdateRegistration={handleUpdateRegistration}
+              confirmDelete={confirmDelete}
+            />
           )}
 
           {activeTab === 'certificates' && (
@@ -2601,264 +2898,44 @@ export function AdminDashboard() {
           )}
 
           {activeTab === 'courses' && (
-            <div className="space-y-6">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                <div>
-                  <h2 className="text-lg font-bold text-slate-800 font-sans tracking-tight">Course Templates</h2>
-                  <p className="text-xs text-slate-500">Manage master definitions for your curriculum</p>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-                  <div className="relative w-full sm:w-64">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <Input 
-                      placeholder="Search Code or Title..." 
-                      className="pl-9 h-10 border-slate-200 focus:ring-blue-600/20 text-xs"
-                      value={courseSearchTerm}
-                      onChange={(e) => setCourseSearchTerm(e.target.value)}
-                    />
-                  </div>
-                  <Button onClick={() => setCourseCreationModalOpen(true)} className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-600/20 px-6 font-bold text-xs uppercase tracking-widest transition-all hover:scale-105 active:scale-95 whitespace-nowrap">
-                    <Plus className="w-4 h-4 mr-2" /> 
-                    Add New Template
-                  </Button>
-                </div>
-              </div>
-
-
-
-
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Course Templates</CardTitle>
-                  <CardDescription>Existing master course definitions</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Code</TableHead>
-                          <TableHead>Title</TableHead>
-                          <TableHead>Category</TableHead>
-                          <TableHead>Level</TableHead>
-                          <TableHead>Day</TableHead>
-                          <TableHead>EB Price</TableHead>
-                          <TableHead>Base Price</TableHead>
-                          <TableHead>Courses</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {courses
-                          .filter(c => 
-                            c.title?.toLowerCase().includes(courseSearchTerm.toLowerCase()) || 
-                            c.courseCode?.toLowerCase().includes(courseSearchTerm.toLowerCase())
-                          )
-                          .map(c => (
-                          <TableRow key={c.id}>
-                            <TableCell className="font-mono text-xs">{c.courseCode || '-'}</TableCell>
-                            <TableCell className="font-medium text-slate-800 whitespace-pre-wrap max-w-[250px] leading-snug">{c.title}</TableCell>
-                            <TableCell className="text-xs">{c.category || '-'}</TableCell>
-                            <TableCell className="text-xs">{c.level || '-'}</TableCell>
-                            <TableCell className="text-xs">{c.day || '-'}</TableCell>
-                            <TableCell className="text-xs font-semibold">{c.earlyBirdPrice ? `$${c.earlyBirdPrice}` : '-'}</TableCell>
-                            <TableCell className="text-xs font-semibold">${c.standardPrice || '-'}</TableCell>
-                            <TableCell className="text-xs">
-                              {sessions.filter(s => s.courseId === c.id).length} Active
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex justify-end gap-2">
-                                <Button 
-                                  variant="outline" 
-                                  size="sm" 
-                                  className="h-8 gap-2 text-blue-600 border-blue-200 hover:bg-blue-50"
-                                  onClick={() => {
-                                    setSelectedTemplateForIntake(c);
-                                    setNewSession({
-                                      ...newSession,
-                                      courseId: c.id,
-                                      earlyBirdPrice: c.earlyBirdPrice || 0,
-                                      standardPrice: c.standardPrice || 0
-                                    });
-                                    setActiveTab('sessions');
-                                  }}
-                                >
-                                  <Plus className="w-3.5 h-3.5" /> Create Intake
-                                </Button>
-
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  className="h-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50"
-                                  onClick={() => {
-                                    setSelectedCourse(c);
-                                    setCourseModalOpen(true);
-                                  }}
-                                >
-                                  Edit
-                                </Button>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  className="h-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                                  onClick={() => confirmDelete(c.id, 'course', c.title || c.courseCode || 'Unknown Course')}
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+            <CoursesTab
+              courseSearchTerm={courseSearchTerm}
+              setCourseSearchTerm={setCourseSearchTerm}
+              setCourseCreationModalOpen={setCourseCreationModalOpen}
+              courses={courses}
+              sessions={sessions}
+              setSelectedTemplateForIntake={setSelectedTemplateForIntake}
+              newSession={newSession}
+              setNewSession={setNewSession}
+              setActiveTab={setActiveTab}
+              setSelectedCourse={setSelectedCourse}
+              setCourseModalOpen={setCourseModalOpen}
+              confirmDelete={confirmDelete}
+            />
           )}
 
           {activeTab === 'tutors' && (
-            <div className="space-y-6">
-              <Card className="border-none shadow-xl shadow-slate-200/50 bg-white/80 backdrop-blur-sm">
-                <CardHeader className="flex flex-col md:flex-row md:items-center justify-between pb-4 gap-4 border-b border-slate-50">
-                  <div>
-                    <CardTitle className="text-xl font-black text-slate-800 tracking-tight">Part-time Instructor</CardTitle>
-                    <CardDescription className="text-xs font-medium text-slate-500">Track records and verify completed courses</CardDescription>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="relative">
-                      <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
-                      <Input 
-                        placeholder="Search instructor..." 
-                        className="pl-9 h-9 text-xs w-48 focus:ring-indigo-500" 
-                        value={instructorSearchTerm}
-                        onChange={(e) => setInstructorSearchTerm(e.target.value)}
-                      />
-                    </div>
-                    <Input type="month" value={ptMonth} onChange={e => setPtMonth(e.target.value)} className="h-9 text-xs w-36" />
-                    <Button onClick={() => setIsManualHoursModalOpen(true)} className="gap-2 h-9 text-[10px] font-bold uppercase tracking-wider bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200">
-                      <Plus className="w-3.5 h-3.5" /> Add Course
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => {
-                        const uniqueTutors = Array.from(new Set(hours.filter(h => {
-                             if (!h.date || !h.date.startsWith(ptMonth)) return false;
-                             const t = tutors.find(t=>t.id===h.tutorId);
-                             if (t?.role !== 'tutor_pt') return false;
-                             if (instructorSearchTerm && !t?.name?.toLowerCase().includes(instructorSearchTerm.toLowerCase())) return false;
-                             return true;
-                        }).map(h => h.tutorId)));
-                        if (uniqueTutors.length === 0) return toast.error('No records found to generate report');
-                        uniqueTutors.forEach(tid => {
-                           const t = tutors.find(t=>t.id===tid);
-                           if (t) generatePTReport(tid, t.name || t.email || 'Unknown', ptMonth);
-                        });
-                        toast.success('Generated ' + uniqueTutors.length + ' reports');
-                    }} className="gap-2 h-9 text-[10px] font-bold uppercase tracking-wider border-slate-200 hover:bg-slate-50">
-                      <Download className="w-3.5 h-3.5" /> Download PDF
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <Table>
-                    <TableHeader className="bg-slate-50/50 border-b border-slate-100">
-                      <TableRow className="hover:bg-transparent">
-                        <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Instructor</TableHead>
-                        <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Course Name</TableHead>
-                        <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Date</TableHead>
-                        <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status</TableHead>
-                        <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {hours.filter(h => {
-                         if (ptMonth && (!h.date || !h.date.startsWith(ptMonth))) return false;
-                         const tutor = tutors.find(t => t.id === h.tutorId);
-                         if (tutor?.role !== 'tutor_pt') return false;
-                         if (!instructorSearchTerm) return true;
-                         return tutor?.name?.toLowerCase().includes(instructorSearchTerm.toLowerCase());
-                      }).map(h => {
-                        const tutor = tutors.find(t => t.id === h.tutorId);
-                        return (
-                          <TableRow key={h.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                            <TableCell className="px-6 py-4">
-                              <div className="font-bold text-slate-800">{tutor?.name || 'Unknown Instructor'}</div>
-                              <div className="text-[10px] font-mono text-slate-400 mt-0.5">{h.tutorId?.slice(0,8)}...</div>
-                            </TableCell>
-                            <TableCell className="px-6 py-4">
-                              <span className="font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-md text-[11px] border border-indigo-100 uppercase tracking-wider shadow-sm">
-                                {h.course || h.details || h.notes || 'N/A'}
-                              </span>
-                            </TableCell>
-                            <TableCell className="px-6 py-4">
-                              <span className="text-[11px] font-medium text-slate-600 tracking-tight">{h.date || 'N/A'}</span>
-                            </TableCell>
-                            <TableCell className="px-6 py-4">
-                               <span className={`px-2.5 py-1 rounded text-[9px] font-black uppercase tracking-wider ${
-                                 h.status === 'approved' ? 'bg-green-100 text-green-700 border border-green-200 shadow-sm' : 
-                                 h.status === 'paid' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-sm' : 
-                                 'bg-amber-100 text-amber-700 border border-amber-200 shadow-sm'}`}>
-                                 {h.status?.replace('_', ' ')}
-                               </span>
-                            </TableCell>
-                            <TableCell className="px-6 py-4 text-right">
-                               <div className="flex justify-end gap-2">
-                                 {h.status === 'pending_approval' && (
-                                    <Button size="sm" onClick={() => handleUpdateHoursStatus(h.id, 'approved')} className="h-8 px-4 text-[10px] font-bold uppercase tracking-wider bg-slate-900 hover:bg-slate-800 text-white shadow-md transition-transform active:scale-95">Approve</Button>
-                                 )}
-                                 {h.status === 'approved' && (
-                                    <Button size="sm" variant="outline" onClick={() => handleUpdateHoursStatus(h.id, 'paid')} className="h-8 px-4 text-[10px] font-bold uppercase tracking-wider border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 shadow-sm transition-transform active:scale-95">Mark Paid</Button>
-                                 )}
-                                 {h.status === 'paid' && (
-                                    <span className="h-8 flex items-center px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400 italic">Settled</span>
-                                 )}
-                               </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                      {hours.filter(h => {
-                         if (ptMonth && (!h.date || !h.date.startsWith(ptMonth))) return false;
-                         const tutor = tutors.find(t => t.id === h.tutorId);
-                         if (tutor?.role !== 'tutor_pt') return false;
-                         if (!instructorSearchTerm) return true;
-                         return tutor?.name?.toLowerCase().includes(instructorSearchTerm.toLowerCase());
-                      }).length === 0 && <TableRow><TableCell colSpan={5} className="text-center py-12 text-slate-400 text-xs italic tracking-wider">No part-time instructor records found matching your criteria.</TableCell></TableRow>}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            </div>
+            <TutorsTab
+              instructorSearchTerm={instructorSearchTerm}
+              setInstructorSearchTerm={setInstructorSearchTerm}
+              ptMonth={ptMonth}
+              setPtMonth={setPtMonth}
+              setIsManualHoursModalOpen={setIsManualHoursModalOpen}
+              hours={hours}
+              tutors={tutors}
+              generatePTReport={generatePTReport}
+              handleUpdateHoursStatus={handleUpdateHoursStatus}
+            />
           )}
 
           {activeTab === 'feedback' && (
-             <Card>
-               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                 <CardTitle>Student Feedback</CardTitle>
-                 <Button variant="outline" size="sm" onClick={() => handleExportCSV(feedbacks, 'feedback')} className="gap-2 h-8"><Download className="w-3.5 h-3.5" /> Export</Button>
-               </CardHeader>
-               <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Student</TableHead>
-                        <TableHead>Rating</TableHead>
-                        <TableHead>Comments</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {feedbacks.map(f => (
-                        <TableRow key={f.id}>
-                          <TableCell className="font-medium">{f.studentName}</TableCell>
-                          <TableCell><span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-xs font-bold">{f.rating} / 5</span></TableCell>
-                          <TableCell className="text-xs text-slate-600 italic whitespace-normal max-w-sm">"{f.comment}"</TableCell>
-                        </TableRow>
-                      ))}
-                      {feedbacks.length === 0 && <TableRow><TableCell colSpan={3} className="text-center py-4 text-slate-500">No feedback submitted yet.</TableCell></TableRow>}
-                    </TableBody>
-                  </Table>
-               </CardContent>
-             </Card>
+            <FeedbackTab
+              feedbacks={feedbacks}
+              courses={courses}
+              selectedFeedbackCourse={selectedFeedbackCourse}
+              setSelectedFeedbackCourse={setSelectedFeedbackCourse}
+              handleExportCSV={handleExportCSV}
+            />
           )}
 
           {activeTab === 'sessions' && (
@@ -2901,22 +2978,72 @@ export function AdminDashboard() {
                       </div>
 
                   <Card className="shadow-sm">
-                    <CardHeader className="flex flex-row items-center justify-between">
-                      <div>
-                        <CardTitle>Active Courses & Intakes</CardTitle>
-                        <CardDescription>Manage your course runs and schedules</CardDescription>
-                      </div>
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <div className="relative w-full sm:w-64">
-                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                          <Input 
-                            placeholder="Search code, course, instructor, status..." 
-                            className="pl-9 h-8 text-xs focus:ring-blue-500 border-slate-200"
-                            value={courseRunSearchTerm}
-                            onChange={(e) => setCourseRunSearchTerm(e.target.value)}
-                          />
+                    <CardHeader className="flex flex-col gap-4">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                        <div>
+                          <CardTitle className="text-base font-bold text-slate-800">Active Courses & Intakes</CardTitle>
+                          <CardDescription className="text-xs text-slate-500">Manage your course runs and schedules</CardDescription>
                         </div>
-                        <Button variant="outline" size="sm" onClick={() => handleExportCSV(sessions, 'sessions')} className="gap-2 h-8"><Download className="w-3.5 h-3.5" /> Export</Button>
+                        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                          <div className="relative w-full sm:w-64">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <Input 
+                              placeholder="Search Code, Course Title, Tutor..." 
+                              className="pl-9 h-8 text-xs focus:ring-blue-500 border-slate-200"
+                              value={courseRunSearchTerm}
+                              onChange={(e) => setCourseRunSearchTerm(e.target.value)}
+                            />
+                          </div>
+                          <Button variant="outline" size="sm" onClick={() => handleExportCSV(sessions, 'sessions')} className="gap-2 h-8 text-xs"><Download className="w-3.5 h-3.5" /> Export</Button>
+                        </div>
+                      </div>
+
+                      {/* Date selection and Hide Completed Filter Row */}
+                      <div className="flex flex-wrap items-center justify-between gap-4 pt-3 border-t border-slate-100">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <span className="text-xs text-slate-500 font-bold flex items-center gap-1">
+                            <CalendarIcon className="w-3.5 h-3.5 text-slate-400" /> Date Range:
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <Input 
+                              type="date" 
+                              className="h-8 text-xs w-36 px-2 cursor-pointer border-slate-200 bg-white" 
+                              value={runsStartDate} 
+                              onChange={(e) => setRunsStartDate(e.target.value)} 
+                            />
+                            <span className="text-xs text-slate-400">to</span>
+                            <Input 
+                              type="date" 
+                              className="h-8 text-xs w-36 px-2 cursor-pointer border-slate-200 bg-white" 
+                              value={runsEndDate} 
+                              onChange={(e) => setRunsEndDate(e.target.value)} 
+                            />
+                          </div>
+                          {(runsStartDate || runsEndDate) && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => { setRunsStartDate(''); setRunsEndDate(''); }} 
+                              className="h-7 text-xs text-rose-500 hover:text-rose-600 hover:bg-rose-50 px-2.5 font-semibold"
+                            >
+                              Clear
+                            </Button>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 hover:border-slate-300 transition-all rounded-lg px-3 py-1.5 cursor-pointer" onClick={() => setShowCompletedRuns(!showCompletedRuns)}>
+                          <input 
+                            type="checkbox" 
+                            checked={showCompletedRuns} 
+                            onChange={(e) => {
+                              // Let click handler on div handle toggle to make toggle area larger and more touch-friendly
+                              e.stopPropagation();
+                              setShowCompletedRuns(e.target.checked);
+                            }} 
+                            className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500 cursor-pointer"
+                          />
+                          <span className="text-xs font-semibold text-slate-700 select-none">Show Completed Courses</span>
+                        </div>
                       </div>
                     </CardHeader>
                     <CardContent>
@@ -2935,13 +3062,26 @@ export function AdminDashboard() {
                           </TableHeader>
                           <TableBody>
                             {sessions.filter(s => {
-                                if (s.sessionStatus === 'cancelled') return false;
                                 const hasCertificates = certificates.some((cert: any) => {
                                     const reg = regs.find((r: any) => r.id === cert.registrationId);
                                     return reg?.sessionId === s.id;
                                 });
                                 if (hasCertificates) return false;
                                 
+                                // 1. Hide completed runs unless toggled on
+                                if (!showCompletedRuns && s.sessionStatus === 'completed') {
+                                    return false;
+                                }
+
+                                // 2. Date selection checks session's startDate
+                                if (runsStartDate && s.startDate && s.startDate < runsStartDate) {
+                                    return false;
+                                }
+                                if (runsEndDate && s.startDate && s.startDate > runsEndDate) {
+                                    return false;
+                                }
+
+                                // 3. Search query lookup
                                 if (courseRunSearchTerm) {
                                     const course = courses.find((c: any) => c.id === s.courseId);
                                     const instructor = tutors.find((t: any) => t.id === s.tutorId);
@@ -2987,8 +3127,14 @@ export function AdminDashboard() {
                                     </div>
                                   </TableCell>
                                   <TableCell>
-                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${s.sessionStatus === 'open' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
-                                      {s.sessionStatus}
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
+                                      s.sessionStatus === 'open' ? 'bg-green-100 text-green-700' : 
+                                      (s.sessionStatus === 'full' || s.sessionStatus === 'confirmed') ? 'bg-amber-100 text-amber-700 font-extrabold' : 
+                                      s.sessionStatus === 'cancelled' ? 'bg-red-100 text-red-700' :
+                                      s.sessionStatus === 'completed' ? 'bg-slate-800 text-white' :
+                                      'bg-slate-100 text-slate-600'
+                                    }`}>
+                                      {(s.sessionStatus === 'full' || s.sessionStatus === 'confirmed') ? 'Confirmed' : s.sessionStatus}
                                     </span>
                                   </TableCell>
                                   <TableCell className="text-right">
@@ -3148,11 +3294,67 @@ export function AdminDashboard() {
               </>
             ) : (
               <Card className="border-none shadow-xl shadow-slate-200/50 bg-white/80 backdrop-blur-sm overflow-hidden">
-                <CardHeader className="border-b border-slate-50 bg-slate-50/30">
-                  <div className="flex justify-between items-center">
+                <CardHeader className="flex flex-col gap-4 border-b border-slate-100 bg-slate-50/50">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                     <div>
-                      <CardTitle className="text-xl font-black text-slate-800 tracking-tight">Session Certificates</CardTitle>
+                      <CardTitle className="text-lg font-black text-slate-800 tracking-tight">Session Certificates</CardTitle>
                       <CardDescription className="text-xs font-medium text-slate-500">Manage attendance sheets and issue certificates by course intake</CardDescription>
+                    </div>
+                    <div className="relative w-full sm:w-64">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <Input 
+                        placeholder="Search Code, Course Title, Session Name..." 
+                        className="pl-9 h-8 text-xs focus:ring-indigo-500 border-slate-200 bg-white"
+                        value={sessionCertSearchTerm}
+                        onChange={(e) => setSessionCertSearchTerm(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Filter Row: Dates and Completed switch */}
+                  <div className="flex flex-wrap items-center justify-between gap-4 pt-3 border-t border-slate-200">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="text-xs text-slate-500 font-bold flex items-center gap-1">
+                        <CalendarIcon className="w-3.5 h-3.5 text-slate-400" /> Date Range:
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <Input 
+                          type="date" 
+                          className="h-8 text-xs w-36 px-2 cursor-pointer border-slate-200 bg-white" 
+                          value={sessionCertsStartDate} 
+                          onChange={(e) => setSessionCertsStartDate(e.target.value)} 
+                        />
+                        <span className="text-xs text-slate-400">to</span>
+                        <Input 
+                          type="date" 
+                          className="h-8 text-xs w-36 px-2 cursor-pointer border-slate-200 bg-white" 
+                          value={sessionCertsEndDate} 
+                          onChange={(e) => setSessionCertsEndDate(e.target.value)} 
+                        />
+                      </div>
+                      {(sessionCertsStartDate || sessionCertsEndDate) && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => { setSessionCertsStartDate(''); setSessionCertsEndDate(''); }} 
+                          className="h-7 text-xs text-rose-500 hover:text-rose-600 hover:bg-rose-50 px-2.5 font-semibold"
+                        >
+                          Clear
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 bg-white border border-slate-200 hover:border-slate-300 transition-all rounded-lg px-3 py-1.5 cursor-pointer" onClick={() => setShowCompletedSessionCerts(!showCompletedSessionCerts)}>
+                      <input 
+                        type="checkbox" 
+                        checked={showCompletedSessionCerts} 
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          setShowCompletedSessionCerts(e.target.checked);
+                        }} 
+                        className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
+                      />
+                      <span className="text-xs font-semibold text-slate-700 select-none">Show Completed</span>
                     </div>
                   </div>
                 </CardHeader>
@@ -3168,7 +3370,32 @@ export function AdminDashboard() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {sessions.map(s => {
+                      {sessions.filter(s => {
+                        // 1. Hide completed session certs unless toggled on
+                        if (!showCompletedSessionCerts && s.sessionStatus === 'completed') {
+                          return false;
+                        }
+
+                        // 2. Date range checks session's startDate
+                        if (sessionCertsStartDate && s.startDate && s.startDate < sessionCertsStartDate) {
+                          return false;
+                        }
+                        if (sessionCertsEndDate && s.startDate && s.startDate > sessionCertsEndDate) {
+                          return false;
+                        }
+
+                        // 3. Search query lookup
+                        if (sessionCertSearchTerm) {
+                          const course = courses.find((c: any) => c.id === s.courseId);
+                          const term = sessionCertSearchTerm.toLowerCase();
+                          const matchCourseCode = course?.courseCode?.toLowerCase().includes(term);
+                          const matchCourseTitle = course?.title?.toLowerCase().includes(term);
+                          const matchSessionName = s.sessionName?.toLowerCase().includes(term);
+                          return matchCourseCode || matchCourseTitle || matchSessionName;
+                        }
+
+                        return true;
+                      }).map(s => {
                         const course = courses.find(c => c.id === s.courseId);
                         const sessionRegs = regs.filter(r => r.sessionId === s.id && r.status === 'verified');
                         
@@ -3188,9 +3415,12 @@ export function AdminDashboard() {
                             </TableCell>
                             <TableCell className="px-6 py-4">
                               <span className={`text-[9px] px-2 py-0.5 rounded font-black uppercase tracking-widest ${
-                                s.sessionStatus === 'completed' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+                                s.sessionStatus === 'completed' ? 'bg-green-100 text-green-700' :
+                                s.sessionStatus === 'cancelled' ? 'bg-red-100 text-red-700' : 
+                                (s.sessionStatus === 'full' || s.sessionStatus === 'confirmed') ? 'bg-amber-100 text-amber-700 font-extrabold' : 
+                                'bg-blue-100 text-blue-700'
                               }`}>
-                                {s.sessionStatus}
+                                {(s.sessionStatus === 'full' || s.sessionStatus === 'confirmed') ? 'Confirmed' : s.sessionStatus}
                               </span>
                             </TableCell>
                             <TableCell className="px-6 py-4 text-right">
@@ -3223,29 +3453,32 @@ export function AdminDashboard() {
             </div>
           )}
 
-          {activeTab === 'users' && (
+          {(activeTab === 'staff' || activeTab === 'students') && (
             <div className="space-y-6">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="relative">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
                     <Input
-                      placeholder="Search users..."
+                      placeholder={activeTab === 'staff' ? "Search staff..." : "Search students..."}
                       className="pl-9 w-64 h-9 bg-white"
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
                   </div>
-                  <select 
-                    className="h-9 rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm"
-                    value={roleFilter}
-                    onChange={(e) => setRoleFilter(e.target.value)}
-                  >
-                    <option value="all">All Roles</option>
-                    <option value="admin">Admins</option>
-                    <option value="tutor">Instructors</option>
-                    <option value="student">Students</option>
-                  </select>
+                  {activeTab === 'staff' && (
+                    <select 
+                      className="h-9 rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm"
+                      value={roleFilter}
+                      onChange={(e) => setRoleFilter(e.target.value)}
+                    >
+                      <option value="all">All Roles</option>
+                      <option value="admin">Admins</option>
+                      <option value="tutor">Instructors (Full-Time)</option>
+                      <option value="tutor_pt">Instructors (Part-Time)</option>
+                      <option value="staff">Staff</option>
+                    </select>
+                  )}
                   <select 
                     className="h-9 rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm"
                     value={statusFilter}
@@ -3260,22 +3493,22 @@ export function AdminDashboard() {
                 <Button 
                   onClick={() => {
                     setSelectedUser(null);
-                    setUserForm({ role: 'student', status: 'active' });
+                    setUserForm({ role: activeTab === 'staff' ? 'tutor' : 'student', status: 'active', qualifiedCategories: [] });
                     setIsUserModalOpen(true);
                   }}
                   className="gap-2 bg-indigo-600 hover:bg-indigo-700"
                 >
-                  <Plus className="w-4 h-4" /> Add User
+                  <Plus className="w-4 h-4" /> {activeTab === 'staff' ? 'Add Staff' : 'Add Student'}
                 </Button>
               </div>
 
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <div>
-                    <CardTitle>User Directory</CardTitle>
-                    <CardDescription>Directory of all system users including staff and students</CardDescription>
+                    <CardTitle>{activeTab === 'staff' ? 'Staff Directory' : 'Student Directory'}</CardTitle>
+                    <CardDescription>{activeTab === 'staff' ? 'Directory of system admins, instructors and staff' : 'Directory of all students'}</CardDescription>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => handleExportCSV(filteredUsers, 'users')} className="gap-2 h-8"><Download className="w-3.5 h-3.5" /> Export</Button>
+                  <Button variant="outline" size="sm" onClick={() => handleExportCSV(filteredUsers, activeTab === 'staff' ? 'staff' : 'students')} className="gap-2 h-8"><Download className="w-3.5 h-3.5" /> Export</Button>
                 </CardHeader>
                 <CardContent>
                   <Table>
@@ -3284,6 +3517,7 @@ export function AdminDashboard() {
                           <TableHead className="cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSort('name')}>User</TableHead>
                           <TableHead className="cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSort('role')}>Role</TableHead>
                           <TableHead className="cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSort('status')}>Status</TableHead>
+                          {activeTab === 'staff' && <TableHead>Admin Remarks</TableHead>}
                           <TableHead className="cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSort('createdAt')}>Joined At</TableHead>
                           <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
@@ -3332,19 +3566,27 @@ export function AdminDashboard() {
                                   {u.status || 'inactive'}
                                </span>
                             </TableCell>
+                            {activeTab === 'staff' && (
+                              <TableCell className="text-[10px] text-slate-600 max-w-[200px] whitespace-pre-wrap break-words" title={u.remarks || ''}>
+                                {u.remarks || '-'}
+                              </TableCell>
+                            )}
                             <TableCell className="text-xs text-slate-500">
                               {formatHkDate(u.createdAt)}
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex items-center justify-end gap-1">
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  className="h-8 px-2 text-indigo-600 cursor-pointer"
-                                  onClick={() => navigate(`/admin/student/${u.id}`)}
-                                >
-                                  <ExternalLink className="w-3.5 h-3.5" />
-                                </Button>
+                                {u.role === 'student' && (
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    className="h-8 px-2 text-indigo-600 cursor-pointer"
+                                    onClick={() => navigate(`/admin/student/${u.id}`)}
+                                    title="Student 360 View"
+                                  >
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                  </Button>
+                                )}
                                 <Button 
                                   variant="ghost" 
                                   size="sm" 
@@ -3366,12 +3608,28 @@ export function AdminDashboard() {
                                       role: u.role,
                                       status: u.status,
                                       phone: u.phone,
+                                      company: u.company,
+                                      qualifiedCategories: u.qualifiedCategories || [],
                                       remarks: u.remarks
                                     });
                                     setIsUserModalOpen(true);
                                   }}
                                 >
                                   <FileText className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className={`h-8 px-2 ${u.email === 'system.admin@vexperthk.com' || u.role === 'admin' ? 'opacity-50 cursor-not-allowed' : 'text-red-600 hover:text-red-700 hover:bg-red-50'}`}
+                                  disabled={u.email === 'system.admin@vexperthk.com' || u.role === 'admin'}
+                                  onClick={() => {
+                                    if (u.email === 'system.admin@vexperthk.com' || u.role === 'admin') return;
+                                    setUserToDelete(u);
+                                    setIsDeleteUserModalOpen(true);
+                                  }}
+                                  title="Delete User"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
                                 </Button>
                               </div>
                             </TableCell>
@@ -3386,258 +3644,83 @@ export function AdminDashboard() {
           )}
 
           {activeTab === 'logs' && (
-             <Card>
-               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                 <div>
-                   <CardTitle>System Logs</CardTitle>
-                   <CardDescription>Security and audit trail (last 100 entries)</CardDescription>
-                 </div>
-                 <Button variant="outline" size="sm" onClick={() => handleExportCSV(auditLogs, 'audit_logs')} className="gap-2 h-8"><Download className="w-3.5 h-3.5" /> Export</Button>
-               </CardHeader>
-               <CardContent>
-                  <Table className="min-w-[800px]">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Timestamp</TableHead>
-                        <TableHead>Action</TableHead>
-                        <TableHead>User Email</TableHead>
-                        <TableHead>Resource</TableHead>
-                        <TableHead>Details</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {auditLogs.map(l => (
-                        <TableRow key={l.id}>
-                          <TableCell className="text-xs whitespace-nowrap">{formatHkDate(l.createdAt, true)}</TableCell>
-                          <TableCell>
-                             <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700">
-                               {l.action}
-                             </span>
-                          </TableCell>
-                          <TableCell className="text-sm font-medium text-slate-700">{l.userEmail}</TableCell>
-                          <TableCell className="text-xs font-mono text-slate-500">{l.resource} / {l.resourceId?.slice(0, 6)}...</TableCell>
-                          <TableCell className="text-xs text-slate-600 max-w-sm overflow-hidden text-ellipsis whitespace-nowrap" title={JSON.stringify(l.details)}>
-                             {JSON.stringify(l.details)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      {auditLogs.length === 0 && <TableRow><TableCell colSpan={5} className="text-center py-8 text-slate-500">No logs found.</TableCell></TableRow>}
-                    </TableBody>
-                  </Table>
-               </CardContent>
-             </Card>
+            <LogsTab
+              logSearchTerm={logSearchTerm}
+              setLogSearchTerm={setLogSearchTerm}
+              logMonth={logMonth}
+              setLogMonth={setLogMonth}
+              setIsDeleteLogsModalOpen={setIsDeleteLogsModalOpen}
+              auditLogs={auditLogs}
+              allUsers={allUsers}
+              handleExportCSV={handleExportCSV}
+            />
           )}
 
           {activeTab === 'promotions' && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center">
-                <h3 className="text-xl font-bold flex items-center gap-2"><Sparkles className="w-6 h-6 text-indigo-500"/> Promotions & Discounts</h3>
-                <Button onClick={() => {
-                  setSelectedPromo(null);
-                  setPromoForm({ name: '', code: '', type: 'code', discountType: 'fixed', discountValue: 0, status: 'active', applicableCourseIds: [], bundleCourse1: '', bundleCourse2: '', startDate: '', endDate: '', adminPassword: '' });
-                  setIsPromoModalOpen(true);
-                }} className="bg-indigo-600 hover:bg-indigo-700">
-                  <Plus className="w-4 h-4 mr-2" /> Add Promotion
-                </Button>
-              </div>
-              
-              <Card>
-                <CardContent className="p-0">
-                  <Table>
-                    <TableHeader className="bg-slate-50">
-                      <TableRow>
-                        <TableHead>Promotion Name</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Code / Conditions</TableHead>
-                        <TableHead>Discount Value</TableHead>
-                        <TableHead>Validity Period</TableHead>
-                        <TableHead>Usage Count</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {promotions.map((p) => (
-                        <TableRow key={p.id}>
-                          <TableCell className="font-medium">{p.name}</TableCell>
-                          <TableCell className="capitalize">{p.type}</TableCell>
-                          <TableCell>
-                            {p.type === 'code' ? (
-                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-mono bg-slate-100 text-slate-700">{p.code}</span>
-                            ) : p.type === 'bundle' ? (
-                                <span className="text-sm text-slate-600">Bundle (2 courses)</span>
-                            ) : '-'}
-                          </TableCell>
-                          <TableCell>
-                             {p.discountType === 'percentage' ? `${p.discountValue}%` : `HKD ${p.discountValue}`}
-                          </TableCell>
-                          <TableCell className="text-xs text-slate-600">
-                             {p.startDate ? format(new Date(p.startDate), 'yyyy-MM-dd HH:mm') : 'Any time'} - {p.endDate ? format(new Date(p.endDate), 'yyyy-MM-dd HH:mm') : 'No expiry'}
-                          </TableCell>
-                          <TableCell>{p.usageCount || 0}</TableCell>
-                          <TableCell>
-                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${p.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-700'}`}>{p.status}</span>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-2">
-                              <Button 
-                                variant="ghost" 
-                                size="sm"
-                                className="text-indigo-600 hover:text-indigo-900"
-                                onClick={() => {
-                                   let b1 = '';
-                                   let b2 = '';
-                                   if (p.type === 'bundle' && p.conditions?.requiredCourseIds) {
-                                       b1 = p.conditions.requiredCourseIds[0] || '';
-                                       b2 = p.conditions.requiredCourseIds[1] || '';
-                                   }
-                                   setSelectedPromo(p);
-                                   setPromoForm({ 
-                                     ...p, 
-                                     startDate: p.startDate ? p.startDate.split('T')[0] : '',
-                                     endDate: p.endDate ? p.endDate.split('T')[0] : '',
-                                     bundleCourse1: b1, 
-                                     bundleCourse2: b2, 
-                                     adminPassword: '' 
-                                   });
-                                   setIsPromoModalOpen(true);
-                                }}
-                              >
-                                Edit
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-red-600 hover:text-red-900 hover:bg-red-50"
-                                onClick={() => {
-                                  setPromoToDelete(p);
-                                  setIsDeletePromoModalOpen(true);
-                                }}
-                              >
-                                Delete
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      {promotions.length === 0 && (
-                        <TableRow><TableCell colSpan={7} className="text-center h-24 text-slate-500">No promotions configured.</TableCell></TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            </div>
+            <PromotionsTab
+              promotions={promotions}
+              promoCategoryFilter={promoCategoryFilter}
+              setPromoCategoryFilter={setPromoCategoryFilter}
+              regs={regs}
+              setSelectedPromo={setSelectedPromo}
+              setPromoForm={setPromoForm}
+              setIsPromoModalOpen={setIsPromoModalOpen}
+              setPromoToDelete={setPromoToDelete}
+              setIsDeletePromoModalOpen={setIsDeletePromoModalOpen}
+              courses={courses}
+              sessions={sessions}
+            />
           )}
 
           {activeTab === 'settings' && (
-            <Card>
-              <CardHeader>
-                <CardTitle>School Settings</CardTitle>
-                <CardDescription>Customize school information for invoices and receipts</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">School Name</label>
-                    <Input 
-                      value={schoolInfo.name} 
-                      onChange={e => setSchoolInfo({...schoolInfo, name: e.target.value})}
-                      placeholder="e.g. Training Academy"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">School Logo</label>
-                    <div className="flex items-center gap-4">
-                      {schoolInfo.logo_url && (
-                        <div className="w-10 h-10 rounded overflow-hidden shrink-0 bg-slate-100 border border-slate-200 flex items-center justify-center">
-                          <img src={schoolInfo.logo_url} alt="Logo preview" className="max-w-full max-h-full object-contain" />
-                        </div>
-                      )}
-                      <div className="flex-1">
-                        <Input 
-                          type="file"
-                          accept="image/*"
-                          onChange={e => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              const reader = new FileReader();
-                              reader.onloadend = () => {
-                                setSchoolInfo({...schoolInfo, logo_url: reader.result as string});
-                              };
-                              reader.readAsDataURL(file);
-                            }
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Official Address</label>
-                    <Input 
-                      value={schoolInfo.address} 
-                      onChange={e => setSchoolInfo({...schoolInfo, address: e.target.value})}
-                      placeholder="Full address for invoices"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Contact Phone</label>
-                    <Input 
-                      value={schoolInfo.phone} 
-                      onChange={e => setSchoolInfo({...schoolInfo, phone: e.target.value})}
-                      placeholder="+852 XXXX XXXX"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Sales Email</label>
-                    <Input 
-                      value={schoolInfo.email || ''} 
-                      onChange={e => setSchoolInfo({...schoolInfo, email: e.target.value})}
-                      placeholder="sales@example.com"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Invoice Prefix</label>
-                    <Input 
-                      value={schoolInfo.invoice_prefix} 
-                      onChange={e => setSchoolInfo({...schoolInfo, invoice_prefix: e.target.value})}
-                      placeholder="e.g. INV"
-                    />
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Invoice Terms & Conditions</label>
-                  <Textarea 
-                    value={schoolInfo.terms_conditions} 
-                    onChange={e => setSchoolInfo({...schoolInfo, terms_conditions: e.target.value})}
-                    className="min-h-[100px]"
-                    placeholder="Enter center fee terms, policies, etc."
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Rooms & Capacity (comma separated)</label>
-                  <Textarea 
-                    value={schoolInfo.rooms || ''} 
-                    onChange={e => setSchoolInfo({...schoolInfo, rooms: e.target.value})}
-                    className="min-h-[100px]"
-                    placeholder="e.g. Room 101 (20), Room 102 (30), Main Hall (100)"
-                  />
-                  <p className="text-xs text-slate-500">List of rooms available for classes with capacity. Separate by commas (e.g. Room A (20), Room B (30)).</p>
-                </div>
-                
-                <div className="flex justify-end">
-                  <Button onClick={handleSaveSchoolInfo} className="bg-blue-600 hover:bg-blue-700">
-                    Save Settings
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            <SettingsTab
+              schoolInfo={schoolInfo}
+              setSchoolInfo={setSchoolInfo}
+              handleSaveSchoolInfo={handleSaveSchoolInfo}
+            />
           )}
 
+          {activeTab === 'permissions' && (
+            <PermissionsTab
+              customRolePermissions={customRolePermissions}
+              setCustomRolePermissions={setCustomRolePermissions}
+              selectedAccessRole={selectedAccessRole}
+              setSelectedAccessRole={setSelectedAccessRole}
+              simulatedRole={simulatedRole}
+              setSimulatedRole={setSimulatedRole}
+              activeAccessSection={activeAccessSection}
+              setActiveAccessSection={setActiveAccessSection}
+            />
+          )}
+
+          </React.Suspense>
         </main>
       </div>
+
+      {/* Delete User Confirmation Modal */}
+      <Dialog open={isDeleteUserModalOpen} onOpenChange={setIsDeleteUserModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-red-600 flex items-center gap-2">
+              <ShieldAlert className="w-5 h-5" />
+              Delete User
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this user? This action cannot be undone.
+            </DialogDescription>
+            {userToDelete && (
+              <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded-md">
+                <div className="font-bold text-red-900">{userToDelete.name || userToDelete.email}</div>
+                <div className="text-xs text-red-700">{userToDelete.role}</div>
+              </div>
+            )}
+          </DialogHeader>
+          <DialogFooter className="mt-4 gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setIsDeleteUserModalOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteUser} className="bg-red-600 hover:bg-red-700">Delete User</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* User Create/Edit Modal */}
       <Dialog open={isUserModalOpen} onOpenChange={setIsUserModalOpen}>
@@ -3670,6 +3753,25 @@ export function AdminDashboard() {
                   onChange={e => setUserForm({...userForm, email: e.target.value})}
                 />
               </div>
+              {!selectedUser && (
+                <div className="space-y-2 col-span-2">
+                  <label className="text-xs font-bold uppercase text-slate-500">Custom Password (Optional)</label>
+                  <Input 
+                    type="password"
+                    placeholder="Leave blank to let user set via password reset" 
+                    value={userForm.password || ''} 
+                    onChange={e => setUserForm({...userForm, password: e.target.value})}
+                  />
+                  <p className="text-[10px] text-slate-400">If provided, the user account will be created immediately with this password (min 6 chars).</p>
+                </div>
+              )}
+              {selectedUser && (
+                <div className="space-y-2 col-span-2 mb-2">
+                   <Button type="button" variant="outline" size="sm" onClick={() => handlePasswordReset(selectedUser.email)} className="w-full gap-2 text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700">
+                     <KeyRound className="w-4 h-4" /> Send Password Reset Email
+                   </Button>
+                </div>
+              )}
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase text-slate-500">Role</label>
                 <select 
@@ -3680,15 +3782,17 @@ export function AdminDashboard() {
                   <option value="student">Student</option>
                   <option value="tutor">Instructor (Full-Time)</option>
                   <option value="tutor_pt">Instructor (Part-Time)</option>
+                  <option value="staff">Staff</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase text-slate-500">Status</label>
                 <select 
-                  className="w-full h-9 rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm"
-                  value={userForm.status || 'active'}
+                  className={`w-full h-9 rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm ${selectedUser?.email === 'system.admin@vexperthk.com' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  value={selectedUser?.email === 'system.admin@vexperthk.com' ? 'active' : (userForm.status || 'active')}
                   onChange={e => setUserForm({...userForm, status: e.target.value as UserStatus})}
+                  disabled={selectedUser?.email === 'system.admin@vexperthk.com'}
                 >
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
@@ -3704,13 +3808,53 @@ export function AdminDashboard() {
                 />
               </div>
               <div className="space-y-2 col-span-2">
+                <label className="text-xs font-bold uppercase text-slate-500">Company Name</label>
+                <Input 
+                  placeholder="e.g. Vantix Limited" 
+                  value={userForm.company || ''} 
+                  onChange={e => setUserForm({...userForm, company: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2 col-span-2">
                 <label className="text-xs font-bold uppercase text-slate-500">Admin Remarks</label>
                 <Textarea 
                   placeholder="Internal notes about this user..." 
+                  className="min-h-[100px]"
                   value={userForm.remarks || ''} 
                   onChange={e => setUserForm({...userForm, remarks: e.target.value})}
                 />
               </div>
+
+              {(userForm.role === 'tutor' || userForm.role === 'tutor_pt') && (
+                <div className="space-y-2 col-span-2">
+                  <label className="text-xs font-bold uppercase text-slate-500">Qualified Categories (Can Teach)</label>
+                  <p className="text-xs text-slate-400 pb-1">Select the course categories this instructor is qualified to teach.</p>
+                  <div className="max-h-64 overflow-y-auto border border-slate-200 rounded-md p-3 bg-white flex flex-wrap gap-2">
+                    {Array.from(new Set(courses.map(c => c.category).filter(Boolean))).sort().map(category => {
+                      const isSelected = userForm.qualifiedCategories?.includes(category) || false;
+                      return (
+                        <label key={category} className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-full border text-sm transition-colors ${isSelected ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-medium' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                          <input 
+                            type="checkbox" 
+                            className="hidden"
+                            checked={isSelected}
+                            onChange={(e) => {
+                              const currentCats = userForm.qualifiedCategories || [];
+                              if (e.target.checked) {
+                                setUserForm({ ...userForm, qualifiedCategories: [...currentCats, category] });
+                              } else {
+                                setUserForm({ ...userForm, qualifiedCategories: currentCats.filter(c => c !== category) });
+                              }
+                            }}
+                          />
+                          {category}
+                        </label>
+                      );
+                    })}
+                    {courses.length === 0 && <span className="text-xs text-slate-500">No categories available.</span>}
+                  </div>
+                </div>
+              )}
             </div>
             <DialogFooter className="pt-4">
               <Button type="button" variant="outline" onClick={() => setIsUserModalOpen(false)}>Cancel</Button>
@@ -3796,6 +3940,30 @@ export function AdminDashboard() {
                        </h3>
                        
                        <div className="grid grid-cols-1 gap-6">
+
+                          <Card>
+                            <CardHeader className="py-3 px-4">
+                              <CardTitle className="text-sm font-bold flex items-center gap-2">
+                                <BookOpen className="w-4 h-4" /> Qualified Categories (Can Teach)
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="p-4">
+                              {selectedUser.qualifiedCategories && selectedUser.qualifiedCategories.length > 0 ? (
+                                <div className="space-y-4">
+                                  <div className="flex flex-wrap gap-2">
+                                    {selectedUser.qualifiedCategories.map(category => (
+                                      <span key={category} className="px-2.5 py-1.5 bg-indigo-50 text-indigo-700 text-xs font-semibold rounded-full border border-indigo-100 flex flex-col leading-tight">
+                                        <span>{category}</span>
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="text-xs text-slate-400 italic">No specific categories assigned.</p>
+                              )}
+                            </CardContent>
+                          </Card>
+
                           {/* Expertise Section */}
                           <Card>
                             <CardHeader className="py-3 px-4 flex flex-row items-center justify-between">
@@ -3880,17 +4048,21 @@ export function AdminDashboard() {
                             <CardContent className="p-4">
                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                                  <div className="p-3 bg-slate-50 rounded-lg">
-                                   <p className="text-[10px] font-bold text-slate-500 uppercase">Courses</p>
+                                   <p className="text-[10px] font-bold text-slate-500 uppercase">Sessions Handled</p>
                                    <p className="text-lg font-bold text-slate-900">{sessions.filter(s => s.tutorId === selectedUser.id).length}</p>
-                                 </div>
-                                 <div className="p-3 bg-slate-50 rounded-lg">
-                                   <p className="text-[10px] font-bold text-slate-500 uppercase">Courses</p>
-                                   <p className="text-lg font-bold text-slate-900">{courses.filter(c => c.tutorId === selectedUser.id).length}</p>
                                  </div>
                                  <div className="p-3 bg-slate-50 rounded-lg">
                                    <p className="text-[10px] font-bold text-slate-500 uppercase">Avg Rating</p>
                                    <p className="text-lg font-bold text-slate-900">
-                                     {(feedbacks.filter(f => courses.find(c => c.id === f.courseId && c.tutorId === selectedUser.id)).reduce((acc, curr) => acc + curr.rating, 0) / (feedbacks.filter(f => courses.find(c => c.id === f.courseId && c.tutorId === selectedUser.id)).length || 1)).toFixed(1)}
+                                     {(() => {
+                                       const tutorFeedbacks = feedbacks.filter(f => {
+                                          if (f.trainerName && f.trainerName === selectedUser.name) return true;
+                                          if (f.sessionId) return sessions.find(s => s.id === f.sessionId)?.tutorId === selectedUser.id;
+                                          return courses.find(c => c.id === f.courseId)?.tutorId === selectedUser.id;
+                                       });
+                                       const total = tutorFeedbacks.reduce((acc, curr) => acc + (parseFloat(curr.overallTrainerScore || curr.overallCourseScore || curr.rating || 0)), 0);
+                                       return tutorFeedbacks.length > 0 ? (total / tutorFeedbacks.length).toFixed(1) : 'N/A';
+                                     })()}
                                    </p>
                                  </div>
                                  <div className="p-3 bg-slate-50 rounded-lg">
@@ -3934,6 +4106,43 @@ export function AdminDashboard() {
                               </Button>
                             </CardContent>
                           </Card>
+
+                          {/* Tutor Evaluations Section */}
+                          <Card>
+                            <CardHeader className="py-3 px-4">
+                              <CardTitle className="text-sm font-bold flex items-center gap-2">
+                                <MessageSquare className="w-4 h-4 text-blue-600" /> Tutor Evaluations
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="p-4">
+                              <div className="space-y-2">
+                                {feedbacks.filter(f => {
+                                   if (f.trainerName && f.trainerName === selectedUser.name) return true;
+                                   if (f.sessionId) return sessions.find(s => s.id === f.sessionId)?.tutorId === selectedUser.id;
+                                   return courses.find(c => c.id === f.courseId)?.tutorId === selectedUser.id;
+                                }).map((f: any) => (
+                                  <div key={f.id} className="p-3 border rounded-lg hover:bg-blue-50/30 transition-colors">
+                                    <div className="flex justify-between items-start mb-1">
+                                      <span className="text-sm font-semibold text-slate-700 max-w-[200px] truncate" title={f.courseName}>{f.courseName}</span>
+                                      <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded text-[10px] font-bold inline-flex items-center gap-1">
+                                        <Star className="w-2.5 h-2.5 fill-current" /> {f.overallTrainerScore || f.overallCourseScore || f.rating || '-'}
+                                      </span>
+                                    </div>
+                                    {f.trainerFeedback && <p className="text-xs text-slate-500 italic mt-1 line-clamp-2">"{f.trainerFeedback}"</p>}
+                                    {f.comment && !f.trainerFeedback && <p className="text-xs text-slate-500 italic mt-1 line-clamp-2">"{f.comment}"</p>}
+                                    <div className="text-[9px] text-slate-400 mt-2 font-mono">By: {f.studentName || 'Anonymous'} • {f.date || 'Unknown Date'}</div>
+                                  </div>
+                                ))}
+                                {feedbacks.filter(f => {
+                                   if (f.trainerName && f.trainerName === selectedUser.name) return true;
+                                   if (f.sessionId) return sessions.find(s => s.id === f.sessionId)?.tutorId === selectedUser.id;
+                                   return courses.find(c => c.id === f.courseId)?.tutorId === selectedUser.id;
+                                }).length === 0 && (
+                                  <p className="text-xs text-slate-400 italic">No evaluations received yet.</p>
+                                )}
+                              </div>
+                            </CardContent>
+                          </Card>
                        </div>
                     </div>
                   ) : (
@@ -3949,20 +4158,91 @@ export function AdminDashboard() {
                           <div className="space-y-2">
                             {regs.filter(r => r.studentId === selectedUser.id).map(reg => {
                               const course = courses.find(c => c.id === reg.courseId);
+                              const sessionLessons = lessons.filter(l => l.sessionId === reg.sessionId && l.lessonStatus === 'completed');
+                              const attended = globalAttendance.filter(a => a.sessionId === reg.sessionId && a.studentId === reg.studentId && (a.status === 'present' || a.status === 'present_am' || a.status === 'present_pm' || a.status === 'AM' || a.status === 'PM')).length;
+                              const total = sessionLessons.length;
+                              const attPercentage = total > 0 ? Math.round((attended / total) * 100) : 0;
                               return (
                                 <div key={reg.id} className="flex items-center justify-between p-2 border rounded hover:bg-slate-50">
                                   <div className="flex flex-col">
                                     <span className="text-sm font-medium">{course?.title || 'Unknown Course'}</span>
                                     <span className="text-[10px] text-slate-400 capitalize">{reg.status} • {reg.payment_status}</span>
                                   </div>
-                                  <Link to={`/admin/finances?registration=${reg.id}`} className="text-indigo-600 hover:underline text-xs">
-                                    View Payment
-                                  </Link>
+                                  <div className="flex items-center gap-4">
+                                    <div className="flex flex-col items-end">
+                                      <span className="text-xs font-bold text-slate-700">{total > 0 ? `${attPercentage}%` : 'N/A'}</span>
+                                      <span className="text-[9px] text-slate-400 uppercase tracking-wider">Attendance</span>
+                                    </div>
+                                    <Link to={`/admin/finances?registration=${reg.id}`} className="text-indigo-600 hover:underline text-xs">
+                                      View Payment
+                                    </Link>
+                                  </div>
                                 </div>
                               );
                             })}
                             {regs.filter(r => r.studentId === selectedUser.id).length === 0 && (
                               <p className="text-xs text-slate-400 italic">No course payments found.</p>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardHeader className="py-3 px-4">
+                          <CardTitle className="text-sm font-bold flex items-center gap-2">
+                            <Award className="w-4 h-4 text-emerald-600" /> Certificates Earned
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-4">
+                          <div className="space-y-2">
+                            {certificates.filter((cert: any) => cert.studentId === selectedUser.id || (cert.studentEmail && cert.studentEmail === selectedUser.email)).map((c: any) => (
+                              <div key={c.id} className="flex items-center justify-between p-2 border rounded hover:bg-emerald-50/30 transition-colors">
+                                <div className="flex flex-col">
+                                  <span className="text-sm font-bold text-slate-700">{c.courseTitle || c.courseId}</span>
+                                  <span className="text-[10px] text-slate-400 font-mono">Issued: {c.issuedAt?.toDate ? c.issuedAt.toDate().toLocaleDateString() : 'Unknown Date'}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold hidden sm:inline">CERTIFIED</span>
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline"
+                                    onClick={() => generateBulkCertificatesPDF([c], c.courseTitle || 'Certificate')}
+                                    className="h-7 text-[10px] px-2 gap-1 font-bold text-emerald-700 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800"
+                                  >
+                                    <Download className="w-3 h-3" /> View
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                            {certificates.filter((cert: any) => cert.studentId === selectedUser.id || (cert.studentEmail && cert.studentEmail === selectedUser.email)).length === 0 && (
+                              <p className="text-xs text-slate-400 italic">No certificates earned yet.</p>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardHeader className="py-3 px-4">
+                          <CardTitle className="text-sm font-bold flex items-center gap-2">
+                            <MessageSquare className="w-4 h-4 text-blue-600" /> Submitted Feedbacks
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-4">
+                          <div className="space-y-2">
+                            {feedbacks.filter(f => f.studentEmail === selectedUser.email).map((f: any) => (
+                              <div key={f.id} className="p-3 border rounded-lg hover:bg-blue-50/30 transition-colors">
+                                <div className="flex justify-between items-start mb-1">
+                                  <span className="text-sm font-semibold text-slate-700 max-w-[200px] truncate" title={f.courseName}>{f.courseName}</span>
+                                  <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded text-[10px] font-bold inline-flex items-center gap-1">
+                                    <Star className="w-2.5 h-2.5 fill-current" /> {f.overallCourseScore || f.rating || '-'}
+                                  </span>
+                                </div>
+                                {f.comment && <p className="text-xs text-slate-500 italic mt-1 line-clamp-2">"{f.comment}"</p>}
+                                <div className="text-[9px] text-slate-400 mt-2 font-mono">{f.date || 'Unknown Date'}</div>
+                              </div>
+                            ))}
+                            {feedbacks.filter(f => f.studentEmail === selectedUser.email).length === 0 && (
+                              <p className="text-xs text-slate-400 italic">No feedbacks submitted.</p>
                             )}
                           </div>
                         </CardContent>
@@ -4116,6 +4396,24 @@ export function AdminDashboard() {
                         </Command>
                       </PopoverContent>
                     </Popover>
+                    
+                    {(() => {
+                      if (selectedSession.tutorId && selectedSession.courseId) {
+                        const course = courses.find((c: any) => c.id === selectedSession.courseId);
+                        const tutor = tutors.find((t: any) => t.id === selectedSession.tutorId);
+                        if (course && course.category && tutor && tutor.qualifiedCategories && !tutor.qualifiedCategories.includes(course.category)) {
+                          return (
+                            <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-md">
+                              <p className="text-xs font-bold text-red-600 leading-tight">
+                                <AlertTriangle className="w-3.5 h-3.5 inline mr-1 -mt-0.5" />
+                                Warning: Instructor is not qualified to teach "{course.category}" category.
+                              </p>
+                            </div>
+                          );
+                        }
+                      }
+                      return null;
+                    })()}
                   </div>
                 </div>
 
@@ -4156,14 +4454,15 @@ export function AdminDashboard() {
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Enrollment Status</label>
                     <select 
-                      className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-blue-600/20 outline-none"
+                      className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-blue-600/20 outline-none disabled:opacity-50"
                       value={selectedSession.sessionStatus}
                       onChange={e => setSelectedSession({...selectedSession, sessionStatus: e.target.value})}
+                      disabled={selectedSession.sessionStatus === 'completed'}
                     >
                       <option value="open">Open</option>
-                      <option value="full">Full</option>
-                      <option value="completed">Completed</option>
+                      <option value="full">Confirmed</option>
                       <option value="cancelled">Cancelled</option>
+                      {selectedSession.sessionStatus === 'completed' && <option value="completed">Completed</option>}
                     </select>
                   </div>
                   <div className="space-y-1.5">
@@ -4739,6 +5038,24 @@ export function AdminDashboard() {
                       </Command>
                     </PopoverContent>
                   </Popover>
+
+                  {(() => {
+                    if (newSession.tutorId && newSession.courseId) {
+                      const course = courses.find((c: any) => c.id === newSession.courseId);
+                      const tutor = tutors.find((t: any) => t.id === newSession.tutorId);
+                      if (course && course.category && tutor && tutor.qualifiedCategories && !tutor.qualifiedCategories.includes(course.category)) {
+                        return (
+                          <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-md">
+                            <p className="text-xs font-bold text-red-600 leading-tight">
+                              <AlertTriangle className="w-3.5 h-3.5 inline mr-1 -mt-0.5" />
+                              Warning: Instructor is not qualified to teach "{course.category}" category.
+                            </p>
+                          </div>
+                        );
+                      }
+                    }
+                    return null;
+                  })()}
                 </div>
 
                 {(newSession.deliveryMode === 'online' || newSession.deliveryMode === 'hybrid') && (
@@ -5091,8 +5408,46 @@ export function AdminDashboard() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={isDeleteLogsModalOpen} onOpenChange={setIsDeleteLogsModalOpen}>
+        <DialogContent className="max-w-md bg-white border-none shadow-2xl p-0 overflow-hidden rounded-2xl">
+          <div className="bg-red-600 px-6 py-5">
+             <DialogTitle className="text-xl font-bold text-white mb-1">Delete System Logs</DialogTitle>
+             <DialogDescription className="text-red-100 text-xs">Permanently delete logs for a specific month or date.</DialogDescription>
+          </div>
+          <form onSubmit={handleDeleteLogsByDate} className="p-6 space-y-4">
+             <div className="space-y-2">
+                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Select Date to Delete</label>
+                 <Input 
+                    type="date" 
+                    value={logDeleteDate} 
+                    onChange={e => setLogDeleteDate(e.target.value)} 
+                    required 
+                 />
+                 <p className="text-xs text-slate-500">All logs matching this exact date (in your local timezone) will be deleted.</p>
+             </div>
+             <div className="space-y-2">
+                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Admin Password</label>
+                 <Input 
+                    type="password" 
+                    placeholder="Enter admin password to confirm"
+                    value={adminPasswordForLogDelete} 
+                    onChange={e => setAdminPasswordForLogDelete(e.target.value)} 
+                    required 
+                 />
+             </div>
+             <div className="pt-4 flex justify-end gap-3">
+                <Button type="button" variant="outline" onClick={() => setIsDeleteLogsModalOpen(false)}>Cancel</Button>
+                <Button type="submit" className="bg-red-600 hover:bg-red-700 font-bold" disabled={loading}>
+                  {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+                  Confirm Delete
+                </Button>
+             </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={isPromoModalOpen} onOpenChange={setIsPromoModalOpen}>
-        <DialogContent className="max-w-xl">
+        <DialogContent className="max-w-xl sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>{selectedPromo ? 'Edit Promotion' : 'Add Promotion'}</DialogTitle>
           </DialogHeader>
@@ -5100,6 +5455,19 @@ export function AdminDashboard() {
             <div className="space-y-2">
                <label className="text-sm font-medium">Promotion Name</label>
                <Input value={promoForm.name || ''} onChange={e => setPromoForm({...promoForm, name: e.target.value})} placeholder="e.g. Early Bird 2026" />
+            </div>
+            <div className="space-y-2">
+               <label className="text-sm font-medium">Marketing Channel Category</label>
+               <select 
+                 className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600" 
+                 value={promoForm.category || 'seminar'} 
+                 onChange={e => setPromoForm({...promoForm, category: e.target.value})}
+               >
+                 {PROMO_CATEGORIES.map(cat => (
+                   <option key={cat.value} value={cat.value}>{cat.label}</option>
+                 ))}
+               </select>
+               <p className="text-xs text-slate-500">Categorize this promo code to track which marketing channels perform best.</p>
             </div>
             <div className="grid grid-cols-2 gap-4">
                <div className="space-y-2">

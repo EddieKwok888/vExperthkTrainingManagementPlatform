@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useContext } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { doc, getDoc, collection, query, where, getDocs, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { AuthContext } from '../App';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '../components/ui/card';
-import { Button } from '../components/ui/button';
+import { db } from '../../lib/firebase';
+import { AuthContext } from '../../App';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
 import { Loader2, ArrowLeft, CheckCircle2, Calendar, Clock, MapPin, Sparkles, GraduationCap, FileText } from 'lucide-react';
-import { handleFirestoreError, OperationType } from '../lib/error';
+import { handleFirestoreError, OperationType } from '../../lib/error';
 import { toast } from 'sonner';
 
 import { jsPDF } from 'jspdf';

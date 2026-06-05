@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BrowserRouter as Router, Routes, Route, Outlet, Link, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Outlet, Link, useNavigate, Navigate } from 'react-router-dom';
 import React, { useEffect, useState, createContext, useContext } from 'react';
 import { useTranslation } from 'react-i18next';
 import { auth, db } from './lib/firebase';
@@ -24,16 +24,16 @@ import {
   DropdownMenuTrigger,
 } from "./components/ui/dropdown-menu";
 
-import { Home } from './pages/Home';
-import { CourseDetail } from './pages/CourseDetail';
-import { RegisterCourse } from './pages/RegisterCourse';
-import { PaymentStatus } from './pages/PaymentStatus';
-import { AdminDashboard } from './pages/AdminDashboard';
-import { InstructorDashboard } from './pages/InstructorDashboard';
-import { MyCourses } from './pages/MyCourses';
-import { FeedbackForm } from './pages/FeedbackForm';
-import { ChatBot } from './components/ChatBot';
-import { StudentProfile } from './pages/StudentProfile';
+import { Home } from './features/courses/Home';
+import { CourseDetail } from './features/courses/CourseDetail';
+import { RegisterCourse } from './features/courses/RegisterCourse';
+import { PaymentStatus } from './features/payment/PaymentStatus';
+import { AdminDashboard } from './features/admin/AdminDashboard';
+import { InstructorDashboard } from './features/instructor/InstructorDashboard';
+import { MyCourses } from './features/student/MyCourses';
+import { FeedbackForm } from './features/feedback/FeedbackForm';
+import { ChatBot } from './components/common/ChatBot';
+import { StudentProfile } from './features/student/StudentProfile';
 
 // Context for Auth
 interface AuthContextType {
@@ -327,7 +327,6 @@ function Layout() {
                   {role === 'student' && (
                     <>
                       <Link to="/student/registrations" className="px-3 py-1 hover:bg-white hover:shadow-sm rounded text-slate-600 hover:text-blue-600 transition-all">{t('common.my_courses')}</Link>
-                      <Link to="/student/profile" className="px-3 py-1 bg-white shadow-sm rounded text-blue-600 border border-slate-200">Student Portal</Link>
                     </>
                   )}
                 </div>
@@ -354,7 +353,7 @@ function Layout() {
         </div>
       </header>
       <div className="flex flex-1 overflow-hidden">
-        <main className="flex-1 overflow-y-auto px-4 sm:px-8 py-8 w-full max-w-7xl mx-auto flex flex-col gap-6">
+        <main className="flex-1 overflow-y-auto px-4 sm:px-8 py-8 w-full max-w-full flex flex-col gap-6">
           <Outlet />
         </main>
       </div>
@@ -374,7 +373,10 @@ function BookIcon(props: any) {
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode, allowedRoles: ('admin' | 'tutor' | 'student')[] }) {
   const { user, role, loading } = useContext(AuthContext);
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin" /></div>;
-  if (!user || (role && !allowedRoles.includes(role))) {
+  if (!user) {
+    return <Navigate to="/" replace />;
+  }
+  if (role && !allowedRoles.includes(role)) {
     return <div className="text-center py-20 text-slate-500 font-medium">Access Denied: You do not have permission to view this page.</div>;
   }
   return <>{children}</>;
@@ -394,7 +396,6 @@ export default function App() {
             <Route path="admin/student/:id" element={<ProtectedRoute allowedRoles={['admin']}><StudentProfile /></ProtectedRoute>} />
             <Route path="instructor" element={<ProtectedRoute allowedRoles={['admin', 'tutor']}><InstructorDashboard /></ProtectedRoute>} />
             <Route path="student/registrations" element={<ProtectedRoute allowedRoles={['admin', 'student']}><MyCourses /></ProtectedRoute>} />
-            <Route path="student/profile" element={<ProtectedRoute allowedRoles={['student']}><StudentProfile /></ProtectedRoute>} />
             <Route path="feedback/:id" element={<ProtectedRoute allowedRoles={['admin', 'tutor', 'student']}><FeedbackForm /></ProtectedRoute>} />
           </Route>
         </Routes>
