@@ -139,7 +139,7 @@ export function PermissionsTab({
                   { key: 'finance', name: '💰 Finance & Payroll Ledger', desc: 'Settle tuition streams, issue authorized invoice receipts, verify refund policies, and balance salaries.' },
                   { key: 'certificates', name: '🎓 Certificates Ledger', desc: 'Generate tamper-proof hash serials, download printable certificates, and adjust award rules.' },
                   { key: 'scheduling', name: '🏫 Scheduling & Reservations', desc: 'Drag-and-drop live rooms, schedule exam sessions, schedule teachers, and analyze scheduling clashes.' },
-                  { key: 'tutors', name: '⏳ Tutor Timecard Reconciliation', desc: 'Verify billable hourly logs from instructors, conduct claims auditing, and release payroll approvals.' },
+                  { key: 'tutors', name: '⏳ Instructor Timecard Reconciliation', desc: 'Verify billable hourly logs from instructors, conduct claims auditing, and release payroll approvals.' },
                   { key: 'feedback', name: '💬 Student Course Evaluations (Feedback)', desc: 'Inspect student course logs, feedback ratings, and record follow-up CS complaint tickets.' },
                   { key: 'logs', name: '🛡️ Operator System Logs (Audit Trails)', desc: 'Monitor every single click, record changes to invoices, IP tags, timestamps, and active operators.' },
                   { key: 'promotions', name: '✨ Promos & Coupons (Promotions)', desc: 'Configure referral programs, discount campaigns, KOL partner codes, and countdown specials.' },
@@ -256,7 +256,7 @@ export function PermissionsTab({
                           className="text-red-600 hover:bg-red-50 font-bold text-xs font-sans"
                           onClick={() => {
                             setCustomRolePermissions(customRolePermissions.filter(r => r.roleId !== role.roleId));
-                            setSelectedAccessRole('ops_manager');
+                            setSelectedAccessRole('admin');
                             toast.success('Custom role removed successfully');
                           }}
                         >
@@ -618,7 +618,7 @@ export function PermissionsTab({
               <p>
                 <strong>✓ Contract Staff Data Isolation:</strong>
                 <br />
-                While Senior Full-Time Instructors enjoy access to global curriculum plans and historical templates, Part-Time Tutors are isolated, only viewing
+                While Senior Full-Time Instructors enjoy access to global curriculum plans and historical templates, Part-Time Instructors are isolated, only viewing
                 scheduled classes assigned directly to them.
               </p>
               <p>

@@ -584,7 +584,7 @@ export function InstructorDashboard() {
           {/* Upcoming sessions */}
           <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between group hover:border-indigo-200 transition-all">
             <div className="space-y-1">
-              <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">Scheduled Sessions</p>
+              <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">Scheduled Courses</p>
               <p className="text-3xl font-extrabold text-slate-800 tracking-tight group-hover:text-indigo-600 transition-colors">
                 {stats.upcomingSessions}
               </p>
@@ -716,7 +716,7 @@ export function InstructorDashboard() {
                                   </span>
                                   {s.deliveryMode && (
                                     <span className="bg-indigo-50 text-indigo-600 text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded tracking-wide">
-                                      {s.deliveryMode}
+                                      {s.deliveryMode === 'onsite' ? 'ClassRoom' : s.deliveryMode === 'online' ? 'Online' : s.deliveryMode === 'hybrid' ? 'Hybrid' : s.deliveryMode}
                                     </span>
                                   )}
                                 </div>
@@ -731,7 +731,7 @@ export function InstructorDashboard() {
                                 </p>
                                 {(s.room || s.classroom) && (
                                   <p className="text-[10px] font-bold text-indigo-600 mt-0.5 flex items-center justify-start sm:justify-end gap-1">
-                                    <MapPin className="w-3 h-3" /> {(s.room || s.classroom)}
+                                    <MapPin className="w-3 h-3" /> Room: {(s.room || s.classroom).replace(/\s*\(Persons:.*?\)/gi, '')}
                                   </p>
                                 )}
                                 {s.meetingLink && (
@@ -913,7 +913,7 @@ export function InstructorDashboard() {
                                 </CardTitle>
                                 
                                 <p className="text-xs text-slate-500 font-medium">
-                                  Tutor: {userProfile?.name || 'Instructor'} • Mode: <span className="font-bold text-indigo-600">{session?.deliveryMode || 'Normal'}</span> {session?.room ? `• Room: ${session.room}` : ''}
+                                  Instructor: {userProfile?.name || 'Instructor'} • Mode: <span className="font-bold text-indigo-600">{session?.deliveryMode === 'onsite' ? 'ClassRoom' : session?.deliveryMode === 'online' ? 'Online' : session?.deliveryMode === 'hybrid' ? 'Hybrid' : (session?.deliveryMode || 'Normal')}</span> {session?.room ? `• Room: ${session.room.replace(/\s*\(Persons:.*?\)/gi, '')}` : ''}
                                 </p>
                               </div>
 
@@ -984,7 +984,7 @@ export function InstructorDashboard() {
                                   <Sparkles className="w-4 h-4 text-indigo-600" />
                                 </div>
                                 <div className="flex flex-col">
-                                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 leading-tight">Class Session</span>
+                                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 leading-tight">Class Course</span>
                                   <span className="text-xs font-bold text-slate-800 tracking-tight leading-tight">Quick Actions</span>
                                 </div>
                               </div>
@@ -1160,10 +1160,10 @@ export function InstructorDashboard() {
                             const totalRegs = allSessionRegistrations.filter(r => r.sessionId === s.id && r.status === 'verified').length;
                             return (
                               <TableRow key={s.id} className="hover:bg-slate-50/30 transition-colors border-b border-slate-55">
-                                <TableCell className="pl-6 py-4.5 font-bold text-sm text-slate-800">
+                                <TableCell className="pl-6 py-4.5 font-bold text-sm text-slate-800 whitespace-normal break-words max-w-[200px]">
                                   {s.sessionName || 'Untitled Run'}
                                 </TableCell>
-                                <TableCell className="font-semibold text-slate-700 text-xs">
+                                <TableCell className="font-semibold text-slate-700 text-xs whitespace-normal break-words max-w-[250px]">
                                   {course?.title || 'Course Template'}
                                 </TableCell>
                                 <TableCell className="text-center text-xs font-semibold font-mono text-indigo-700">
@@ -1173,7 +1173,7 @@ export function InstructorDashboard() {
                                   {totalRegs} student{totalRegs !== 1 ? 's' : ''}
                                 </TableCell>
                                 <TableCell className="text-center text-xs font-semibold text-slate-650">
-                                  {s.deliveryMode || 'Normal'}
+                                  {s.deliveryMode === 'onsite' ? 'ClassRoom' : s.deliveryMode === 'online' ? 'Online' : s.deliveryMode === 'hybrid' ? 'Hybrid' : (s.deliveryMode || 'Normal')}
                                 </TableCell>
                                 <TableCell className="pr-6 text-right">
                                   <span className="px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider bg-slate-800 text-white shadow-sm ring-1 ring-slate-900/10">

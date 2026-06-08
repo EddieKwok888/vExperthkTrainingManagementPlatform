@@ -270,7 +270,7 @@ export function StudentProfile() {
              <Award className="w-4 h-4"/> <span className="hidden sm:inline">Certificates</span>
           </TabsTrigger>
           <TabsTrigger value="evaluations" className="py-3 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg flex items-center gap-2 text-sm font-medium">
-             <MessageSquare className="w-4 h-4"/> <span className="hidden sm:inline">Tutor Evaluations</span>
+             <MessageSquare className="w-4 h-4"/> <span className="hidden sm:inline">Instructor Evaluations</span>
           </TabsTrigger>
         </TabsList>
 
@@ -435,11 +435,11 @@ export function StudentProfile() {
             </Card>
           </TabsContent>
 
-          {/* 4. Tutor Evaluations */}
+          {/* 4. Instructor Evaluations */}
           <TabsContent value="evaluations" className="m-0 focus:outline-none">
             <Card className="border-slate-200 shadow-sm border-t-4 border-t-purple-500 overflow-hidden">
               <CardHeader className="bg-slate-50 border-b border-slate-100 pb-4">
-                <CardTitle className="text-lg flex items-center gap-2"><MessageSquare className="w-5 h-5 text-purple-500"/> Tutor Evaluations</CardTitle>
+                <CardTitle className="text-lg flex items-center gap-2"><MessageSquare className="w-5 h-5 text-purple-500"/> Instructor Evaluations</CardTitle>
                 <CardDescription>Feedback and remarks provided by instructors.</CardDescription>
               </CardHeader>
               <CardContent className="p-6 bg-slate-50/30">

@@ -24,7 +24,7 @@ service cloud.firestore {
         (request.auth.token.email != null && request.auth.token.email.lower() == 'system.admin@vexperthk.com') ||
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'coordinator', 'finance', 'staff'])
       );
     }
 
@@ -34,7 +34,7 @@ service cloud.firestore {
         (request.auth.token.email != null && request.auth.token.email.lower() == 'trainer@vexperthk.com') ||
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'tutor'])
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'coordinator', 'finance', 'staff', 'tutor', 'tutor_pt'])
       );
     }
 
@@ -55,7 +55,7 @@ service cloud.firestore {
     function isValidUser(data) {
       return data.keys().hasAll(['email', 'role', 'name', 'status', 'createdAt']) &&
              data.email is string &&
-             data.role in ['student', 'tutor', 'admin'] &&
+             data.role in ['student', 'tutor', 'tutor_pt', 'admin', 'coordinator', 'finance', 'staff'] &&
              data.name is string && data.name.size() <= 100 &&
              data.status in ['active', 'inactive', 'suspended'];
     }

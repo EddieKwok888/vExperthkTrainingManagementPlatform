@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { getHkDateString } from '../../lib/utils';
 import { AuthContext } from '../../App';
 import { jsPDF } from 'jspdf';
+import { DEFAULT_TEMPLATE } from '../admin/components/FeedbackTemplateTab';
 
 const generateCertificatePDF = (cert: any) => {
   const doc = new jsPDF({ orientation: 'landscape' });
@@ -55,51 +56,33 @@ export function FeedbackForm() {
   const { user } = useContext(AuthContext);
   
   const [loading, setLoading] = useState(true);
+  const [template, setTemplate] = useState<any>(null);
+  
   const [courseName, setCourseName] = useState('');
   const [trainerName, setInstructorName] = useState('N/A');
   
-  // Basic info
-  const [studentName, setStudentName] = useState(user?.displayName || '');
-  const [studentEmail, setStudentEmail] = useState(user?.email || '');
-  const [companyName, setCompanyName] = useState('');
+  const [formData, setFormData] = useState<Record<string, string>>({});
   
-  // Part A Ratings
-  const [contentScore, setContentScore] = useState('');
-  const [levelScore, setLevelScore] = useState('');
-  const [materialsScore, setMaterialsScore] = useState('');
-  const [facilitiesScore, setFacilitiesScore] = useState('');
-  const [practiceScore, setPracticeScore] = useState('');
-  const [jobApplicabilityScore, setJobApplicabilityScore] = useState('');
-  const [overallCourseScore, setOverallCourseScore] = useState('');
-  
-  // Part A Text
-  const [usefulTopics, setUsefulTopics] = useState('');
-  const [leastUsefulTopics, setLeastUsefulTopics] = useState('');
-  const [meetObjective, setMeetObjective] = useState('');
-  
-  // Part B Ratings
-  const [tutorKnowledgeScore, setTutorKnowledgeScore] = useState('');
-  const [tutorOrganizationScore, setTutorOrganizationScore] = useState('');
-  const [tutorPresentationScore, setTutorPresentationScore] = useState('');
-  const [tutorAttentionScore, setTutorAttentionScore] = useState('');
-  const [overallTutorScore, setOverallTutorScore] = useState('');
-  
-  // Part C
-  const [comments, setComments] = useState('');
   const [marketingConsent, setMarketingConsent] = useState(true);
-
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    const fetchContext = async () => {
+    // Initial pre-fill
+    if (user?.displayName) updateForm('studentName', user.displayName);
+    if (user?.email) updateForm('studentEmail', user.email);
+  }, [user]);
+
+  useEffect(() => {
+    const fetchContextAndTemplate = async () => {
       try {
-        if (!id) return;
-        const courseRef = doc(db, 'courses', id);
-        const courseSnap = await getDoc(courseRef);
         let tId = null;
-        if (courseSnap.exists()) {
-          setCourseName(courseSnap.data().title || 'Course');
-          tId = courseSnap.data().tutorId;
+        if (id) {
+          const courseRef = doc(db, 'courses', id);
+          const courseSnap = await getDoc(courseRef);
+          if (courseSnap.exists()) {
+            setCourseName(courseSnap.data().title || 'Course');
+            tId = courseSnap.data().tutorId;
+          }
         }
         
         if (sessionId) {
@@ -121,69 +104,112 @@ export function FeedbackForm() {
              console.warn("Could not load tutor profile");
            }
         }
+
+        if (user?.uid) {
+           try {
+              const uRef = doc(db, 'users', user.uid);
+              const uSnap = await getDoc(uRef);
+              if (uSnap.exists()) {
+                 const udata = uSnap.data();
+                 setFormData(prev => ({ 
+                   ...prev, 
+                   companyName: udata.company || udata.companyName || '',
+                   studentName: udata.name || user.displayName || '',
+                   studentEmail: udata.email || user.email || ''
+                 }));
+              }
+           } catch (e) {
+              console.warn("Could not load user profile", e);
+           }
+        }
+
+        const applyTemplate = (tmpl: any) => {
+           setTemplate(tmpl);
+           setFormData(prev => {
+             const newForm = { ...prev };
+             tmpl.fields?.forEach((f: any) => {
+               if (f.type === 'rating' && !newForm[f.id]) {
+                 newForm[f.id] = '5';
+               }
+             });
+             return newForm;
+           });
+        };
+
+        // Fetch template
+        try {
+           const tmplRef = doc(db, 'settings', 'feedback_template');
+           const tmplSnap = await getDoc(tmplRef);
+           if(tmplSnap.exists()) {
+              applyTemplate(tmplSnap.data());
+           } else {
+              applyTemplate(DEFAULT_TEMPLATE);
+           }
+        } catch (e) {
+           console.error("Failed loading template, using default.", e);
+           applyTemplate(DEFAULT_TEMPLATE);
+        }
+
       } catch (err) {
         console.error("Failed to load context:", err);
       } finally {
         setLoading(false);
       }
     };
-    fetchContext();
+    fetchContextAndTemplate();
   }, [id, sessionId]);
 
+  const updateForm = (key: string, value: string) => {
+    setFormData(prev => ({ ...prev, [key]: value }));
+  };
+
   const handleSubmit = async () => {
-    if (!id || !studentName.trim() || !studentEmail.trim() || !companyName.trim()) {
-      toast.error('Please fill in all required fields (marked with *).');
-      return;
-    }
+    if (!template) return;
     
-    // Validate that all radio buttons are checked
-    if (!contentScore || !levelScore || !materialsScore || !facilitiesScore || !practiceScore || !jobApplicabilityScore || !overallCourseScore || !tutorKnowledgeScore || !tutorOrganizationScore || !tutorPresentationScore || !tutorAttentionScore || !overallTutorScore) {
-       toast.error('Please rate all dimensions in Part A and Part B.');
+    // Validation
+    const missingFields: string[] = [];
+    template.fields.forEach((f: any) => {
+       if (f.required && !formData[f.id]?.trim()) {
+          missingFields.push(f.label);
+       }
+    });
+
+    if (missingFields.length > 0) {
+       toast.error(`Please fill in required fields: ${missingFields[0]}...`);
        return;
     }
     
     setSubmitting(true);
     try {
-      await addDoc(collection(db, 'feedbacks'), {
+      
+      const payload: any = {
         courseId: id,
         sessionId: sessionId || null,
-        studentName,
-        studentEmail,
-        companyName,
+        studentName: formData['studentName'] || user?.displayName || 'Anonymous',
+        studentEmail: formData['studentEmail'] || user?.email || '',
+        companyName: formData['companyName'] || '',
         courseName,
         trainerName,
         date: getHkDateString(),
-        
-        // Part A Course
-        contentScore: parseInt(contentScore),
-        levelScore: parseInt(levelScore),
-        materialsScore: parseInt(materialsScore),
-        facilitiesScore: parseInt(facilitiesScore),
-        practiceScore: parseInt(practiceScore),
-        jobApplicabilityScore: parseInt(jobApplicabilityScore),
-        overallCourseScore: parseInt(overallCourseScore),
-        
-        // Part A Text
-        usefulTopics,
-        leastUsefulTopics,
-        meetObjective,
-        
-        // Part B Instructor
-        tutorKnowledgeScore: parseInt(tutorKnowledgeScore),
-        tutorOrganizationScore: parseInt(tutorOrganizationScore),
-        tutorPresentationScore: parseInt(tutorPresentationScore),
-        tutorAttentionScore: parseInt(tutorAttentionScore),
-        overallTutorScore: parseInt(overallTutorScore),
-        
-        rating: parseInt(overallCourseScore), // Keep for backward compatibility
-        comment: comments, // Keep for backward compatibility
-        
-        // Part C
-        comments,
         marketingConsent,
-        
         createdAt: serverTimestamp()
+      };
+
+      // Add dynamic fields, parse numbers if rating
+      template.fields.forEach((f: any) => {
+         const val = formData[f.id] || '';
+         if (f.type === 'rating') {
+             payload[f.id] = val ? parseInt(val) : 0;
+         } else {
+             payload[f.id] = val;
+         }
       });
+      
+      // Fallbacks for specific analytics fields if they happened to change ID but not semantics (best effort)
+      if(!payload.rating && payload.overallCourseScore) payload.rating = payload.overallCourseScore;
+      if(!payload.comment && formData.comment) payload.comment = formData.comment;
+
+      await addDoc(collection(db, 'feedbacks'), payload);
       
       // Auto-issue certificate since feedback is completed
       if (sessionId && user?.email) {
@@ -207,7 +233,7 @@ export function FeedbackForm() {
                 const certData = {
                   studentId: user.uid,
                   studentEmail: user.email,
-                  studentName: studentName,
+                  studentName: payload.studentName,
                   courseId: id,
                   course_title: courseName,
                   registrationId: regId,
@@ -234,18 +260,23 @@ export function FeedbackForm() {
     }
   };
 
-  if (loading) {
-     return <div className="flex justify-center items-center py-24"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>;
+  if (loading || !template) {
+     return <div className="flex justify-center items-center py-24"><Loader2 className="w-8 h-8 animate-spin text-indigo-600" /></div>;
   }
 
-  const renderRadioGroup = (label: string, value: string, setter: (val: string) => void) => (
-    <div className="py-3">
-      <p className="text-sm font-medium text-slate-800 mb-3">{label}</p>
+  const renderRadioGroup = (f: any) => (
+    <div key={f.id} className="py-4">
+      <p className="text-sm font-medium text-slate-800 mb-3">{f.label} {f.required && <span className="text-red-500">*</span>}</p>
       <div className="flex flex-wrap gap-6 sm:gap-12 pl-2">
         {['5', '4', '3', '2', '1'].map(grade => (
-          <label key={grade} className="flex items-center gap-2 cursor-pointer transition-colors hover:text-blue-600">
-            <input type="radio" className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500 cursor-pointer" name={label} value={grade} checked={value === grade} onChange={(e) => setter(e.target.value)} />
-            <span className="text-sm">{grade}</span>
+          <label key={grade} className="flex items-center gap-2 cursor-pointer transition-colors hover:text-indigo-600">
+            <input type="radio" className="w-4 h-4 text-indigo-600 border-slate-300 focus:ring-indigo-500 cursor-pointer" 
+              name={f.id} 
+              value={grade} 
+              checked={formData[f.id] === grade} 
+              onChange={(e) => updateForm(f.id, e.target.value)} 
+            />
+            <span className="text-sm font-bold text-slate-700">{grade}</span>
           </label>
         ))}
       </div>
@@ -253,131 +284,101 @@ export function FeedbackForm() {
   );
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6 pb-12">
+    <div className="max-w-3xl mx-auto space-y-6 pb-12 animate-in fade-in duration-500 font-sans">
       <div className="text-center mb-8">
-        <h1 className="text-2xl font-black text-slate-900 uppercase tracking-widest">COURSE EVALUATION QUESTIONNAIRE</h1>
-        <p className="text-slate-500 text-sm mt-1">課程問卷</p>
+        <h1 className="text-2xl font-black text-slate-900 tracking-tight">{template.title}</h1>
+        <p className="text-slate-500 text-sm mt-2">{template.description}</p>
       </div>
       
-      <Card className="border-t-4 border-t-blue-600 shadow-md">
+      {/* Required Course Metadata Block */}
+      <Card className="border-t-4 border-t-indigo-600 shadow-md">
         <CardHeader className="bg-slate-50 border-b border-slate-100 pb-4">
-          <CardTitle className="text-lg uppercase tracking-wider text-slate-800">GENERAL INFORMATION 基本資料：</CardTitle>
-          <CardDescription>Fields marked with an * are required.<br/>* 號標記的欄位必須填寫。</CardDescription>
+          <CardTitle className="text-xs font-black uppercase tracking-wider text-slate-500">GENERAL INFORMATION</CardTitle>
+          <CardDescription className="text-xs font-medium">Auto-filled data regarding the current session</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 pt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
              <div className="space-y-2">
-               <label className="text-sm font-bold text-slate-700">Course Name 課程名稱 *</label>
-               <Input value={courseName || 'Loading...'} readOnly className="bg-slate-50 font-medium text-slate-600" />
+               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Course Name</label>
+               <Input value={courseName || 'Loading...'} readOnly className="bg-slate-50 font-bold text-slate-700 border-slate-200" />
              </div>
-             
              <div className="space-y-2">
-               <label className="text-sm font-bold text-slate-700">Date 日期 :</label>
-               <Input value={getHkDateString()} readOnly className="bg-slate-50 font-medium text-slate-600" />
+               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Instructor</label>
+               <Input value={trainerName} readOnly className="bg-slate-50 font-bold text-slate-700 border-slate-200" />
              </div>
-             
              <div className="space-y-2 md:col-span-2">
-               <label className="text-sm font-bold text-slate-700">Instructor 課程導師 *</label>
-               <Input value={trainerName} readOnly className="bg-slate-50 font-medium text-slate-600 text-sm" />
-             </div>
-             
-             <div className="space-y-2">
-               <label className="text-sm font-bold text-slate-700">Student Name 學生姓名 *</label>
-               <Input value={studentName} onChange={e => setStudentName(e.target.value)} />
-             </div>
-             
-             <div className="space-y-2">
-               <label className="text-sm font-bold text-slate-700">Email 電郵地址 *</label>
-               <Input type="email" value={studentEmail} onChange={e => setStudentEmail(e.target.value)} />
-             </div>
-             
-             <div className="space-y-2 md:col-span-2">
-               <label className="text-sm font-bold text-slate-700">Company Name 機構名稱 *</label>
-               <Input value={companyName} onChange={e => setCompanyName(e.target.value)} />
+               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Date</label>
+               <Input value={getHkDateString()} readOnly className="bg-slate-50 font-bold text-slate-700 border-slate-200" />
              </div>
           </div>
         </CardContent>
       </Card>
 
-      <Card className="shadow-md">
-        <CardHeader className="bg-indigo-50 border-b border-indigo-100 pb-4">
-           <CardTitle className="text-lg uppercase tracking-wider text-slate-800">PART A 第一部分 - COURSE EVALUATION 課程評分：</CardTitle>
-           <CardDescription className="text-slate-600">Please rate the course according to the following dimensions by checking the appropriate boxes.<br/>請作出對此課程的評分，根據以下項目填上適當意見。<br/><span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 mt-2 inline-block rounded font-mono">(Highest 最高:5; Lowest 最低:1)</span></CardDescription>
-        </CardHeader>
-        <CardContent className="pt-6 divide-y divide-slate-100">
-           {renderRadioGroup("Content of the course 內容:", contentScore, setContentScore)}
-           {renderRadioGroup("Level of the course 程度:", levelScore, setLevelScore)}
-           {renderRadioGroup("Course material usefulness 教材 :", materialsScore, setMaterialsScore)}
-           {renderRadioGroup("Teaching aids, facilities & environment 設施 :", facilitiesScore, setFacilitiesScore)}
-           {renderRadioGroup("Adequacy of practice/exercise 練習 :", practiceScore, setPracticeScore)}
-           {renderRadioGroup("Job applicability / usefulness 實用 :", jobApplicabilityScore, setJobApplicabilityScore)}
-           {renderRadioGroup("OVERALL 整體評分 :", overallCourseScore, setOverallCourseScore)}
-           
-           <div className="py-4 space-y-2">
-               <label className="text-sm font-medium text-slate-800 block mb-2">What topic(s) did you find most useful and interesting? 你對哪些課題最有興趣?</label>
-               <textarea value={usefulTopics} onChange={e => setUsefulTopics(e.target.value)} className="w-full h-24 border border-slate-200 rounded-md p-3 text-sm focus:ring-2 focus:ring-blue-600 outline-none resize-none" />
-           </div>
-           
-           <div className="py-4 space-y-2">
-               <label className="text-sm font-medium text-slate-800 block mb-2">What topic(s) did you find least useful and interesting? 你認為哪些課題較沉悶?</label>
-               <textarea value={leastUsefulTopics} onChange={e => setLeastUsefulTopics(e.target.value)} className="w-full h-24 border border-slate-200 rounded-md p-3 text-sm focus:ring-2 focus:ring-blue-600 outline-none resize-none" />
-           </div>
-           
-           <div className="py-4 space-y-2">
-               <label className="text-sm font-medium text-slate-800 block mb-2">Did the course meet the course objective? If not, why? 你認為此課程能達到課程目標? 如果未能，請列出原因。</label>
-               <textarea value={meetObjective} onChange={e => setMeetObjective(e.target.value)} className="w-full h-24 border border-slate-200 rounded-md p-3 text-sm focus:ring-2 focus:ring-blue-600 outline-none resize-none" />
-           </div>
+      {/* Dynamic Fields */}
+      <Card className="shadow-md border-none">
+        <CardContent className="p-0">
+          <div className="divide-y divide-slate-100">
+            {template.fields.map((f: any) => {
+               if (f.type === 'rating') {
+                  return (
+                    <div className="p-6 md:p-8 bg-white hover:bg-slate-50/50 transition-colors" key={f.id}>
+                       {renderRadioGroup(f)}
+                    </div>
+                  );
+               } else if (f.type === 'textarea') {
+                  return (
+                    <div className="p-6 md:p-8 bg-white hover:bg-slate-50/50 transition-colors" key={f.id}>
+                       <label className="text-sm font-medium text-slate-800 block mb-2">{f.label} {f.required && <span className="text-red-500">*</span>}</label>
+                       <textarea 
+                         value={formData[f.id] || ''} 
+                         onChange={e => updateForm(f.id, e.target.value)} 
+                         className="w-full h-24 border border-slate-200 rounded-md p-3 text-sm focus:ring-2 focus:ring-indigo-600 outline-none resize-none font-medium text-slate-700 bg-white" 
+                       />
+                    </div>
+                  );
+               } else {
+                  const isReadOnly = ['studentName', 'studentEmail', 'companyName'].includes(f.id);
+                  return (
+                    <div className="p-6 md:p-8 bg-white hover:bg-slate-50/50 transition-colors" key={f.id}>
+                       <label className="text-sm font-medium text-slate-800 block mb-2">{f.label} {f.required && <span className="text-red-500">*</span>}</label>
+                       <Input 
+                         value={formData[f.id] || ''} 
+                         onChange={e => { if (!isReadOnly) updateForm(f.id, e.target.value); }} 
+                         readOnly={isReadOnly}
+                         className={`w-full h-10 border-slate-200 text-sm font-medium text-slate-700 max-w-sm ${isReadOnly ? 'bg-slate-50 opacity-70 cursor-not-allowed' : 'bg-white'}`} 
+                       />
+                    </div>
+                  );
+               }
+            })}
+          </div>
         </CardContent>
       </Card>
-      
-      <Card className="shadow-md">
-        <CardHeader className="bg-emerald-50 border-b border-emerald-100 pb-4">
-           <CardTitle className="text-lg uppercase tracking-wider text-slate-800">PART B 第二部分 - TRAINER(S) EVALUATION 對導師評分：</CardTitle>
-           <CardDescription className="text-slate-600">Please rate the trainer's performance according to the following dimensions.<br/>請作出對導師的評分，根據以下項目填上適當意見。<br/><span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 mt-2 inline-block rounded font-mono">(Highest 最高:5; Lowest 最低:1)</span></CardDescription>
-        </CardHeader>
-        <CardContent className="pt-6 divide-y divide-slate-100">
-           {renderRadioGroup("Knowledge of the subject 科目的認識:", tutorKnowledgeScore, setTutorKnowledgeScore)}
-           {renderRadioGroup("Organization & Logic 教學編排:", tutorOrganizationScore, setTutorOrganizationScore)}
-           {renderRadioGroup("Presentation & communication skills 表達技巧 :", tutorPresentationScore, setTutorPresentationScore)}
-           {renderRadioGroup("Individual attention given 對學生的照顧 :", tutorAttentionScore, setTutorAttentionScore)}
-           {renderRadioGroup("OVERALL 整體評分 :", overallTutorScore, setOverallTutorScore)}
-        </CardContent>
-      </Card>
-      
-      <Card className="shadow-md">
-        <CardHeader className="bg-amber-50 border-b border-amber-100 pb-4">
-           <CardTitle className="text-lg uppercase tracking-wider text-slate-800">PART C 第三部分 - ANY OTHER COMMENTS 其他意見：</CardTitle>
-        </CardHeader>
-        <CardContent className="pt-6 space-y-6">
-           <textarea 
-             value={comments} 
-             onChange={e => setComments(e.target.value)} 
-             placeholder="Comments" 
-             className="flex min-h-[120px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 resize-none"
-           />
-           
-           <label className="flex items-start gap-3 p-4 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100 transition-colors">
-              <input type="checkbox" checked={marketingConsent} onChange={e => setMarketingConsent(e.target.checked)} className="mt-1 w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer" />
+
+      <Card className="shadow-none border border-slate-200 bg-transparent">
+        <CardContent className="p-6">
+           <label className="flex items-start gap-4 p-4 bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 transition-colors shadow-sm">
+              <input type="checkbox" checked={marketingConsent} onChange={e => setMarketingConsent(e.target.checked)} className="mt-1 w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer" />
               <div className="text-sm text-slate-600 leading-relaxed">
-                 <p className="font-semibold text-slate-800">Kenfil Hong Kong Limited may use my comment for marketing purpose.</p>
-                 <p>Please check the box to indicate your consent.</p>
-                 <p className="italic mt-1 text-xs">Note: We assure you that your personal information will be kept confidential and will not be shared with any third party.</p>
+                 <p className="font-bold text-slate-800 mb-1">Marketing Consent</p>
+                 <p className="font-medium">Kenfil Hong Kong Limited may use my comment for marketing purpose. Please check the box to indicate your consent.</p>
+                 <p className="italic mt-2 text-xs text-slate-400">Note: We assure you that your personal information will be kept confidential and will not be shared with any third party.</p>
               </div>
            </label>
            
-           <div className="flex gap-4 pt-4">
-              <Button type="button" variant="outline" className="w-1/3 h-12 text-xs uppercase tracking-wider font-bold" onClick={() => window.location.reload()}>Reset 重新設定</Button>
-              <Button className="w-2/3 gap-2 h-12 text-xs uppercase tracking-wider font-bold bg-blue-600 hover:bg-blue-700 text-white" onClick={handleSubmit} disabled={submitting}>
+           <div className="flex gap-4 pt-6">
+              <Button type="button" variant="outline" className="w-1/3 h-12 text-xs uppercase tracking-wider font-bold shadow-sm" onClick={() => window.location.reload()}>Reset Defaults</Button>
+              <Button className="w-2/3 gap-2 h-12 text-xs uppercase tracking-wider font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md active:scale-[0.98] transition-transform" onClick={handleSubmit} disabled={submitting}>
                 {submitting && <Loader2 className="w-5 h-5 animate-spin"/>}
-                Submit 提交
+                Submit Evaluation
               </Button>
            </div>
         </CardContent>
       </Card>
       
-      <div className="text-center text-xs text-slate-400 py-4">
-         © 2026 Copyright: <strong className="text-slate-500">Kenfil Hong Kong Limited</strong>
+      <div className="text-center text-xs font-medium text-slate-400 py-4">
+         © {new Date().getFullYear()} Copyright: <strong className="text-slate-500 font-bold">Kenfil Hong Kong Limited</strong>
       </div>
     </div>
-  )
+  );
 }

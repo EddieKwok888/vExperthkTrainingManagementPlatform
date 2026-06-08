@@ -34,11 +34,12 @@ import { MyCourses } from './features/student/MyCourses';
 import { FeedbackForm } from './features/feedback/FeedbackForm';
 import { ChatBot } from './components/common/ChatBot';
 import { StudentProfile } from './features/student/StudentProfile';
+import { UserRole } from './types';
 
 // Context for Auth
 interface AuthContextType {
   user: User | null;
-  role: 'student' | 'tutor' | 'admin' | null;
+  role: UserRole | null;
   loading: boolean;
   login: () => void;
   logout: () => void;
@@ -49,7 +50,7 @@ export const AuthContext = createContext<AuthContextType>({
 
 function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [role, setRole] = useState<'student' | 'tutor' | 'admin' | null>(null);
+  const [role, setRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
@@ -81,7 +82,16 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           const userDoc = await getDoc(doc(db, 'users', u.uid));
           if (userDoc.exists()) {
-            setRole(userDoc.data().role);
+            const userData = userDoc.data();
+            if (userData.status === 'inactive' || userData.status === 'suspended') {
+                await signOut(auth);
+                toast.error(`Account is ${userData.status}. Please contact administrator.`);
+                setUser(null);
+                setRole(null);
+                setLoading(false);
+                return;
+            }
+            setRole(userData.role);
           } else {
             // Check if admin bootstrap config exists and bypass
             const adminDoc = await getDoc(doc(db, 'admins', u.uid));
@@ -151,7 +161,11 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
         await createUserWithEmailAndPassword(auth, email, password);
       }
     } catch (e: any) {
-      toast.error(e.message);
+      if (e.code === 'auth/email-already-in-use') {
+        toast.error("User with this email already exists.");
+      } else {
+        toast.error(e.message);
+      }
     } finally {
       setAuthLoading(false);
     }
@@ -177,7 +191,11 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const logout = () => signOut(auth);
+  const logout = () => {
+    signOut(auth);
+    setEmail('');
+    setPassword('');
+  };
 
   return (
     <AuthContext.Provider value={{ user, role, loading, login, logout }}>
@@ -322,8 +340,8 @@ function Layout() {
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : user ? (
               <div className="flex items-center gap-6">
                 <div className="flex bg-slate-100 p-1 rounded-md text-xs font-medium">
-                  {role === 'admin' && <Link to="/admin" className="px-3 py-1 bg-white shadow-sm rounded text-blue-600 border border-slate-200">{t('common.admin')}</Link>}
-                  {role === 'tutor' && <Link to="/instructor" className="px-3 py-1 bg-white shadow-sm rounded text-blue-600 border border-slate-200">{t('common.tutor')}</Link>}
+                  {['admin', 'coordinator', 'finance', 'staff'].includes(role || '') && <Link to="/admin" className="px-3 py-1 bg-white shadow-sm rounded text-blue-600 border border-slate-200">{t('common.admin')}</Link>}
+                  {['tutor', 'tutor_pt'].includes(role || '') && <Link to="/instructor" className="px-3 py-1 bg-white shadow-sm rounded text-blue-600 border border-slate-200">{t('common.tutor')}</Link>}
                   {role === 'student' && (
                     <>
                       <Link to="/student/registrations" className="px-3 py-1 hover:bg-white hover:shadow-sm rounded text-slate-600 hover:text-blue-600 transition-all">{t('common.my_courses')}</Link>
@@ -370,7 +388,7 @@ function BookIcon(props: any) {
   )
 }
 
-function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode, allowedRoles: ('admin' | 'tutor' | 'student')[] }) {
+function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode, allowedRoles: UserRole[] }) {
   const { user, role, loading } = useContext(AuthContext);
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin" /></div>;
   if (!user) {
@@ -392,9 +410,9 @@ export default function App() {
             <Route path="course/:id" element={<CourseDetail />} />
             <Route path="register/:id" element={<RegisterCourse />} />
             <Route path="payment-status/:id" element={<PaymentStatus />} />
-            <Route path="admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
-            <Route path="admin/student/:id" element={<ProtectedRoute allowedRoles={['admin']}><StudentProfile /></ProtectedRoute>} />
-            <Route path="instructor" element={<ProtectedRoute allowedRoles={['admin', 'tutor']}><InstructorDashboard /></ProtectedRoute>} />
+            <Route path="admin" element={<ProtectedRoute allowedRoles={['admin', 'coordinator', 'finance', 'staff']}><AdminDashboard /></ProtectedRoute>} />
+            <Route path="admin/student/:id" element={<ProtectedRoute allowedRoles={['admin', 'coordinator', 'staff']}><StudentProfile /></ProtectedRoute>} />
+            <Route path="instructor" element={<ProtectedRoute allowedRoles={['admin', 'coordinator', 'tutor', 'tutor_pt']}><InstructorDashboard /></ProtectedRoute>} />
             <Route path="student/registrations" element={<ProtectedRoute allowedRoles={['admin', 'student']}><MyCourses /></ProtectedRoute>} />
             <Route path="feedback/:id" element={<ProtectedRoute allowedRoles={['admin', 'tutor', 'student']}><FeedbackForm /></ProtectedRoute>} />
           </Route>

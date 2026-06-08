@@ -14,7 +14,7 @@ import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../components/ui/dialog';
-import { MonitorPlay, Loader2, Plus, Database, ExternalLink, LayoutDashboard, BookOpen, Calendar as CalendarIcon, Users, CreditCard, Clock, MessageSquare, CheckCircle, XCircle, Download, FileText, Upload, GraduationCap, BarChart2, BarChart3, TrendingUp, ShieldAlert, Building2, MapPin, CalendarRange, Share2, ArrowLeftRight, ClipboardList, Search, UserPlus, Mail, Phone, Award, ShieldCheck, Briefcase, KeyRound, Copy, Edit2, Trash2, ChevronLeft, ChevronDown, Sparkles, Star, AlertTriangle } from 'lucide-react';
+import { MonitorPlay, Loader2, Plus, Database, ExternalLink, LayoutDashboard, BookOpen, Calendar as CalendarIcon, Users, CreditCard, Clock, MessageSquare, CheckCircle, XCircle, Download, FileText, Upload, GraduationCap, BarChart2, BarChart3, TrendingUp, ShieldAlert, Building2, MapPin, CalendarRange, Share2, ArrowLeftRight, ClipboardList, Search, UserPlus, Mail, Phone, Award, ShieldCheck, Briefcase, KeyRound, Copy, Edit2, Trash2, ChevronLeft, ChevronDown, Sparkles, Star, AlertTriangle, History } from 'lucide-react';
 import { toast } from 'sonner';
 import { jsPDF } from 'jspdf';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
@@ -33,6 +33,7 @@ const LogsTab = React.lazy(() => import('./components/LogsTab').then(m => ({ def
 const PromotionsTab = React.lazy(() => import('./components/PromotionsTab').then(m => ({ default: m.PromotionsTab })));
 import { PROMO_CATEGORIES, PROMO_CATEGORY_MAP } from './components/PromotionsTab';
 const SettingsTab = React.lazy(() => import('./components/SettingsTab').then(m => ({ default: m.SettingsTab })));
+const FeedbackTemplateTab = React.lazy(() => import('./components/FeedbackTemplateTab').then(m => ({ default: m.FeedbackTemplateTab })));
 const FeedbackTab = React.lazy(() => import('./components/FeedbackTab').then(m => ({ default: m.FeedbackTab })));
 const CoursesTab = React.lazy(() => import('./components/CoursesTab').then(m => ({ default: m.CoursesTab })));
 const TutorsTab = React.lazy(() => import('./components/TutorsTab').then(m => ({ default: m.TutorsTab })));
@@ -148,6 +149,7 @@ export function AdminDashboard() {
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [isUserViewModalOpen, setIsUserViewModalOpen] = useState(false);
   const [isDeleteUserModalOpen, setIsDeleteUserModalOpen] = useState(false);
+  const [adminPasswordForDelete, setAdminPasswordForDelete] = useState('');
   const [userToDelete, setUserToDelete] = useState<any>(null);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [userForm, setUserForm] = useState<Partial<User> & { password?: string }>({
@@ -165,7 +167,6 @@ export function AdminDashboard() {
   const [runsEndDate, setRunsEndDate] = useState('');
 
   const [sessionCertSearchTerm, setSessionCertSearchTerm] = useState('');
-  const [showCompletedSessionCerts, setShowCompletedSessionCerts] = useState(false);
   const [sessionCertsStartDate, setSessionCertsStartDate] = useState('');
   const [sessionCertsEndDate, setSessionCertsEndDate] = useState('');
 
@@ -181,6 +182,7 @@ export function AdminDashboard() {
   const [selectedSessionCert, setSelectedSessionCert] = useState<any>(null);
   const [sessionStudentsData, setSessionStudentsData] = useState<any[]>([]);
   const [isCertLoading, setIsCertLoading] = useState(false);
+  const [pastDaysToShow, setPastDaysToShow] = useState(0);
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortConfig, setSortConfig] = useState<{ key: keyof User; direction: 'asc' | 'desc' }>({ key: 'name', direction: 'asc' });
@@ -229,14 +231,14 @@ export function AdminDashboard() {
   const [promoCategoryFilter, setPromoCategoryFilter] = useState('all');
 
   // Permissions & Granular Access Control States
-  const [selectedAccessRole, setSelectedAccessRole] = useState('ops_manager');
-  const [simulatedRole, setSimulatedRole] = useState('ops_manager');
+  const [selectedAccessRole, setSelectedAccessRole] = useState('admin');
+  const [simulatedRole, setSimulatedRole] = useState('admin');
   const [activeAccessSection, setActiveAccessSection] = useState<'matrix' | 'details' | 'sim' | 'docs'>('matrix');
   const [customRolePermissions, setCustomRolePermissions] = useState<any[]>([
     {
       roleId: 'admin',
       name: 'Super Admin',
-      desc: 'Full authorization. Controls system configuration, backups, high-level approvals, and staff permissions.',
+      desc: '超級管理員 - 可以看到所有東西。擁有最高權限，控制系統設定、備份及所有權限分配。',
       maxAuthAmount: 'Unlimited',
       restrictions: 'None',
       permissions: {
@@ -254,51 +256,51 @@ export function AdminDashboard() {
       }
     },
     {
-      roleId: 'ops_manager',
-      name: 'Operations Manager',
-      desc: 'Manages core course setups, scheduling, teacher allocations, syllabus templates, and staff coordinate checks.',
-      maxAuthAmount: 'HKD 50,000 / tx',
-      restrictions: 'Restricted from core config like updating billing prefixes or admin passwords.',
+      roleId: 'coordinator',
+      name: 'Course Coordinator',
+      desc: '課程統籌 - 負責課程管理、排堂排師、處理證書及學生名單，無法存取財務報表或系統設定。',
+      maxAuthAmount: 'N/A',
+      restrictions: 'Restricted from managing finance, deleting users, or viewing system audit logs.',
       permissions: {
-        overview: 'full',
+        overview: 'view',
         courses: 'full',
         sessions: 'full',
-        finance: 'view',
+        finance: 'none',
         certificates: 'full',
         scheduling: 'full',
-        tutors: 'full',
+        tutors: 'view',
         feedback: 'full',
-        logs: 'view',
+        logs: 'none',
         promotions: 'full',
-        settings: 'none'
+        settings: 'full'
       }
     },
     {
-      roleId: 'finance_staff',
-      name: 'Finance Specialist',
-      desc: 'Handles fee collection, processes tutor payroll, audits classroom expenses, and reconciles school ledger entries.',
+      roleId: 'finance',
+      name: 'Finance',
+      desc: '會計 - 處理財務報表、付款設定及電子收據。無法管理課程、學生或排期。',
       maxAuthAmount: 'Unlimited (Finance only)',
-      restrictions: 'Restricted from managing course runs, attendance tracking, scheduling, or certificate issuance.',
+      restrictions: 'Restricted from managing courses, schedules, evaluating feedback, or issuing certificates.',
       permissions: {
         overview: 'view',
         courses: 'none',
-        sessions: 'view',
+        sessions: 'none',
         finance: 'full',
         certificates: 'none',
         scheduling: 'none',
-        tutors: 'view',
+        tutors: 'none',
         feedback: 'none',
         logs: 'view',
-        promotions: 'view',
+        promotions: 'none',
         settings: 'none'
       }
     },
     {
-      roleId: 'instructor_ft',
-      name: 'Senior Instructor (FT)',
-      desc: 'Standard full-time lecturer. Writes and views system syllabuses and carries out class session management.',
-      maxAuthAmount: 'N/A',
-      restrictions: 'Cannot view financial ledgers outside of assigned students, or hourly rates of other instructors.',
+      roleId: 'staff',
+      name: 'Staff (Other)',
+      desc: '一般職員 - 處理基本查詢及客服。',
+      maxAuthAmount: 'HKD 2,000 / tx',
+      restrictions: 'Restricted from system settings, high-level finance, and course creations.',
       permissions: {
         overview: 'none',
         courses: 'view',
@@ -307,47 +309,7 @@ export function AdminDashboard() {
         certificates: 'view',
         scheduling: 'view',
         tutors: 'view',
-        feedback: 'full',
-        logs: 'none',
-        promotions: 'none',
-        settings: 'none'
-      }
-    },
-    {
-      roleId: 'instructor_pt',
-      name: 'Part-Time Tutor',
-      desc: 'Hourly pay teacher. Read-only schedules, can take attendance and report hours within 24h of class window.',
-      maxAuthAmount: 'N/A',
-      restrictions: 'Restricted to personal teaching schedule, class attendance sheet, and individual self-claims only.',
-      permissions: {
-        overview: 'none',
-        courses: 'none',
-        sessions: 'none',
-        finance: 'none',
-        certificates: 'none',
-        scheduling: 'view',
-        tutors: 'none',
         feedback: 'view',
-        logs: 'none',
-        promotions: 'none',
-        settings: 'none'
-      }
-    },
-    {
-      roleId: 'cs_staff',
-      name: 'Customer Support / Front Desk',
-      desc: 'Handles student registrations, processes course session queries, and manages certificate disbursements.',
-      maxAuthAmount: 'HKD 2,000 / tx',
-      restrictions: 'Restricted from re-assigning instructors, deleting historical records, or viewing tutor salaries.',
-      permissions: {
-        overview: 'none',
-        courses: 'view',
-        sessions: 'view',
-        finance: 'view',
-        certificates: 'full',
-        scheduling: 'view',
-        tutors: 'view',
-        feedback: 'full',
         logs: 'none',
         promotions: 'view',
         settings: 'none'
@@ -576,10 +538,10 @@ export function AdminDashboard() {
   };
 
   useEffect(() => {
-    if (role === 'admin') fetchData(false);
+    if (['admin', 'coordinator', 'finance', 'staff'].includes(role || '')) fetchData(false);
   }, [role]);
 
-  // New Session Form State
+  // New Course Form State
   const [newSession, setNewSession] = useState({
     courseId: '',
     tutorId: '',
@@ -635,7 +597,7 @@ export function AdminDashboard() {
       const sessionRef = doc(collection(db, 'course_sessions'));
       await setDoc(sessionRef, sessionData);
       await logAudit(user?.uid || 'admin', user?.email || 'admin', 'CREATE_SESSION', 'course_sessions', sessionRef.id, sessionData);
-      toast.success("Session created!");
+      toast.success("Course created!");
       setSessionCreationModalOpen(false);
       setSelectedTemplateForIntake(null);
       setNewSession({
@@ -745,7 +707,7 @@ export function AdminDashboard() {
         sessionStatus: updates.sessionStatus || 'open',
         updatedAt: serverTimestamp()
       });
-      toast.success("Session updated successfully");
+      toast.success("Course updated successfully");
       setSessionModalOpen(false);
       fetchData();
     } catch (e: any) {
@@ -850,7 +812,7 @@ export function AdminDashboard() {
         await batch.commit();
       }
       
-      toast.success("Session duplicated successfully!");
+      toast.success("Course duplicated successfully!");
       fetchData();
     } catch(e: any) { toast.error(e.message); }
   };
@@ -1077,7 +1039,11 @@ export function AdminDashboard() {
       setUserForm({ role: 'student', status: 'active' });
       fetchData();
     } catch (e: any) {
-      toast.error(e.message);
+      if (e.code === 'auth/email-already-in-use') {
+        toast.error("User with this email already exists in the system.");
+      } else {
+        toast.error(e.message);
+      }
     } finally {
       if (tempApp) {
         await deleteApp(tempApp);
@@ -1093,18 +1059,38 @@ export function AdminDashboard() {
       toast.error("Administrators cannot be deleted.");
       setIsDeleteUserModalOpen(false);
       setUserToDelete(null);
+      setAdminPasswordForDelete('');
       return;
     }
 
+    if (!adminPasswordForDelete) {
+      toast.error("Please enter your admin password to confirm deletion.");
+      return;
+    }
+
+    let tempApp;
+    setLoading(true);
+
     try {
+      if (!user?.email) throw new Error("Admin email not found");
+      tempApp = initializeApp(app.options, "SecondaryApp_Delete_" + Date.now());
+      const tempAuth = getAuth(tempApp);
+      await signInWithEmailAndPassword(tempAuth, user.email, adminPasswordForDelete);
+      
       await deleteDoc(doc(db, 'users', userToDelete.id));
       await logAudit(user?.uid || 'admin', user?.email || 'admin', 'DELETE_USER', 'users', userToDelete.id, {});
       toast.success("User deleted successfully");
       setIsDeleteUserModalOpen(false);
       setUserToDelete(null);
+      setAdminPasswordForDelete('');
       fetchData();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Invalid password or deletion failed: " + e.message);
+    } finally {
+      if (tempApp) {
+        await deleteApp(tempApp);
+      }
+      setLoading(false);
     }
   };
 
@@ -1112,8 +1098,13 @@ export function AdminDashboard() {
     e.preventDefault();
     if (!selectedUser) return;
     
-    if (selectedUser.email === 'system.admin@vexperthk.com' && userForm.status !== 'active') {
+    if ((selectedUser.email === 'system.admin@vexperthk.com' || selectedUser.role === 'admin') && userForm.status !== 'active') {
       toast.error("Administrators cannot be deactivated");
+      return;
+    }
+
+    if ((selectedUser.role === 'admin' || selectedUser.email === 'system.admin@vexperthk.com') && userForm.role !== 'admin') {
+      toast.error("Administrator role cannot be changed");
       return;
     }
 
@@ -1124,9 +1115,9 @@ export function AdminDashboard() {
         phone: userForm.phone || '',
         company: userForm.company || '',
         qualifiedCategories: userForm.role === 'tutor' || userForm.role === 'tutor_pt' ? (userForm.qualifiedCategories || []) : [],
-        status: selectedUser.email === 'system.admin@vexperthk.com' ? 'active' : userForm.status,
+        status: (selectedUser.email === 'system.admin@vexperthk.com' || selectedUser.role === 'admin') ? 'active' : userForm.status,
         remarks: userForm.remarks || '',
-        role: userForm.role,
+        role: (selectedUser.email === 'system.admin@vexperthk.com' || selectedUser.role === 'admin') ? 'admin' : userForm.role,
       };
       
       await updateDoc(doc(db, 'users', selectedUser.id), updates);
@@ -1233,93 +1224,171 @@ export function AdminDashboard() {
   };
 
   const handleExportAttendanceSheet = (session: any, course: any, enrolledStudents: any[]) => {
-    const doc = new jsPDF();
+    const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
     const date = formatHkDate(new Date());
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 15;
+    const contentWidth = pageWidth - margin * 2;
     
     // Header
     if (schoolInfo.logo_url && schoolInfo.logo_url.startsWith('data:image')) {
       try {
-        doc.addImage(schoolInfo.logo_url, 'PNG', 20, 10, 15, 15);
+        doc.addImage(schoolInfo.logo_url, 'PNG', margin, 10, 15, 15);
       } catch (e) {
         // Fallback
       }
     }
     doc.setFontSize(22);
     doc.setTextColor(30, 41, 59);
-    doc.text('CLASS ATTENDANCE SHEET', 105, 20, { align: 'center' });
+    doc.text('CLASS ATTENDANCE SHEET', pageWidth / 2, 20, { align: 'center' });
     
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text(`Generated on: ${date}`, 190, 25, { align: 'right' });
+    doc.text(`Generated on: ${date}`, pageWidth - margin, 20, { align: 'right' });
     
-    // Course Info Box
-    doc.setDrawColor(226, 232, 240);
-    doc.setFillColor(248, 250, 252);
-    doc.rect(20, 35, 170, 30, 'F');
-    doc.rect(20, 35, 170, 30);
-    
-    const sessionLessons = lessons.filter(l => l.sessionId === session.id);
-    const displayStartTime = sessionLessons.length > 0 && sessionLessons[0].startTime ? sessionLessons[0].startTime : (session.startTime || 'N/A');
-    const displayEndTime = sessionLessons.length > 0 && sessionLessons[0].endTime ? sessionLessons[0].endTime : (session.endTime || 'N/A');
-    const timeDisplay = `${displayStartTime} - ${displayEndTime}`;
-    
+    const sessionLessons = lessons.filter(l => l.sessionId === session.id || l.session_id === session.id);
+    let courseDates: string[] = [];
+    if (sessionLessons && sessionLessons.length > 0) {
+        const dates = sessionLessons.map(l => l.lessonDate || l.lesson_date).filter(Boolean);
+        courseDates = Array.from(new Set(dates)).sort();
+    }
+    if (courseDates.length === 0) {
+        const start = session.startDate;
+        const end = session.endDate;
+        if (start && end && start !== end) {
+            let current = new Date(start);
+            const endD = new Date(end);
+            while (current <= endD) {
+                courseDates.push(current.toISOString().split('T')[0]);
+                current.setDate(current.getDate() + 1);
+            }
+        } else if (start) {
+            courseDates.push(start);
+        } else {
+            courseDates.push('N/A');
+        }
+    }
+
+    if (courseDates.length === 0) courseDates = ['N/A'];
+
     const instructor = tutors.find(t => t.id === session.tutorId) || tutors.find(t => t.id === course?.tutorId);
     
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(30, 41, 59);
-    doc.text(`Course: ${course?.title || 'Unknown'}`, 25, 45);
-    doc.text(`Session Date: ${session.startDate}`, 25, 52);
     
-    doc.text(`Instructor: ${instructor?.name || 'N/A'}`, 120, 45);
-    doc.text(`Room/Mode: ${session.deliveryMode || session.classroom || 'N/A'}`, 120, 52);
+    const courseText = `Course: ${course?.title || 'Unknown'}`;
+    const splitCourseText = doc.splitTextToSize(courseText, contentWidth / 2 - 10);
+    const textLines = splitCourseText.length;
+    
+    // Base height is 25. For every line beyond 1, add 6 to the height.
+    const boxHeight = 25 + Math.max(0, (textLines - 1) * 6);
+    
+    // Course Info Box
+    doc.setDrawColor(226, 232, 240);
+    doc.setFillColor(248, 250, 252);
+    doc.rect(margin, 30, contentWidth, boxHeight, 'F');
+    doc.rect(margin, 30, contentWidth, boxHeight);
+    
+    doc.setTextColor(30, 41, 59);
+    doc.text(splitCourseText, margin + 5, 40);
+    
+    const datesStr = courseDates.length > 3 
+        ? `${courseDates[0]} to ${courseDates[courseDates.length - 1]}`
+        : courseDates.join(', ');
+
+    const sessionDateY = 40 + (textLines * 6); // below course text
+    doc.text(`Course Date: ${datesStr}`, margin + 5, sessionDateY);
+    
+    doc.text(`Instructor: ${instructor?.name || 'N/A'}`, margin + contentWidth / 2 + 10, 40);
+    const roomStr = (session.room || session.classroom || 'N/A').replace(/\s*\(Persons:.*?\)/gi, '');
+    doc.text(`Room: ${roomStr}`, margin + contentWidth / 2 + 10, 47);
     
     // Table Header
-    const tableTop = 75;
-    doc.setFillColor(241, 245, 249);
-    doc.rect(20, tableTop, 170, 10, 'F');
-    doc.rect(20, tableTop, 170, 10);
-    doc.line(85, tableTop, 85, tableTop + 10);
-    doc.line(135, tableTop, 135, tableTop + 10);
+    const tableTop = 30 + boxHeight + 10;
     
-    doc.setFontSize(10);
-    doc.text('Student Name', 25, tableTop + 6.5);
-    doc.text('Signature (Morning)', 90, tableTop + 6.5);
-    doc.text('Signature (Afternoon)', 140, tableTop + 6.5);
+    // Columns Layout
+    const nameColWidth = 50; 
+    const dateSectionWidth = contentWidth - nameColWidth;
+    const singleDateWidth = dateSectionWidth / courseDates.length;
+
+    // Redraw Header Helper
+    const drawHeader = (startY: number) => {
+        doc.setFillColor(241, 245, 249);
+        doc.setDrawColor(226, 232, 240);
+        // Header height mapping
+        doc.rect(margin, startY, contentWidth, 14, 'F');
+        doc.rect(margin, startY, contentWidth, 14);
+        
+        // Name Col line
+        doc.line(margin + nameColWidth, startY, margin + nameColWidth, startY + 14);
+        
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(30, 41, 59);
+        doc.text('Student Name', margin + 5, startY + 9);
+        
+        // Date Columns
+        courseDates.forEach((d, idx) => {
+            const dateStartX = margin + nameColWidth + (idx * singleDateWidth);
+            if (idx > 0) {
+                // Divider between dates
+                doc.line(dateStartX, startY, dateStartX, startY + 14);
+            }
+            // Date title centered
+            doc.text(d, dateStartX + singleDateWidth / 2, startY + 6, { align: 'center' });
+            
+            // Middle divider for AM/PM
+            const amPmY = startY + 8;
+            doc.line(dateStartX, amPmY, dateStartX + singleDateWidth, amPmY);
+            doc.line(dateStartX + singleDateWidth / 2, amPmY, dateStartX + singleDateWidth / 2, startY + 14);
+            
+            doc.setFontSize(8);
+            doc.text('AM', dateStartX + singleDateWidth / 4, startY + 12, { align: 'center' });
+            doc.text('PM', dateStartX + (singleDateWidth * 3) / 4, startY + 12, { align: 'center' });
+            doc.setFontSize(10);
+        });
+    };
+
+    drawHeader(tableTop);
     
     // Table Rows
-    let currentY = tableTop + 10;
+    let currentY = tableTop + 14;
     enrolledStudents.forEach((student) => {
       const rowHeight = 16;
-      if (currentY + rowHeight > 280) {
+      if (currentY + rowHeight > pageHeight - margin) {
         doc.addPage();
-        currentY = 20;
-        // Redraw Header
-        doc.setFillColor(241, 245, 249);
-        doc.rect(20, currentY, 170, 10, 'F');
-        doc.rect(20, currentY, 170, 10);
-        doc.line(85, currentY, 85, currentY + 10);
-        doc.line(135, currentY, 135, currentY + 10);
-        doc.setFontSize(10);
-        doc.text('Student Name', 25, currentY + 6.5);
-        doc.text('Signature (Morning)', 90, currentY + 6.5);
-        doc.text('Signature (Afternoon)', 140, currentY + 6.5);
-        currentY += 10;
+        currentY = margin;
+        drawHeader(currentY);
+        currentY += 14;
       }
       doc.setDrawColor(226, 232, 240);
-      doc.rect(20, currentY, 170, rowHeight);
-      doc.line(85, currentY, 85, currentY + rowHeight);
-      doc.line(135, currentY, 135, currentY + rowHeight);
+      doc.rect(margin, currentY, contentWidth, rowHeight);
+      
+      // Name Col divider
+      doc.line(margin + nameColWidth, currentY, margin + nameColWidth, currentY + rowHeight);
+      
+      // Row dividers
+      courseDates.forEach((d, idx) => {
+            const dateStartX = margin + nameColWidth + (idx * singleDateWidth);
+            if (idx > 0) {
+                doc.line(dateStartX, currentY, dateStartX, currentY + rowHeight);
+            }
+            // AM / PM divider inside the date
+            doc.line(dateStartX + singleDateWidth / 2, currentY, dateStartX + singleDateWidth / 2, currentY + rowHeight);
+      });
       
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10);
-      const name = student.studentName.length > 28 ? student.studentName.substring(0, 28) + '...' : student.studentName;
-      doc.text(name, 25, currentY + 10);
+      const name = student.studentName;
+      // limit max chars
+      const splitName = doc.splitTextToSize(name, nameColWidth - 5);
+      doc.text(splitName[0] + (splitName.length > 1 ? '...' : ''), margin + 5, currentY + 10);
       
       currentY += rowHeight;
     });
     
-    doc.save(`Attendance_${course?.title || 'Course'}_${session.startDate}.pdf`);
+    doc.save(`Attendance_${course?.courseCode || 'Course'}_${session.startDate || 'N/A'}.pdf`);
   };
 
   const handleRescheduleSession = async (sessionId: string, newDate: string, newStart: string) => {
@@ -1328,7 +1397,7 @@ export function AdminDashboard() {
            startDate: newDate,
            startTime: newStart
         });
-        toast.success("Session rescheduled");
+        toast.success("Course rescheduled");
         fetchData();
         setSessionModalOpen(false);
      } catch(e: any) { toast.error(e.message); }
@@ -1524,6 +1593,7 @@ export function AdminDashboard() {
     setSelectedSessionCert(session);
     setIsCertModalOpen(true);
     setIsCertLoading(true);
+    setPastDaysToShow(0);
     try {
       const enrolledStudents = regs.filter(r => r.sessionId === session.id && r.status === 'verified');
       const sessionLessons = lessons.filter(l => l.sessionId === session.id && l.lessonStatus === 'completed');
@@ -1572,14 +1642,31 @@ export function AdminDashboard() {
     }
   };
 
-  const handleToggleAttendanceConfirm = async (regId: string, type: 'am' | 'pm' | 'eve', currentValue: boolean) => {
+  const handleToggleAttendanceConfirm = async (regId: string, date: string, type: 'am' | 'pm' | 'eve', currentValue: boolean) => {
     try {
-      const fieldName = `${type}Confirmed`;
-      await updateDoc(doc(db, 'registrations', regId), { [fieldName]: !currentValue });
-      toast.success(`${type.toUpperCase()} Attendance ${!currentValue ? 'Confirmed' : 'Removed'}`);
+      const fieldPath = `attendanceRecords.${date}.${type}`;
+      await updateDoc(doc(db, 'registrations', regId), { [fieldPath]: !currentValue });
+      toast.success(`${type.toUpperCase()} Attendance for ${date} ${!currentValue ? 'Confirmed' : 'Removed'}`);
       
-      setRegs(prev => prev.map(r => r.id === regId ? { ...r, [fieldName]: !currentValue } : r));
-      setSessionStudentsData(prev => prev.map(s => s.id === regId ? { ...s, [fieldName]: !currentValue } : s));
+      setRegs(prev => prev.map(r => {
+        if (r.id === regId) {
+          const newRecords = { ...(r.attendanceRecords || {}) };
+          if (!newRecords[date]) newRecords[date] = {};
+          newRecords[date][type] = !currentValue;
+          return { ...r, attendanceRecords: newRecords };
+        }
+        return r;
+      }));
+      
+      setSessionStudentsData(prev => prev.map(s => {
+        if (s.id === regId) {
+          const newRecords = { ...(s.attendanceRecords || {}) };
+          if (!newRecords[date]) newRecords[date] = {};
+          newRecords[date][type] = !currentValue;
+          return { ...s, attendanceRecords: newRecords };
+        }
+        return s;
+      }));
     } catch (e: any) {
       toast.error(e.message);
     }
@@ -2015,27 +2102,54 @@ export function AdminDashboard() {
     }
   };
 
-  if (role !== 'admin') return <div className="text-center py-20">Access Denied</div>;
+  const allTabs = [
+    { id: 'overview', label: t('nav.overview'), icon: LayoutDashboard },
+    { id: 'courses', label: 'Templates', icon: BookOpen },
+    { id: 'sessions', label: 'Courses', icon: CalendarIcon },
+    { id: 'certificates', label: t('nav.certificates'), icon: Database },
+    { id: 'scheduling', label: t('nav.scheduling'), icon: CalendarRange },
+    { id: 'tutors', label: t('nav.tutors'), icon: Clock },
+    { id: 'feedback', label: t('nav.feedback'), icon: MessageSquare },
+    { id: 'logs', label: t('nav.logs'), icon: ShieldAlert },
+    { id: 'staff', label: 'Staff Directory', icon: Briefcase },
+    { id: 'students', label: 'Student Directory', icon: Users },
+    { id: 'promotions', label: 'Promotions', icon: Sparkles },
+    { id: 'permissions', label: 'Access Control', icon: ShieldCheck },
+    { id: 'settings', label: t('nav.settings'), icon: Upload },
+    { id: 'finance', label: t('nav.finance'), icon: BarChart2 }
+  ];
+
+  const getAccessibleTabs = () => {
+    if (role === 'admin' || user?.email === 'system.admin@vexperthk.com') return allTabs;
+    if (role === 'coordinator') {
+      return allTabs.filter(t => ['courses', 'sessions', 'certificates', 'scheduling', 'feedback', 'students', 'promotions', 'settings'].includes(t.id));
+    }
+    if (role === 'finance') {
+      return allTabs.filter(t => ['finance'].includes(t.id));
+    }
+    if (role === 'staff') {
+      return allTabs.filter(t => ['sessions', 'students', 'feedback'].includes(t.id));
+    }
+    return [];
+  };
+
+  useEffect(() => {
+    if (!loading && role && activeTab) {
+      const allowed = getAccessibleTabs().map(t => t.id);
+      if (allowed.length > 0 && !allowed.includes(activeTab)) {
+        setActiveTab(allowed[0]);
+      }
+    }
+  }, [role, activeTab, loading]);
+
+  if (role !== 'admin' && role !== 'coordinator' && role !== 'finance' && role !== 'staff') {
+    return <div className="text-center py-20 font-bold text-slate-500">Access Denied: You do not have permission to view the Admin Dashboard.</div>;
+  }
 
   const NavigationMenu = () => (
     <div className="flex flex-col gap-2 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
       <div className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-2 px-2">Menu</div>
-      {[
-        { id: 'overview', label: t('nav.overview'), icon: LayoutDashboard },
-        { id: 'courses', label: 'Templates', icon: BookOpen },
-        { id: 'sessions', label: 'Courses', icon: CalendarIcon },
-        { id: 'finance', label: t('nav.finance'), icon: BarChart2 },
-        { id: 'certificates', label: t('nav.certificates'), icon: Database },
-        { id: 'scheduling', label: t('nav.scheduling'), icon: CalendarRange },
-        { id: 'tutors', label: t('nav.tutors'), icon: Clock },
-        { id: 'feedback', label: t('nav.feedback'), icon: MessageSquare },
-        { id: 'logs', label: t('nav.logs'), icon: ShieldAlert },
-        { id: 'staff', label: 'Staff Directory', icon: Briefcase },
-        { id: 'students', label: 'Student Directory', icon: Users },
-        { id: 'promotions', label: 'Promotions', icon: Sparkles },
-        { id: 'permissions', label: 'Access Control', icon: ShieldCheck },
-        { id: 'settings', label: t('nav.settings'), icon: Upload }
-      ].map(tab => (
+      {getAccessibleTabs().map(tab => (
         <button
           key={tab.id}
           onClick={() => setActiveTab(tab.id)}
@@ -2066,24 +2180,9 @@ export function AdminDashboard() {
         </aside>
         
         {/* Mobile Nav */}
-        <div className="md:hidden overflow-x-auto pb-2">
+          <div className="md:hidden overflow-x-auto pb-2">
            <div className="flex gap-2 min-w-max">
-             {[
-               { id: 'overview', label: t('nav.overview') },
-               { id: 'courses', label: 'Templates' },
-               { id: 'sessions', label: 'Courses' },
-               { id: 'finance', label: t('nav.finance') },
-               { id: 'certificates', label: t('nav.certificates') },
-               { id: 'scheduling', label: t('nav.scheduling') },
-               { id: 'tutors', label: t('nav.tutors') },
-               { id: 'feedback', label: t('nav.feedback') },
-               { id: 'logs', label: t('nav.logs') },
-               { id: 'staff', label: 'Staff' },
-               { id: 'students', label: 'Students' },
-               { id: 'promotions', label: 'Promotions' },
-               { id: 'permissions', label: 'Access Control' },
-               { id: 'settings', label: t('nav.settings') }
-             ].map(tab => (
+             {getAccessibleTabs().map(tab => (
                <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
@@ -2286,7 +2385,7 @@ export function AdminDashboard() {
                             certificates.reduce((acc, cert) => {
                               const reg = regs.find(r => r.id === cert.registrationId);
                               const session = sessions.find(s => s.id === reg?.sessionId);
-                              const sessionLabel = session ? `${session.sessionName} (${session.startDate} to ${session.endDate})` : 'Unknown Session';
+                              const sessionLabel = session ? `${session.sessionName} (${session.startDate} to ${session.endDate})` : 'Unknown Course';
                               
                               const key = `${cert.courseId || "Unknown Course"}_${session?.id || "unknown"}`;
                               if (!acc[key]) acc[key] = { 
@@ -2398,7 +2497,7 @@ export function AdminDashboard() {
                         const activeLessonsToday = lessons.filter(l => (l.lessonDate || l.lesson_date || '') === scheduleDate);
                         
                         const activeSessionsToday = sessions.filter(s => {
-                            if (s.sessionStatus === 'cancelled') return false;
+                            if (s.sessionStatus !== 'confirmed' && s.sessionStatus !== 'full' && s.sessionStatus !== 'completed') return false;
                             const isDailyLesson = activeLessonsToday.some(l => l.sessionId === s.id);
                             if (isDailyLesson) return true;
                             if (!s.startDate || !s.endDate) return false;
@@ -2412,7 +2511,7 @@ export function AdminDashboard() {
                         activeLessonsToday.forEach(l => {
                             const session = sessions.find(s => s.id === l.sessionId || s.id === l.session_id);
                             if (!session) return;
-                            if (session.sessionStatus === 'cancelled') return;
+                            if (session.sessionStatus !== 'confirmed' && session.sessionStatus !== 'full' && session.sessionStatus !== 'completed') return;
                             
                             allSessionsToDisplay.push({
                                 id: l.id,
@@ -2467,9 +2566,9 @@ export function AdminDashboard() {
                                     <div className="bg-blue-600 px-5 py-3 flex items-center justify-between">
                                         <div className="flex items-center gap-2">
                                             <MapPin className="w-4 h-4 text-slate-300" />
-                                            <h3 className="font-black text-white text-sm uppercase tracking-wider">{rName === 'unassigned' ? 'Unassigned Room' : rName}</h3>
+                                            <h3 className="font-black text-white text-sm uppercase tracking-wider">{rName === 'unassigned' ? 'Unassigned Room' : rName.replace(/\s*\(Persons:.*?\)/gi, '')}</h3>
                                         </div>
-                                        <div className="px-2 py-0.5 rounded bg-white/20 text-[10px] font-bold tracking-wider text-white uppercase">{roomItems.length} Sessions</div>
+                                        <div className="px-2 py-0.5 rounded bg-white/20 text-[10px] font-bold tracking-wider text-white uppercase">{roomItems.length} Courses</div>
                                     </div>
                                     <div className="divide-y divide-slate-100 p-2 space-y-2">
                                         {roomItems.map(item => {
@@ -2555,7 +2654,7 @@ export function AdminDashboard() {
                         });
                         
                         const tutorSessions = sessions.filter(s => {
-                          if (s.sessionStatus === 'cancelled') return false;
+                          if (s.sessionStatus !== 'confirmed' && s.sessionStatus !== 'full' && s.sessionStatus !== 'completed') return false;
                           const tid = s.tutorId || s.tutor_id;
                           if (tid !== tutor.id) return false;
                           if (!s.startDate || !s.endDate) return false;
@@ -2582,7 +2681,7 @@ export function AdminDashboard() {
                                     <div key={l.id} className="p-3 bg-indigo-50/50 border border-indigo-100 rounded text-sm">
                                       <div className="font-bold text-indigo-900">{course?.title || session?.sessionName}</div>
                                       <div className="text-xs text-indigo-700 mt-1">{timeDisplay}</div>
-                                      <div className="text-xs text-indigo-500 mt-1 flex items-center gap-1"><MapPin className="w-3 h-3" /> {l.classroom || session?.room || session?.classroom || session?.deliveryMode || 'Room TBC'}</div>
+                                      <div className="text-xs text-indigo-500 mt-1 flex items-center gap-1"><MapPin className="w-3 h-3" /> {(l.classroom || session?.room || session?.classroom || session?.deliveryMode || 'Room TBC').replace(/\s*\(Persons:.*?\)/gi, '')}</div>
                                     </div>
                                   );
                                 })}
@@ -2649,7 +2748,7 @@ export function AdminDashboard() {
                   <CardContent className="pt-0">
                     {(() => {
                       const overlappingSessions = sessions.filter(s => {
-                        if (s.sessionStatus === 'cancelled') return false;
+                        if (s.sessionStatus !== 'confirmed' && s.sessionStatus !== 'full' && s.sessionStatus !== 'completed') return false;
                         const tid = s.tutorId || s.tutor_id;
                         if (scheduleInstructorFilter && tid !== scheduleInstructorFilter) return false;
                         if (!s.startDate || !s.endDate) return false;
@@ -2741,7 +2840,7 @@ export function AdminDashboard() {
                           });
                           
                           const roomSessions = sessions.filter(s => {
-                            if (s.sessionStatus === 'cancelled') return false;
+                            if (s.sessionStatus !== 'confirmed' && s.sessionStatus !== 'full' && s.sessionStatus !== 'completed') return false;
                             const r = s.room || s.classroom || s.deliveryMode;
                             if (r !== roomName) return false;
                             if (!s.startDate || !s.endDate) return false;
@@ -2834,8 +2933,10 @@ export function AdminDashboard() {
                   </CardHeader>
                   <CardContent className="pt-0">
                     {(() => {
+                      const today = new Date().toISOString().split('T')[0];
                       const overlappingSessions = sessions.filter(s => {
-                        if (s.sessionStatus === 'cancelled') return false;
+                        if (s.sessionStatus !== 'confirmed' && s.sessionStatus !== 'full' && s.sessionStatus !== 'completed') return false;
+                        if (s.endDate && s.endDate < today) return false;
                         const r = s.room || s.classroom || s.deliveryMode;
                         if (scheduleRoomFilter && r !== scheduleRoomFilter) return false;
                         if (!s.startDate || !s.endDate) return false;
@@ -2868,7 +2969,7 @@ export function AdminDashboard() {
                                     return (
                                         <div key={roomName} className="mb-8">
                                             <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
-                                                <MapPin className="w-4 h-4 text-emerald-500" /> {roomName === 'unassigned' ? 'Unassigned Room' : roomName} - Active Intakes
+                                                <MapPin className="w-4 h-4 text-emerald-500" /> {roomName === 'unassigned' ? 'Unassigned Room' : roomName.replace(/\s*\(Persons:.*?\)/gi, '')} - Active Intakes
                                             </h3>
                                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                                 {sessionsForRoom.map(s => {
@@ -2928,13 +3029,19 @@ export function AdminDashboard() {
             />
           )}
 
+          {activeTab === 'feedback-template' && (
+            <FeedbackTemplateTab />
+          )}
+
           {activeTab === 'feedback' && (
             <FeedbackTab
               feedbacks={feedbacks}
               courses={courses}
+              sessions={sessions}
               selectedFeedbackCourse={selectedFeedbackCourse}
               setSelectedFeedbackCourse={setSelectedFeedbackCourse}
               handleExportCSV={handleExportCSV}
+              onOpenTemplate={() => setActiveTab('feedback-template')}
             />
           )}
 
@@ -2955,7 +3062,7 @@ export function AdminDashboard() {
                   onClick={() => setCourseRunsActiveTab('attendance')}
                   className="px-6 h-8 text-[11px] font-bold uppercase tracking-wider"
                 >
-                  Sessions & Attendance
+                  Confirmed Course
                 </Button>
               </div>
 
@@ -2988,7 +3095,7 @@ export function AdminDashboard() {
                           <div className="relative w-full sm:w-64">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                             <Input 
-                              placeholder="Search Code, Course Title, Tutor..." 
+                              placeholder="Search Code, Course Title, Instructor..." 
                               className="pl-9 h-8 text-xs focus:ring-blue-500 border-slate-200"
                               value={courseRunSearchTerm}
                               onChange={(e) => setCourseRunSearchTerm(e.target.value)}
@@ -3042,7 +3149,7 @@ export function AdminDashboard() {
                             }} 
                             className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500 cursor-pointer"
                           />
-                          <span className="text-xs font-semibold text-slate-700 select-none">Show Completed Courses</span>
+                          <span className="text-xs font-semibold text-slate-700 select-none">Show Completed / Cancelled</span>
                         </div>
                       </div>
                     </CardHeader>
@@ -3068,8 +3175,8 @@ export function AdminDashboard() {
                                 });
                                 if (hasCertificates) return false;
                                 
-                                // 1. Hide completed runs unless toggled on
-                                if (!showCompletedRuns && s.sessionStatus === 'completed') {
+                                // 1. Hide completed and cancelled runs unless toggled on
+                                if (!showCompletedRuns && (s.sessionStatus === 'completed' || s.sessionStatus === 'cancelled')) {
                                     return false;
                                 }
 
@@ -3094,27 +3201,35 @@ export function AdminDashboard() {
                                     return matchCourseCode || matchSessionName || matchCourseTitle || matchInstructor || matchStatus;
                                 }
                                 return true;
+                            }).sort((a, b) => {
+                              const isAConf = a.sessionStatus === 'confirmed';
+                              const isBConf = b.sessionStatus === 'confirmed';
+                              if (isAConf && !isBConf) return -1;
+                              if (!isAConf && isBConf) return 1;
+                              const dateA = a.startDate || '9999-12-31';
+                              const dateB = b.startDate || '9999-12-31';
+                              return dateA.localeCompare(dateB);
                             }).map(s => {
                               const course = courses.find(c => c.id === s.courseId);
                               const instructor = tutors.find(t => t.id === s.tutorId);
                               return (
                                 <TableRow key={s.id} className="hover:bg-slate-50/50">
                                   <TableCell>
-                                    <div className="font-semibold text-slate-800 whitespace-pre-wrap leading-snug">{course?.courseCode || s.sessionName}</div>
+                                    <div className="font-semibold text-slate-800 whitespace-normal break-words max-w-[200px] leading-snug">{course?.courseCode || s.sessionName}</div>
                                     <div className="text-[10px] uppercase font-bold text-slate-400 mt-0.5">
                                       {s.startDate || 'No date'} - {s.endDate || 'No date'}
                                     </div>
                                   </TableCell>
-                                  <TableCell className="text-xs whitespace-pre-wrap max-w-[200px] leading-tight">{course?.title || 'Unknown'}</TableCell>
+                                  <TableCell className="text-xs whitespace-normal break-words max-w-[250px] leading-tight">{course?.title || 'Unknown'}</TableCell>
                                   <TableCell className="text-xs font-medium">{instructor?.name || 'Unassigned'}</TableCell>
                                   <TableCell>
                                     <div className="flex flex-col gap-1 items-start">
                                       <span className="bg-slate-100 px-2 py-0.5 rounded uppercase font-black text-[10px] tracking-tight text-slate-600">
-                                        {s.deliveryMode || 'N/A'}
+                                        {s.deliveryMode === 'onsite' ? 'ClassRoom' : s.deliveryMode === 'online' ? 'Online' : s.deliveryMode === 'hybrid' ? 'Hybrid' : (s.deliveryMode || 'N/A')}
                                       </span>
                                       {s.room && (
                                         <span className="text-[10px] font-bold text-blue-600 flex items-center gap-1">
-                                          <MapPin className="w-3 h-3" /> {s.room}
+                                          <MapPin className="w-3 h-3" /> Room: {s.room.replace(/\s*\(Persons:.*?\)/gi, '')}
                                         </span>
                                       )}
                                     </div>
@@ -3140,7 +3255,7 @@ export function AdminDashboard() {
                                   <TableCell className="text-right">
                                     <div className="flex justify-end gap-1">
                                       <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-blue-600" title="Edit" onClick={() => { setSelectedSession(s); setSessionModalOpen(true); }}><Edit2 className="w-3.5 h-3.5" /></Button>
-                                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-300 hover:text-red-600" title="Delete" onClick={() => confirmDelete(s.id, 'session', s.sessionName || 'Unknown Session')}>
+                                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-300 hover:text-red-600" title="Delete" onClick={() => confirmDelete(s.id, 'session', s.sessionName || 'Unknown Course')}>
                                         <Trash2 className="w-3.5 h-3.5" />
                                       </Button>
                                     </div>
@@ -3297,13 +3412,13 @@ export function AdminDashboard() {
                 <CardHeader className="flex flex-col gap-4 border-b border-slate-100 bg-slate-50/50">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                     <div>
-                      <CardTitle className="text-lg font-black text-slate-800 tracking-tight">Session Certificates</CardTitle>
+                      <CardTitle className="text-lg font-black text-slate-800 tracking-tight">Confirmed Course</CardTitle>
                       <CardDescription className="text-xs font-medium text-slate-500">Manage attendance sheets and issue certificates by course intake</CardDescription>
                     </div>
                     <div className="relative w-full sm:w-64">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                       <Input 
-                        placeholder="Search Code, Course Title, Session Name..." 
+                        placeholder="Search Code, Course Title, Course Name..." 
                         className="pl-9 h-8 text-xs focus:ring-indigo-500 border-slate-200 bg-white"
                         value={sessionCertSearchTerm}
                         onChange={(e) => setSessionCertSearchTerm(e.target.value)}
@@ -3343,26 +3458,13 @@ export function AdminDashboard() {
                         </Button>
                       )}
                     </div>
-
-                    <div className="flex items-center gap-2 bg-white border border-slate-200 hover:border-slate-300 transition-all rounded-lg px-3 py-1.5 cursor-pointer" onClick={() => setShowCompletedSessionCerts(!showCompletedSessionCerts)}>
-                      <input 
-                        type="checkbox" 
-                        checked={showCompletedSessionCerts} 
-                        onChange={(e) => {
-                          e.stopPropagation();
-                          setShowCompletedSessionCerts(e.target.checked);
-                        }} 
-                        className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
-                      />
-                      <span className="text-xs font-semibold text-slate-700 select-none">Show Completed</span>
-                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
                   <Table>
                     <TableHeader className="bg-slate-50/50">
                       <TableRow className="hover:bg-transparent border-slate-100">
-                        <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Course / Session</TableHead>
+                        <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Course / Intake</TableHead>
                         <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Dates</TableHead>
                         <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Enrollees</TableHead>
                         <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status</TableHead>
@@ -3371,8 +3473,8 @@ export function AdminDashboard() {
                     </TableHeader>
                     <TableBody>
                       {sessions.filter(s => {
-                        // 1. Hide completed session certs unless toggled on
-                        if (!showCompletedSessionCerts && s.sessionStatus === 'completed') {
+                        // 1. Only show confirmed/full sessions
+                        if (s.sessionStatus !== 'full' && s.sessionStatus !== 'confirmed') {
                           return false;
                         }
 
@@ -3395,6 +3497,10 @@ export function AdminDashboard() {
                         }
 
                         return true;
+                      }).sort((a, b) => {
+                        const dateA = a.startDate || '9999-12-31';
+                        const dateB = b.startDate || '9999-12-31';
+                        return dateA.localeCompare(dateB);
                       }).map(s => {
                         const course = courses.find(c => c.id === s.courseId);
                         const sessionRegs = regs.filter(r => r.sessionId === s.id && r.status === 'verified');
@@ -3402,8 +3508,8 @@ export function AdminDashboard() {
                         return (
                           <TableRow key={s.id} className="group border-slate-50 hover:bg-slate-50/50 transition-colors">
                             <TableCell className="px-6 py-4">
-                              <div className="font-bold text-slate-800 leading-tight">{course?.title}</div>
-                              <div className="text-[10px] font-mono text-slate-400 mt-0.5">{s.sessionName}</div>
+                              <div className="font-bold text-slate-800 leading-tight whitespace-normal break-words max-w-[250px]">{course?.title}</div>
+                              <div className="text-[10px] font-mono text-slate-400 mt-0.5 whitespace-normal break-words max-w-[250px]">{s.sessionName}</div>
                             </TableCell>
                             <TableCell className="px-6 py-4 text-xs font-medium text-slate-600">
                               {s.startDate} - {s.endDate}
@@ -3546,10 +3652,12 @@ export function AdminDashboard() {
                             <TableCell>
                               <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                                 u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 
+                                u.role === 'coordinator' ? 'bg-indigo-100 text-indigo-700' : 
+                                u.role === 'finance' ? 'bg-emerald-100 text-emerald-700' : 
                                 u.role === 'tutor' || u.role === 'tutor_pt' ? 'bg-blue-100 text-blue-700' : 
                                 'bg-slate-100 text-slate-600'
                               }`}>
-                                {u.role === 'tutor_pt' ? 'Instructor (Part-Time)' : u.role === 'tutor' ? 'Instructor (Full-Time)' : u.role ? t(`common.${u.role}`) : t('common.student')}
+                                {u.role === 'tutor_pt' ? 'Instructor (Part-Time)' : u.role === 'tutor' ? 'Instructor (Full-Time)' : u.role === 'coordinator' ? 'Course Coordinator' : u.role === 'finance' ? 'Finance' : u.role === 'staff' ? 'Staff (Other)' : u.role === 'admin' ? 'Admin' : u.role === 'student' ? 'Student' : (u.role ? String(u.role).toUpperCase() : 'STUDENT')}
                               </span>
                             </TableCell>
                             <TableCell>
@@ -3617,20 +3725,22 @@ export function AdminDashboard() {
                                 >
                                   <FileText className="w-3.5 h-3.5" />
                                 </Button>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  className={`h-8 px-2 ${u.email === 'system.admin@vexperthk.com' || u.role === 'admin' ? 'opacity-50 cursor-not-allowed' : 'text-red-600 hover:text-red-700 hover:bg-red-50'}`}
-                                  disabled={u.email === 'system.admin@vexperthk.com' || u.role === 'admin'}
-                                  onClick={() => {
-                                    if (u.email === 'system.admin@vexperthk.com' || u.role === 'admin') return;
-                                    setUserToDelete(u);
-                                    setIsDeleteUserModalOpen(true);
-                                  }}
-                                  title="Delete User"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </Button>
+                                {role === 'admin' && (
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    className={`h-8 px-2 ${u.email === 'system.admin@vexperthk.com' || u.role === 'admin' ? 'opacity-50 cursor-not-allowed' : 'text-red-600 hover:text-red-700 hover:bg-red-50'}`}
+                                    disabled={u.email === 'system.admin@vexperthk.com' || u.role === 'admin'}
+                                    onClick={() => {
+                                      if (u.email === 'system.admin@vexperthk.com' || u.role === 'admin') return;
+                                      setUserToDelete(u);
+                                      setIsDeleteUserModalOpen(true);
+                                    }}
+                                    title="Delete User"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </Button>
+                                )}
                               </div>
                             </TableCell>
                           </TableRow>
@@ -3706,7 +3816,7 @@ export function AdminDashboard() {
               Delete User
             </DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete this user? This action cannot be undone.
+              Are you sure you want to delete this user? This action cannot be undone. Please enter your admin password to confirm.
             </DialogDescription>
             {userToDelete && (
               <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded-md">
@@ -3714,10 +3824,22 @@ export function AdminDashboard() {
                 <div className="text-xs text-red-700">{userToDelete.role}</div>
               </div>
             )}
+            <div className="mt-4">
+              <Label className="text-xs font-bold text-slate-700 mb-1 block">Admin Password</Label>
+              <Input 
+                type="password"
+                placeholder="Enter your password"
+                value={adminPasswordForDelete}
+                onChange={e => setAdminPasswordForDelete(e.target.value)}
+                className="w-full"
+              />
+            </div>
           </DialogHeader>
           <DialogFooter className="mt-4 gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setIsDeleteUserModalOpen(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDeleteUser} className="bg-red-600 hover:bg-red-700">Delete User</Button>
+            <Button variant="outline" onClick={() => { setIsDeleteUserModalOpen(false); setAdminPasswordForDelete(''); }}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteUser} disabled={loading || !adminPasswordForDelete} className="bg-red-600 hover:bg-red-700">
+              {loading ? 'Deleting...' : 'Delete User'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -3775,24 +3897,27 @@ export function AdminDashboard() {
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase text-slate-500">Role</label>
                 <select 
-                  className="w-full h-9 rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm"
-                  value={userForm.role || 'student'}
+                  className={`w-full h-9 rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm ${role !== 'admin' || selectedUser?.role === 'admin' || selectedUser?.email === 'system.admin@vexperthk.com' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  value={selectedUser?.role === 'admin' || selectedUser?.email === 'system.admin@vexperthk.com' ? 'admin' : (userForm.role || 'student')}
                   onChange={e => setUserForm({...userForm, role: e.target.value as UserRole})}
+                  disabled={role !== 'admin' || selectedUser?.role === 'admin' || selectedUser?.email === 'system.admin@vexperthk.com'}
                 >
                   <option value="student">Student</option>
                   <option value="tutor">Instructor (Full-Time)</option>
                   <option value="tutor_pt">Instructor (Part-Time)</option>
-                  <option value="staff">Staff</option>
+                  <option value="coordinator">Course Coordinator</option>
+                  <option value="finance">Finance</option>
+                  <option value="staff">Staff (Other)</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase text-slate-500">Status</label>
                 <select 
-                  className={`w-full h-9 rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm ${selectedUser?.email === 'system.admin@vexperthk.com' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  value={selectedUser?.email === 'system.admin@vexperthk.com' ? 'active' : (userForm.status || 'active')}
+                  className={`w-full h-9 rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm ${selectedUser?.role === 'admin' || selectedUser?.email === 'system.admin@vexperthk.com' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  value={selectedUser?.role === 'admin' || selectedUser?.email === 'system.admin@vexperthk.com' ? 'active' : (userForm.status || 'active')}
                   onChange={e => setUserForm({...userForm, status: e.target.value as UserStatus})}
-                  disabled={selectedUser?.email === 'system.admin@vexperthk.com'}
+                  disabled={selectedUser?.role === 'admin' || selectedUser?.email === 'system.admin@vexperthk.com'}
                 >
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
@@ -4048,7 +4173,7 @@ export function AdminDashboard() {
                             <CardContent className="p-4">
                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                                  <div className="p-3 bg-slate-50 rounded-lg">
-                                   <p className="text-[10px] font-bold text-slate-500 uppercase">Sessions Handled</p>
+                                   <p className="text-[10px] font-bold text-slate-500 uppercase">Courses Handled</p>
                                    <p className="text-lg font-bold text-slate-900">{sessions.filter(s => s.tutorId === selectedUser.id).length}</p>
                                  </div>
                                  <div className="p-3 bg-slate-50 rounded-lg">
@@ -4107,11 +4232,11 @@ export function AdminDashboard() {
                             </CardContent>
                           </Card>
 
-                          {/* Tutor Evaluations Section */}
+                          {/* Instructor Evaluations Section */}
                           <Card>
                             <CardHeader className="py-3 px-4">
                               <CardTitle className="text-sm font-bold flex items-center gap-2">
-                                <MessageSquare className="w-4 h-4 text-blue-600" /> Tutor Evaluations
+                                <MessageSquare className="w-4 h-4 text-blue-600" /> Instructor Evaluations
                               </CardTitle>
                             </CardHeader>
                             <CardContent className="p-4">
@@ -4259,7 +4384,7 @@ export function AdminDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Session Modal */}
+      {/* Edit Course Modal */}
       <Dialog open={sessionModalOpen} onOpenChange={setSessionModalOpen}>
         <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-hidden flex flex-col p-0 border-none shadow-2xl">
           <DialogHeader className="p-6 pb-2 bg-slate-50/50 rounded-t-lg border-b border-slate-100">
@@ -4322,7 +4447,7 @@ export function AdminDashboard() {
                       value={selectedSession.deliveryMode}
                       onChange={e => setSelectedSession({...selectedSession, deliveryMode: e.target.value})}
                     >
-                      <option value="onsite">On-site</option>
+                      <option value="onsite">ClassRoom</option>
                       <option value="online">Online</option>
                       <option value="hybrid">Hybrid</option>
                     </select>
@@ -4965,7 +5090,7 @@ export function AdminDashboard() {
                     value={newSession.deliveryMode}
                     onChange={e => setNewSession({...newSession, deliveryMode: e.target.value})}
                   >
-                    <option value="onsite">On-site</option>
+                    <option value="onsite">ClassRoom</option>
                     <option value="online">Online (Zoom/Teams)</option>
                     <option value="hybrid">Hybrid</option>
                   </select>
@@ -5112,7 +5237,7 @@ export function AdminDashboard() {
                   Certificate Management
                 </DialogTitle>
                 <DialogDescription className="text-slate-400 font-medium text-sm mt-2">
-                  Session: <span className="text-white font-bold">{selectedSessionCert?.sessionName}</span> • Course: <span className="text-white font-bold">{courses.find(c => c.id === selectedSessionCert?.courseId)?.title}</span>
+                  Course: <span className="text-white font-bold">{selectedSessionCert?.sessionName}</span> • Course: <span className="text-white font-bold">{courses.find(c => c.id === selectedSessionCert?.courseId)?.title}</span>
                 </DialogDescription>
               </DialogHeader>
             </div>
@@ -5163,53 +5288,128 @@ export function AdminDashboard() {
                 </div>
 
                 <div>
-                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                    Enrolled Student Roster
-                    <div className="h-[1px] flex-1 bg-slate-100"></div>
-                  </h4>
-                  <div className="border border-slate-100 rounded-xl overflow-hidden bg-white shadow-sm">
-                    <Table>
-                      <TableHeader className="bg-slate-50/50">
-                        <TableRow className="hover:bg-transparent border-slate-100">
-                          <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Student Identity</TableHead>
-                          <TableHead className="px-6 py-4 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {sessionStudentsData.map(student => {
-                          return (
-                            <TableRow key={student.id} className="border-slate-50 hover:bg-slate-50/30 transition-colors">
-                              <TableCell className="px-6 py-4">
-                                <div className="font-bold text-slate-800">{student.studentName}</div>
-                                <div className="text-[10px] text-slate-400 font-mono italic">{student.studentEmail}</div>
-                              </TableCell>
-                              <TableCell className="px-6 py-4 text-right">
-                                <div className="flex justify-end gap-2">
-                                  {(['am', 'pm'] as const).map(type => {
-                                    const isConfirmed = student[`${type}Confirmed`];
-                                    return (
-                                      <Button
-                                        key={type}
-                                        size="sm"
-                                        onClick={() => handleToggleAttendanceConfirm(student.id, type, isConfirmed)}
-                                        className={`h-8 px-3 text-[10px] font-black uppercase tracking-wider transition-all ${
-                                          isConfirmed 
-                                            ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' 
-                                            : 'bg-white border border-slate-200 hover:bg-slate-50 text-slate-500 shadow-none'
-                                        }`}
-                                      >
-                                        {isConfirmed && <CheckCircle className="w-3 h-3 mr-1" />}
-                                        {type} CONFIRM
-                                      </Button>
-                                    );
-                                  })}
-                                </div>
-                              </TableCell>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center mb-4">
+                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2 flex-1">
+                      Enrolled Student Roster
+                      <div className="h-[1px] flex-1 bg-slate-100 ml-2"></div>
+                    </h4>
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="text-[10px] uppercase font-bold text-slate-500" 
+                      onClick={() => setPastDaysToShow(p => p + 1)}
+                    >
+                      <History className="w-3 h-3 mr-1" /> 顯示上一日
+                    </Button>
+                  </div>
+                  <div className="border border-slate-100 rounded-xl overflow-x-auto bg-white shadow-sm">
+                    {(() => {
+                      let baseDates: string[] = [];
+                      const sessionLessons = lessons.filter(l => l.sessionId === selectedSessionCert?.id || l.session_id === selectedSessionCert?.id);
+                      if (sessionLessons.length > 0) {
+                          baseDates = sessionLessons.map(l => l.lessonDate || l.lesson_date).filter(Boolean);
+                      } else {
+                          const start = selectedSessionCert?.startDate;
+                          const end = selectedSessionCert?.endDate;
+                          if (start && end && start !== end) {
+                              let current = new Date(start);
+                              const endD = new Date(end);
+                              while (current <= endD) {
+                                  baseDates.push(current.toISOString().split('T')[0]);
+                                  current.setDate(current.getDate() + 1);
+                              }
+                          } else if (start) {
+                              baseDates.push(start);
+                          } else {
+                              baseDates.push('N/A');
+                          }
+                      }
+                      
+                      baseDates = Array.from(new Set(baseDates)).filter(d => d !== 'N/A').sort();
+
+                      const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' });
+                      let displayDates = new Set<string>();
+                      
+                      let currentIndex = -1;
+                      
+                      if (baseDates.includes(todayStr)) {
+                          currentIndex = baseDates.indexOf(todayStr);
+                      } else {
+                          const pastDates = baseDates.filter(d => d <= todayStr);
+                          if (pastDates.length > 0) {
+                              currentIndex = baseDates.indexOf(pastDates[pastDates.length - 1]);
+                          } else if (baseDates.length > 0) {
+                              currentIndex = 0;
+                          }
+                      }
+
+                      if (currentIndex !== -1) {
+                          displayDates.add(baseDates[currentIndex]);
+                          for (let i = 1; i <= pastDaysToShow; i++) {
+                              if (currentIndex - i >= 0) {
+                                  displayDates.add(baseDates[currentIndex - i]);
+                              }
+                          }
+                      }
+
+                      let sessionDates = Array.from(displayDates).sort();
+                      if (sessionDates.length === 0) sessionDates.push('N/A');
+
+                      return (
+                        <Table>
+                          <TableHeader className="bg-slate-50/50 whitespace-nowrap">
+                            <TableRow className="hover:bg-transparent border-slate-100">
+                              <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Student Identity</TableHead>
+                              <TableHead className="px-6 py-4 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest min-w-[200px]">Attendance Checks</TableHead>
                             </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
+                          </TableHeader>
+                          <TableBody>
+                            {sessionStudentsData.map(student => {
+                              return (
+                                <TableRow key={student.id} className="border-slate-50 hover:bg-slate-50/30 transition-colors">
+                                  <TableCell className="px-6 py-4">
+                                    <div className="font-bold text-slate-800 whitespace-nowrap">{student.studentName}</div>
+                                    <div className="text-[10px] text-slate-400 font-mono italic">{student.studentEmail}</div>
+                                  </TableCell>
+                                  <TableCell className="px-6 py-4 text-right">
+                                    <div className="flex flex-col gap-2 justify-end items-end w-full">
+                                      {sessionDates.map((date, idx) => (
+                                        <div key={date} className="flex flex-row items-center gap-3 bg-slate-50/50 p-1.5 rounded-lg border border-slate-100/60 w-max shrink-0">
+                                          <span className="text-[10px] font-bold text-slate-500 w-20 text-right">{date}</span>
+                                          <div className="flex gap-1">
+                                            {(['am', 'pm'] as const).map(type => {
+                                              const isRecordPresent = student.attendanceRecords && student.attendanceRecords[date] && typeof student.attendanceRecords[date][type] !== 'undefined';
+                                              const isFirstDay = baseDates.length > 0 && date === baseDates[0];
+                                              const isConfirmed = isRecordPresent ? student.attendanceRecords[date][type] : (isFirstDay && student[`${type}Confirmed`]);
+                                              
+                                              return (
+                                                <Button
+                                                  key={type}
+                                                  size="sm"
+                                                  onClick={() => handleToggleAttendanceConfirm(student.id, date, type, !!isConfirmed)}
+                                                  className={`h-7 px-2.5 text-[9px] font-black uppercase tracking-wider transition-all ${
+                                                    isConfirmed 
+                                                      ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' 
+                                                      : 'bg-white border border-slate-200 hover:bg-slate-50 text-slate-400 shadow-none'
+                                                  }`}
+                                                >
+                                                  {isConfirmed && <CheckCircle className="w-3 h-3 mr-1" />}
+                                                  {type}
+                                                </Button>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>

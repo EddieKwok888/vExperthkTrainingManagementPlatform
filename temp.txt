@@ -1,0 +1,2 @@
+748:      toast.success("Session updated successfully");
+1408:        toast.success("Session rescheduled");
