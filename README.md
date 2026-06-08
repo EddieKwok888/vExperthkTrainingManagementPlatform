@@ -1,28 +1,122 @@
-# ProTrain AI: Enterprise Training Management Platform
+# VExpert HK - Learning Management System (LMS)
 
-This is a comprehensive platform for managing training schedules, registrations, tutor payments, and student progress with AI-driven RAG assistance for course recommendations and support.
+A comprehensive, role-based Learning Management System designed to handle courses, user registrations, tutor scheduling, and administrative tasks for educational centers.
 
-## Phase 5: Security-First Hardening & Production Operations
+## 🚀 Tech Stack
 
-### Cloud Run Security Preparation
-- The backend features a production-ready `Dockerfile` multi-stage build running behind NGINX.
-- The `nginx.conf.template` applies important security headers out-of-the-box (`X-Frame-Options`, `X-XSS-Protection`).
-- Container exposes port bound to `${PORT}` for zero-downtime deployment compatibility via Google Cloud Run scaling.
-- When deploying, ensure the service securely connects to Gemini using **Secret Manager** instead of injecting API keys as plain-text env variables.
+- **Frontend Framework**: React 18 with TypeScript
+- **Build Tool**: Vite
+- **Styling**: Tailwind CSS & shadcn/ui components
+- **Routing**: React Router DOM (v6)
+- **Backend & Database**: Firebase (Authentication, Firestore)
+- **Internationalization (i18n)**: react-i18next
+- **Icons**: Lucide React
 
-### Environment & Secrets Checklist
-- `GEMINI_API_KEY`: Kept off client-facing code (or scoped appropriately within server logic/functions when migrating the Gemini call out of the ChatBot).
-- All `.env` variations (`.env.local`, `.env.production`) should be tracked in `.gitignore` to prevent secret spills.
+## 👥 User Roles & Permissions
 
-### Security Testing Checklist (Phase 5 Completion)
-- [x] **Public user cannot access admin dashboard**: `ProtectedRoute` and `firestore.rules` blocks them and prevents queries.
-- [x] **Tutor cannot access another tutor's sessions**: `firestore.rules` enforces `resource.data.tutor_id == request.auth.uid`.
-- [x] **Tutor cannot read payment proof**: Tutors are blocked from reading the `registrations` collection where base64 payment strings live.
-- [x] **Student cannot read another student's registration**: Enforced via `student_id == request.auth.uid`.
-- [x] **Student cannot mark payment as paid**: Rules block updates where `payment_status` is forcibly set to anything other than `pending_verification`.
-- [x] **Public user cannot read registrations collection**: Reads require authentication.
-- [x] **Public user cannot upload unsupported file type**: Type (`image/*`) and size constraints (`2MB`) on the frontend block invalid proofs before reading/upload.
-- [x] **AI assistant refuses private data requests**: RAG Instruction prevents revealing internal structure, payment data, and sensitive admin info.
-- [x] **Deleted records are soft-deleted, not permanently removed**: Administrative workflows have eschewed `deleteDoc()` mutations in favor of audit-logged state changes.
+The system operates with a robust Role-Based Access Control (RBAC) model:
 
-For further details on Access Control and Incident Response, view `SECURITY.md`.
+1. **Admin (`admin`)**: Full access to all system modules, configurations, and user management.
+2. **Course Coordinator (`coordinator`)**: Manages courses, schedules, sessions, tutor assignments, and student feedback.
+3. **Finance (`finance`)**: Access to financial reports, payment tracking, and transaction records.
+4. **Staff / Other (`staff`)**: Operational support, mainly managing active sessions, student attendances, and feedback.
+5. **Instructor / Tutor (`tutor` / `tutor_pt`)**: Can view their assigned teaching schedules, mark student attendance, view class rosters, and access teaching materials.
+6. **Student (`student`)**: Can browse available courses, register, submit payments, view their enrolled courses, and submit feedback.
+
+## 🌟 Key Features
+
+### For Students
+- **Course Catalog**: Browse available course templates and upcoming sessions.
+- **Registration**: Enroll in course sessions.
+- **My Courses**: View upcoming classes, enrolled sessions, and attendance records.
+- **Feedback System**: Submit post-course feedback.
+
+### For Instructors
+- **Instructor Dashboard**: Overview of assigned teaching hours.
+- **Class Management**: View list of students per class.
+- **Attendance Tracking**: Mark student attendance (AM / PM / Evening).
+- **Schedule**: View upcoming lessons and shifts.
+
+### For Administrators & Staff (Admin Portal)
+- **Course & Session Management**: Create templates, schedule sessions, define pricing and capacities.
+- **Registration & Payment**: Track student enrollments, approve payments, and manage invoices.
+- **User Management**: Create and manage staff, tutor, and student accounts. Address password resets.
+- **Tutor Scheduling**: Assign tutors to specific lessons and manage monthly tutor shifts.
+- **Certification**: Issue digital certificates to students upon course completion.
+- **Promotions**: Manage discount codes and promotional banners.
+- **Audit Logs**: Track system usage and critical data changes.
+- **Branch Management**: Set up multiple training location branches.
+
+## 📂 Project Structure
+
+```text
+├── src/
+│   ├── components/      # Reusable UI components (shadcn/ui, layout components)
+│   │   ├── ui/          # Generic UI primitives (Buttons, Inputs, Dialogs)
+│   │   └── common/      # Shared components (Chatbot, etc.)
+│   ├── features/        # Feature-based module organization
+│   │   ├── admin/       # Modules for Admin Dashboard
+│   │   ├── courses/     # Public catalog, course details, registration
+│   │   ├── instructor/  # Instructor portal and class management
+│   │   ├── student/     # Student portal (My Courses)
+│   │   ├── payment/     # Checkout and payment status flows
+│   │   └── feedback/    # Feedback submission forms
+│   ├── lib/             # Utility functions, configurations
+│   │   └── firebase.ts  # Firebase configuration and initialization
+│   ├── App.tsx          # Main application router and context providers
+│   ├── main.tsx         # Application entry point
+│   └── index.css        # Global styles and Tailwind directives
+├── firestore.rules      # Firebase security rules
+└── package.json         # Project dependencies and npm scripts
+```
+
+## 🔒 Security
+
+- **Firestore Rules**: Strict security rules implemented to ensure users can only access and modify data relevant to their specific role.
+- **Protected Routes**: Frontend routing enforces role constraints, redirecting unauthorized users automatically.
+- **Data Encapsulation**: Tutors can only see their own assigned shifts; students only see their own registrations.
+
+## 🌐 Localization (i18n)
+
+The system supports multi-language capabilities easily switchable via the UI.
+- English (`en`)
+- Traditional Chinese (`zh-HK`)
+
+## 🛠 Set Up & Development
+
+1. **Install Dependencies**:
+   ```bash
+   npm install
+   ```
+
+2. **Environment Configuration**:
+   Ensure `.env` contains the required Firebase API keys.
+   ```env
+   VITE_FIREBASE_API_KEY=your_api_key
+   VITE_FIREBASE_AUTH_DOMAIN=your_auth_domain
+   VITE_FIREBASE_PROJECT_ID=your_project_id
+   # ...other firebase config
+   ```
+
+3. **Start Development Server**:
+   ```bash
+   npm run dev
+   ```
+
+4. **Build for Production**:
+   ```bash
+   npm run build
+   ```
+
+## 📝 Database Schema (Firestore)
+
+- `users`: User profiles, roles, contact info.
+- `courses`: Course templates and descriptions.
+- `course_sessions`: Scheduled instances of courses with start/end dates.
+- `lessons`: Individual class blocks tied to sessions.
+- `registrations`: Student enrollments mapping users to sessions.
+- `certificates`: Issued completion certificates.
+- `feedbacks`: Submitted course reviews.
+- `tutor_shifts`: Monthly scheduling mapping for instructors.
+- `audit_logs`: Immutable tracking of critical system operations.
+- `branches`: Set up multiple training location branches.
