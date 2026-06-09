@@ -163,3 +163,9 @@ Upgraded the Role-Based Access Control (RBAC) setup to support strict **Cell-by-
 - **Clear Progress Indicators**: Added a bold red "**已完成**" (Completed) badge alongside elegantly greyed-out text for past and completed lessons, making it intuitively easy to visually separate course histories from upcoming classes.
 - **Detailed Registration Badging**: Course progress cards now clearly display the exact course date ranges (Start Date to End Date) right on the progress overview screen.
 
+### 🛠️ 6. AdminDashboard Code Slimming & Modal Extraction (代碼瘦身與模組化)
+- **UI Decoupling**: Extracted over 15 complex popup `Dialog` components into standalone React components under `src/features/admin/components/modals/`.
+- **Improved Maintainability**: Greatly reduced the file size of the primary `AdminDashboard.tsx`, slicing off thousands of lines of markup.
+- **Extracted Modals included**: *UserFormModal, SessionCreationModal, SessionEditModal, UserViewModal, CertificateModal, DeleteConfirmModal, PromoModal, AttendanceModal, SessionAttendanceModal, ManualHoursModal, and DeleteLogsModal*.
+- **Optimized Props**: Explicit typings, structured callback parameters, and automated lazy loading references help improve long-term scaleable application speed and code legibility without altering functionality.
+

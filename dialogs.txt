@@ -1,0 +1,69 @@
+2748:      <Dialog open={isDeleteUserModalOpen} onOpenChange={setIsDeleteUserModalOpen}>
+2749:        <DialogContent className="sm:max-w-md">
+2750:          <DialogHeader>
+2751:            <DialogTitle className="text-red-600 flex items-center gap-2">
+2755:            <DialogDescription>
+2775:          <DialogFooter className="mt-4 gap-2 sm:gap-0">
+2785:      <Dialog open={isUserModalOpen} onOpenChange={setIsUserModalOpen}>
+2786:        <DialogContent className="sm:max-w-md">
+2791:                <DialogHeader>
+2792:                  <DialogTitle>{isTabReadOnly ? 'User Details' : (selectedUser ? 'Edit User' : 'Create New User')}</DialogTitle>
+2793:                  <DialogDescription>
+2950:                  <DialogFooter className="pt-4">
+2966:      <Dialog open={isUserViewModalOpen} onOpenChange={setIsUserViewModalOpen}>
+2967:        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+3352:          <DialogFooter>
+3359:      <Dialog open={sessionModalOpen} onOpenChange={setSessionModalOpen}>
+3360:        <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-hidden flex flex-col p-0 border-none shadow-2xl">
+3361:          <DialogHeader className="p-6 pb-2 bg-slate-50/50 rounded-t-lg border-b border-slate-100">
+3362:            <DialogTitle className="text-xl font-bold text-slate-800">Edit Course Intake</DialogTitle>
+3363:            <DialogDescription>Modify specific instance details, scheduling, and quotas</DialogDescription>
+3602:            <DialogFooter className="pt-6 border-t border-slate-100 flex gap-2">
+3612:      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+3613:        <DialogContent className="sm:max-w-[400px]">
+3614:          <DialogHeader>
+3615:            <DialogTitle className="flex items-center gap-2 text-red-600 font-bold">
+3622:            <DialogDescription className="text-slate-600">
+3635:          <DialogFooter className="mt-6 flex gap-2 sm:justify-end">
+3666:      <Dialog open={sessionCreationModalOpen} onOpenChange={setSessionCreationModalOpen}>
+3667:        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-hidden flex flex-col p-0 border-none shadow-2xl">
+3668:          <DialogHeader className="p-6 pb-2 bg-slate-50/50 rounded-t-lg border-b border-slate-100">
+3669:            <DialogTitle className="text-xl font-bold text-slate-800">
+3672:            <DialogDescription>Schedule a specific instance of a course template</DialogDescription>
+3909:          <DialogFooter className="p-6 bg-slate-50/50 rounded-b-lg border-t border-slate-100 flex gap-2">
+3919:      <Dialog open={isCertModalOpen} onOpenChange={setIsCertModalOpen}>
+3920:        <DialogContent className="sm:max-w-[900px] max-h-[85vh] overflow-y-auto p-0 border-none shadow-2xl rounded-2xl overflow-hidden bg-white/95 backdrop-blur-xl">
+3923:              <DialogHeader>
+3924:                <DialogTitle className="flex items-center gap-3 text-2xl font-black tracking-tight">
+3930:                <DialogDescription className="text-slate-400 font-medium text-sm mt-2">
+4109:          <DialogFooter className="p-6 bg-slate-50/50 border-t border-slate-100">
+4115:      <Dialog open={isAttendanceModalOpen} onOpenChange={setIsAttendanceModalOpen}>
+4116:        <DialogContent className="sm:max-w-[700px]">
+4117:          <DialogHeader className="p-6 pb-4 border-b border-slate-100">
+4118:            <DialogTitle className="text-xl font-black text-slate-800 tracking-tight">Mark Attendance</DialogTitle>
+4119:            <DialogDescription className="text-slate-500 font-medium">
+4165:          <DialogFooter className="p-6 border-t border-slate-100 flex gap-2 justify-end">
+4174:      <Dialog open={isSessionAttendanceModalOpen} onOpenChange={setIsSessionAttendanceModalOpen}>
+4175:        <DialogContent className="sm:max-w-[700px]">
+4176:          <DialogHeader className="p-6 pb-4 border-b border-slate-100">
+4177:            <DialogTitle className="text-xl font-black text-slate-800 tracking-tight">Manage Attendance</DialogTitle>
+4178:            <DialogDescription className="text-slate-500 font-medium">
+4227:          <DialogFooter className="p-4 border-t border-slate-100">
+4234:      <Dialog open={isManualHoursModalOpen} onOpenChange={setIsManualHoursModalOpen}>
+4235:        <DialogContent className="max-w-md bg-white border-none shadow-2xl p-0 overflow-hidden rounded-2xl">
+4238:              <DialogTitle className="text-xl font-bold text-white mb-1">Add Part-time Record</DialogTitle>
+4239:              <DialogDescription className="text-indigo-100 text-xs">Record a daily course for a part-time instructor</DialogDescription>
+4302:      <Dialog open={isDeleteLogsModalOpen} onOpenChange={setIsDeleteLogsModalOpen}>
+4303:        <DialogContent className="max-w-md bg-white border-none shadow-2xl p-0 overflow-hidden rounded-2xl">
+4305:             <DialogTitle className="text-xl font-bold text-white mb-1">Delete System Logs</DialogTitle>
+4306:             <DialogDescription className="text-red-100 text-xs">Permanently delete logs for a specific month or date.</DialogDescription>
+4340:      <Dialog open={isPromoModalOpen} onOpenChange={setIsPromoModalOpen}>
+4341:        <DialogContent className="max-w-xl sm:max-w-xl">
+4342:          <DialogHeader>
+4343:            <DialogTitle>{selectedPromo ? 'Edit Promotion' : 'Add Promotion'}</DialogTitle>
+4443:          <DialogFooter>
+4451:      <Dialog open={isDeletePromoModalOpen} onOpenChange={setIsDeletePromoModalOpen}>
+4452:        <DialogContent className="sm:max-w-[425px]">
+4453:          <DialogHeader>
+4454:            <DialogTitle>Delete Promotion</DialogTitle>
+4459:          <DialogFooter>
