@@ -120,3 +120,34 @@ The system supports multi-language capabilities easily switchable via the UI.
 - `tutor_shifts`: Monthly scheduling mapping for instructors.
 - `audit_logs`: Immutable tracking of critical system operations.
 - `branches`: Set up multiple training location branches.
+
+## 📅 Today's Updates (2026-06-09)
+
+### 1. 🛡️ Comprehensive RBAC Permission Matrix & Role Configurator
+Upgraded the Role-Based Access Control (RBAC) setup to support strict **Cell-by-Cell Permission Controls** for **14 system modules** instead of a subset of features. The grid mapping includes:
+- **Overview** (概覽)
+- **Templates** (課程模板 - Base course catalog outlines)
+- **Courses** (開班/期次 - Actual session runs and timetabled lessons)
+- **Certificates** (證書 - Issuing student printable rewards)
+- **Instructor & Room Schedule** (導師及場地日程 - Drag-and-drop live rooms)
+- **Part-time Instructor** (兼職導師/學時審計 - Review tutor hours worked)
+- **Feedback** (意見反饋 - Create and check student course feedback)
+- **System Logs** (系統日誌 - Chronological security audit logs trail)
+- **Staff Directory** (職員名錄 - Administrator, Coordinator & Tutor rosters)
+- **Student Directory** (學生名錄 - Filter student cell digits and status details)
+- **Promotions** (推廣優惠 - Code campaigns, referral rewards)
+- **Access Control** (權限控制 - Live Interactive Matrix Grid control panel)
+- **School Settings** (學校設置 - Invoices and branch configurations)
+- **Financial Reports** (財務報表 - Settle tuitions, track register amounts, print PDFs)
+
+### ⚡ 2. Real-Time Dynamic Synchronization (實時更新)
+- **Firestore `onSnapshot` Streams**: Shifted permission storage from isolated `localStorage` variables to deep, real-time Firestore listening streams (`settings/role_permissions`).
+- **Instant Propagation**: Any permission adjustment applied in the grid updates the database immediately. The updated tab boundaries, action visibility selectors, and read-only flags propagate to all authenticated admins and staff in real-time, instantly blocking or granting access without needing any browser page refresh.
+- **Fail-Safe Seeding**: Implemented auto-seeding defaults for `Super Admin`, `Course Coordinator`, `Finance`, and `Staff (Other)` roles to pre-populate custom properties in new database setups safely.
+
+### 🔒 3. Precision Access Guarding & UI Controls
+- **ReadOnlyAlert Integration**: Dynamic alerts warning users of their limited permissions show up clearly across the **Staff Directory**, **Student Directory**, and **Access Control** panels if set to `view` access.
+- **Action Invalidation**:
+  - Hidden critical action triggers (such as *Add Student*, *Add Staff*, *Reset Password* triggers) for users configured with "view-only" permissions.
+  - Locked input states in modals (Full Name, Role, Phone, Remarks) dynamically to read-only when accessed by limited views.
+
