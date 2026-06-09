@@ -53,6 +53,7 @@ export function StudentDashboard() {
   const [certificates, setCertificates] = useState<any[]>([]);
   const [recommended, setRecommended] = useState<any[]>([]);
   const [lessons, setLessons] = useState<any[]>([]);
+  const [enrolledSessions, setEnrolledSessions] = useState<any[]>([]);
   const [feedbacks, setFeedbacks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
@@ -89,12 +90,17 @@ export function StudentDashboard() {
 
           if (sessionIds.length > 0) {
             const lessonDocs: any[] = [];
+            const sessionDocs: any[] = [];
             for (let i = 0; i < sessionIds.length; i += 10) {
               const chunk = sessionIds.slice(i, i + 10);
               const lSnap = await getDocs(query(collection(db, 'lessons'), where('sessionId', 'in', chunk)));
               lessonDocs.push(...lSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+              
+              const sSnap = await getDocs(query(collection(db, 'course_sessions'), where('__name__', 'in', chunk)));
+              sessionDocs.push(...sSnap.docs.map(d => ({ id: d.id, ...d.data() })));
             }
             setLessons(lessonDocs.sort((a, b) => (a.lessonDate || '').localeCompare(b.lessonDate || '')));
+            setEnrolledSessions(sessionDocs);
           }
 
           const sessionsSnap = await getDocs(query(collection(db, 'course_sessions'), where('sessionStatus', '==', 'open')));
@@ -141,6 +147,24 @@ export function StudentDashboard() {
   if (role !== 'student') return <div className="text-center py-20">Access Denied</div>;
 
   const validRegs = regs.filter(r => !!r.courseId && !!r.sessionId);
+  const verifiedSessionIds = new Set(validRegs.filter(r => r.status?.toLowerCase() === 'verified').map(r => r.sessionId));
+  const todayStr = getHkDateString();
+  const scheduleLessons = lessons.filter(l => verifiedSessionIds.has(l.sessionId)).sort((a, b) => {
+    const aPast = a.lessonDate < todayStr;
+    const bPast = b.lessonDate < todayStr;
+    if (aPast && !bPast) return 1;
+    if (!aPast && bPast) return -1;
+    if (aPast && bPast) return (b.lessonDate || '').localeCompare(a.lessonDate || '');
+    return (a.lessonDate || '').localeCompare(b.lessonDate || '');
+  });
+  const scheduleSessions = enrolledSessions.filter(s => verifiedSessionIds.has(s.id)).sort((a, b) => {
+    const aPast = (a.endDate || a.startDate) < todayStr;
+    const bPast = (b.endDate || b.startDate) < todayStr;
+    if (aPast && !bPast) return 1;
+    if (!aPast && bPast) return -1;
+    if (aPast && bPast) return (b.startDate || '').localeCompare(a.startDate || '');
+    return (a.startDate || '').localeCompare(b.startDate || '');
+  });
 
   return (
     <div className="space-y-6">
@@ -244,8 +268,19 @@ export function StudentDashboard() {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-6">
-              {validRegs.map(r => {
+              {[...validRegs].sort((a, b) => {
+                 const sessionA = enrolledSessions.find(s => s.id === a.sessionId) || {} as any;
+                 const sessionB = enrolledSessions.find(s => s.id === b.sessionId) || {} as any;
+                 const todayStr = getHkDateString();
+                 const aPast = (sessionA.endDate || sessionA.startDate || '') < todayStr;
+                 const bPast = (sessionB.endDate || sessionB.startDate || '') < todayStr;
+                 if (aPast && !bPast) return 1;
+                 if (!aPast && bPast) return -1;
+                 if (aPast && bPast) return (sessionB.startDate || '').localeCompare(sessionA.startDate || '');
+                 return (sessionA.startDate || '').localeCompare(sessionB.startDate || '');
+              }).map(r => {
                 const course = courses.find(c => c.id === r.courseId);
+                const session = enrolledSessions.find(s => s.id === r.sessionId);
                 const sessionLessons = lessons.filter(l => l.sessionId === r.sessionId);
                 
                 // Calculate progress
@@ -279,7 +314,34 @@ export function StudentDashboard() {
                                     {course?.courseCode && <span className="font-mono text-sm text-slate-500 mr-2">{course.courseCode}</span>}
                                     {course?.title || 'Unknown Course'}
                                  </h3>
-                                <p className="text-sm text-slate-500 mt-1">Session: {r.sessionId?.slice(-6)} • Payment: <span className={`font-medium ${r.status === 'verified' ? 'text-green-600' : 'text-amber-600'}`}>{r.status?.toUpperCase()}</span></p>
+                                <div className="mt-2 flex flex-col gap-2">
+                                     {session && session.startDate && session.endDate && (
+                                       <div className="text-sm font-semibold text-slate-600 flex items-center gap-1.5 bg-slate-100/80 w-fit px-2.5 py-1 rounded-md">
+                                         <Calendar className="w-4 h-4 text-slate-400" />
+                                         {session.startDate} to {session.endDate}
+                                       </div>
+                                     )}
+                                     {course?.description && <p className="text-sm text-slate-600 line-clamp-2">{course.description}</p>}
+                                     <div className="flex flex-wrap items-center gap-2 text-xs">
+                                         {course?.category && <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded uppercase font-bold">{course.category}</span>}
+                                         {course?.level && <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded uppercase font-bold">{course.level}</span>}
+                                         {course?.day && <span className="text-slate-500 font-medium">Duration: {course.day} days</span>}
+                                         {course?.format && <span className="text-slate-500 font-medium whitespace-nowrap">Format: {course.format}</span>}
+                                         <span className="text-slate-500 font-medium ml-1">Payment: <span className={r.status?.toLowerCase() === 'verified' ? 'text-green-600 font-bold' : 'text-amber-600 font-bold'}>{r.status?.toUpperCase()}</span></span>
+                                     </div>
+                                     <div className="mt-2 flex flex-wrap gap-2">
+                                         {course?.outlineName && course?.outlineData && (
+                                             <a href={course.outlineData} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs font-bold uppercase tracking-wider transition-colors w-fit">
+                                                 <Download className="w-3.5 h-3.5" /> {course.outlineName}
+                                             </a>
+                                         )}
+                                         <Link to={`/payment-status/${r.id}`}>
+                                            <Button variant="outline" size="sm" className="bg-white text-slate-700 hover:bg-slate-50 text-xs h-7 px-3 border-slate-200 shadow-sm font-medium">
+                                                <FileText className="w-3.5 h-3.5 mr-1.5" /> Electronic Receipt
+                                            </Button>
+                                         </Link>
+                                     </div>
+                                 </div>
                            </div>
                            <div className="text-right shrink-0">
                                <div className="text-2xl font-black text-blue-600">{progressPercent}%</div>
@@ -291,112 +353,39 @@ export function StudentDashboard() {
                        </div>
                    </div>
                    
-                   <CardContent className="p-0">
-                       <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-100">
-                           {/* Modules Tracking */}
-                           <div className="p-5">
-                               <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4 flex items-center gap-2">
-                                   <BookOpen className="w-4 h-4 text-indigo-500" />
-                                   Modules & Lessons
-                               </h4>
-                               {totalLessons === 0 ? (
-                                   <p className="text-xs text-slate-400">No lessons scheduled yet.</p>
-                               ) : (
-                                   <div className="space-y-4">
-                                       {sessionLessons.map((l, i) => {
-                                            const rec = l.lessonDate && attendanceRecords[l.lessonDate];
-                                            const attended = rec && (rec.am || rec.pm || rec.eve);
-                                            const isPast = l.lessonDate && l.lessonDate < today;
-                                            const isCompleted = attended || isPast;
-                                            const isNext = nextLesson && nextLesson.id === l.id;
+                   {progressPercent >= 100 && r.status?.toLowerCase() === 'verified' && (
+                       <CardContent className="p-0">
+                           <div className="p-5 bg-slate-50/50 border-t border-slate-100 flex flex-col sm:flex-row justify-end gap-3 w-full">
+                               {(() => {
+                                   const hasSubmittedFeedback = feedbacks.some(f => f.sessionId === r.sessionId);
+                                   const cert = certificates.find(c => c.registrationId === r.id);
+                                   
+                                   if (!hasSubmittedFeedback && !cert) {
+                                       return (
+                                           <Link to={`/feedback/${r.courseId}?session=${r.sessionId}`}>
+                                           <Button variant="secondary" className="w-full sm:w-auto bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 font-bold uppercase tracking-wider text-[10px]">
+                                               <FileText className="w-3.5 h-3.5 mr-1.5" /> Submit Feedback to unlock certificate
+                                           </Button>
+                                           </Link>
+                                       );
+                                   }
 
-                                            return (
-                                                <div key={l.id} className="flex gap-3">
-                                                    <div className="flex flex-col items-center">
-                                                        {isCompleted ? (
-                                                            <CheckCircle className="w-5 h-5 text-green-500 z-10 bg-white" />
-                                                        ) : isNext ? (
-                                                            <div className="w-5 h-5 rounded-full border-2 border-blue-500 flex items-center justify-center z-10 bg-white">
-                                                                <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                                                            </div>
-                                                        ) : (
-                                                            <Circle className="w-5 h-5 text-slate-200 z-10 bg-white" />
-                                                        )}
-                                                        {i < sessionLessons.length - 1 && <div className="w-0.5 h-full bg-slate-100 -mt-2 -mb-2" />}
-                                                    </div>
-                                                    <div className={`pb-2 ${isCompleted ? 'opacity-70' : isNext ? '' : 'opacity-50'}`}>
-                                                        <div className={`text-sm font-bold ${isNext ? 'text-blue-700' : 'text-slate-700'}`}>{l.lessonTitle || `Lesson ${l.lessonNumber || i+1}`}</div>
-                                                        <div className="text-xs text-slate-500 mt-0.5">{l.lessonDate} • {l.startTime} - {l.endTime}</div>
-                                                    </div>
-                                                </div>
-                                            )
-                                       })}
-                                   </div>
-                               )}
+                                   if (cert) {
+                                       return (
+                                           <Button 
+                                           variant="default" 
+                                           className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-bold uppercase tracking-wider text-[10px]"
+                                           onClick={() => generateCertificatePDF(cert)}
+                                           >
+                                           <Download className="w-3.5 h-3.5 mr-1.5" /> Download Certificate
+                                           </Button>
+                                       );
+                                   }
+                                   return null;
+                               })()}
                            </div>
-                           
-                           {/* Next Steps / Actions */}
-                           <div className="p-5 flex flex-col justify-between bg-slate-50/50">
-                               <div>
-                                    <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4">Current Status</h4>
-                                    
-                                    {nextLesson ? (
-                                        <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-4">
-                                            <div className="text-xs font-bold text-blue-600 mb-1">UPCOMING CLASS</div>
-                                            <div className="font-bold text-slate-800">{nextLesson.lessonTitle || `Lesson ${nextLesson.lessonNumber}`}</div>
-                                            <div className="text-sm text-slate-600 mt-1">{nextLesson.lessonDate} at {nextLesson.startTime}</div>
-                                            {nextLesson.meetingLink && (
-                                                <a href={nextLesson.meetingLink} target="_blank" rel="noreferrer" className="inline-block mt-2 text-xs font-bold text-white bg-blue-600 px-3 py-1.5 rounded-md hover:bg-blue-700">Join Online</a>
-                                            )}
-                                        </div>
-                                    ) : progressPercent >= 100 ? (
-                                        <div className="bg-green-50 border border-green-100 rounded-lg p-4 mb-4">
-                                            <div className="text-xs font-bold text-green-600 mb-1">COURSE COMPLETED</div>
-                                            <div className="text-sm text-slate-600 mt-1">You have completed all scheduled lessons for this course.</div>
-                                        </div>
-                                    ) : (
-                                        <p className="text-xs text-slate-500">Waiting for schedule...</p>
-                                    )}
-                               </div>
-
-                               <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-slate-200">
-                                    {progressPercent >= 100 && r.status === 'verified' && (
-                                        // Feedback & Cert logic
-                                        (() => {
-                                            const hasSubmittedFeedback = feedbacks.some(f => f.sessionId === r.sessionId);
-                                            const cert = certificates.find(c => c.registrationId === r.id);
-                                            
-                                            if (!hasSubmittedFeedback && !cert) {
-                                                return (
-                                                    <Link to={`/feedback/${r.courseId}?session=${r.sessionId}`} className="w-full">
-                                                    <Button variant="secondary" className="w-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 font-bold uppercase tracking-wider text-[10px]">
-                                                        <FileText className="w-3.5 h-3.5 mr-1.5" /> Submit Feedback to unlock certificate
-                                                    </Button>
-                                                    </Link>
-                                                );
-                                            }
-
-                                            if (cert) {
-                                                return (
-                                                    <Button 
-                                                    variant="default" 
-                                                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold uppercase tracking-wider text-[10px]"
-                                                    onClick={() => generateCertificatePDF(cert)}
-                                                    >
-                                                    <Download className="w-3.5 h-3.5 mr-1.5" /> Download Certificate
-                                                    </Button>
-                                                );
-                                            }
-                                            return null;
-                                        })()
-                                    )}
-                                    <Link to={`/payment-status/${r.id}`} className="w-full">
-                                        <Button variant="outline" className="w-full bg-white text-slate-600 text-xs">View Registration details</Button>
-                                    </Link>
-                               </div>
-                           </div>
-                       </div>
-                   </CardContent>
+                       </CardContent>
+                   )}
                  </Card>
                 );
               })}
@@ -411,11 +400,9 @@ export function StudentDashboard() {
               <CardDescription>View your upcoming and past lesson dates</CardDescription>
             </CardHeader>
             <CardContent>
-               {lessons.length === 0 ? (
-                 <p className="text-slate-500 py-4 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50">No scheduled classes found.</p>
-               ) : (
+               {scheduleLessons.length > 0 ? (
                  <div className="space-y-3">
-                   {lessons.map((l: any) => {
+                   {scheduleLessons.map((l: any) => {
                       const courseName = courses.find(c => c.id === regs.find(r => r.sessionId === l.sessionId)?.courseId)?.title || "Course Session";
                       const isPast = l.lessonDate && l.lessonDate < getHkDateString();
                       return (
@@ -427,12 +414,15 @@ export function StudentDashboard() {
                             </div>
                             <div>
                                <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">{l.lessonDate} • {l.startTime} - {l.endTime}</div>
-                               <h4 className={`font-bold ${isPast ? 'text-slate-600' : 'text-slate-800'}`}>{courseName}</h4>
-                               <p className="text-sm font-medium mt-0.5">{l.lessonTitle || `Lesson ${l.lessonNumber}`}</p>
+                               <h4 className={`font-bold ${isPast ? 'text-slate-400' : 'text-slate-800'}`}>
+                                 {courseName}
+                                 {isPast && <span className="text-red-600 ml-2 font-black text-xs">已完成</span>}
+                               </h4>
+                               <p className={`text-sm font-medium mt-0.5 ${isPast ? 'text-slate-400' : ''}`}>{l.lessonTitle || `Lesson ${l.lessonNumber}`}</p>
                             </div>
                           </div>
                           <div className="text-right shrink-0">
-                            <div className="text-xs text-slate-500">Classroom: <span className="font-semibold text-slate-700">{l.classroom || 'TBA'}</span></div>
+                            <div className="text-xs text-slate-500">Classroom: <span className={`font-semibold ${isPast ? 'text-slate-400' : 'text-slate-700'}`}>{String(l.classroom || 'TBA').replace(/\s*\(?Persons:[^)]*\)?/gi, '').trim()}</span></div>
                             {l.meetingLink && (
                                <a href={l.meetingLink} target="_blank" rel="noreferrer" className="text-xs text-blue-600 font-bold hover:underline mt-1 inline-block">Online Link</a>
                             )}
@@ -440,6 +430,43 @@ export function StudentDashboard() {
                         </div>
                       );
                    })}
+                 </div>
+               ) : scheduleSessions.length > 0 ? (
+                 <div className="space-y-3">
+                   {scheduleSessions.map((s: any) => {
+                      const courseName = courses.find(c => c.id === s.courseId)?.title || "Course Session";
+                      const isPast = s.endDate && s.endDate < getHkDateString();
+                      return (
+                        <div key={s.id} className={`flex items-start md:items-center justify-between p-4 border rounded-xl gap-4 ${isPast ? 'bg-slate-50 border-slate-200 text-slate-500' : 'bg-white border-blue-100 shadow-sm'}`}>
+                          <div className="flex items-center gap-4">
+                            <div className={`w-12 h-12 rounded-full flex flex-col items-center justify-center shrink-0 ${isPast ? 'bg-slate-200 text-slate-500' : 'bg-blue-100 text-blue-600'}`}>
+                               <Calendar className="w-5 h-5 mb-0.5" />
+                               <span className="text-[9px] font-black">{s.startDate?.slice(5)}</span>
+                            </div>
+                            <div>
+                               <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">{s.startDate} to {s.endDate}</div>
+                               <h4 className={`font-bold ${isPast ? 'text-slate-400' : 'text-slate-800'}`}>
+                                 {courseName}
+                                 {isPast && <span className="text-red-600 ml-2 font-black text-xs">已完成</span>}
+                               </h4>
+                               <p className={`text-sm font-medium mt-0.5 ${isPast ? 'text-slate-400' : ''}`}>{s.sessionName || 'Course Schedule'}</p>
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="text-xs text-slate-500">Classroom: <span className={`font-semibold ${isPast ? 'text-slate-400' : 'text-slate-700'}`}>{String(s.classroom || s.room || 'TBA').replace(/\s*\(?Persons:[^)]*\)?/gi, '').trim()}</span></div>
+                            {s.meetingLink && (
+                               <a href={s.meetingLink} target="_blank" rel="noreferrer" className="text-xs text-blue-600 font-bold hover:underline mt-1 inline-block">Online Link</a>
+                            )}
+                          </div>
+                        </div>
+                      );
+                   })}
+                 </div>
+               ) : (
+                 <div className="py-8 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50">
+                    <Calendar className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+                    <p className="text-slate-600 font-medium">No scheduled classes found.</p>
+                    <p className="text-sm text-slate-500 mt-1 max-w-md mx-auto">Your course schedule will appear here once classes have been published for your enrolled sessions.</p>
                  </div>
                )}
             </CardContent>

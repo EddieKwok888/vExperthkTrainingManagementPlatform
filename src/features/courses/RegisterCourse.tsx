@@ -148,6 +148,13 @@ export function RegisterCourse() {
           const q = query(collection(db, 'course_sessions'), where('courseId', '==', id));
           const sSnap = await getDocs(q);
           const fetchedSessions = sSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter((s: any) => s.sessionStatus === 'open');
+          
+          fetchedSessions.sort((a: any, b: any) => {
+            const dateA = a.startDate || '';
+            const dateB = b.startDate || '';
+            return dateA.localeCompare(dateB);
+          });
+          
           setSessions(fetchedSessions);
           
           if (preselectedSession && fetchedSessions.some(s => s.id === preselectedSession)) {
@@ -560,7 +567,7 @@ export function RegisterCourse() {
                     <option value="" disabled>Select a session</option>
                     {sessions.map(s => (
                       <option key={s.id} value={s.id}>
-                        {s.sessionName} ({s.startDate} to {s.endDate})
+                        {s.sessionName} (Starts: {s.startDate})
                       </option>
                     ))}
                   </select>
@@ -581,7 +588,7 @@ export function RegisterCourse() {
                     <option value="" disabled>Select a session</option>
                     {sessions2.map(s => (
                       <option key={s.id} value={s.id}>
-                        {s.sessionName} ({s.startDate} to {s.endDate})
+                        {s.sessionName} (Starts: {s.startDate})
                       </option>
                     ))}
                   </select>
@@ -601,7 +608,7 @@ export function RegisterCourse() {
                   <option value="" disabled>Select a session</option>
                   {sessions.map(s => (
                     <option key={s.id} value={s.id}>
-                      {s.sessionName} ({s.startDate} to {s.endDate})
+                      {s.sessionName} (Starts: {s.startDate})
                     </option>
                   ))}
                 </select>

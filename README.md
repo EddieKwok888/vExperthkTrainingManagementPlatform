@@ -151,3 +151,15 @@ Upgraded the Role-Based Access Control (RBAC) setup to support strict **Cell-by-
   - Hidden critical action triggers (such as *Add Student*, *Add Staff*, *Reset Password* triggers) for users configured with "view-only" permissions.
   - Locked input states in modals (Full Name, Role, Phone, Remarks) dynamically to read-only when accessed by limited views.
 
+### 📅 4. Intake Chronological Sorting & Clean Layout (最近開課排頂及精簡版面)
+- **Upcoming Intakes Sorting**: Optimized "Upcoming Intakes" lists across the **Course Catalog (Home)**, **Course Details**, and **Registration Dialogs** to prioritize chronologically closer classes. Open sessions are now automatically sorted by their starting date ascendingly, putting the most immediate available opening at the very top for seamless browsing and pre-selected bookings.
+- **Simplified UI**:
+  - Removed time displays (hours/minutes clock indicators) from the course catalog details panel based on client feedback, keeping the focus entirely on starting dates and available delivery modes.
+  - Removed enrollment seat indicators (such as `● 0/5 Filled`) from the upcoming intakes view so numeric slot counts remain completely clean and elegant.
+
+### 🎓 5. Student Dashboard Enhancements (學生介面優化)
+- **Sleeker Class Schedules**: Hid the classroom capacity indicator (e.g., "Persons: 10") across the "My Class Schedule" and "Course Progress" tabs to keep the student interface clean and focused solely on the venue name.
+- **Chronological Sorting**: Upcoming classes and enrolled course progresses are now intelligently sorted chronologically by their closest start dates, ensuring students always see their most immediate upcoming lessons first. 
+- **Clear Progress Indicators**: Added a bold red "**已完成**" (Completed) badge alongside elegantly greyed-out text for past and completed lessons, making it intuitively easy to visually separate course histories from upcoming classes.
+- **Detailed Registration Badging**: Course progress cards now clearly display the exact course date ranges (Start Date to End Date) right on the progress overview screen.
+

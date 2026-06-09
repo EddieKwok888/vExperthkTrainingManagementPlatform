@@ -162,7 +162,7 @@ export function Home() {
                         </CardTitle>
                         <CardDescription className="line-clamp-2 text-slate-500 mt-1">
                           <span className="block font-semibold text-blue-600 tracking-tight text-xs uppercase mb-1">
-                            {course.sessionName} • {course.startDate && course.endDate ? `${course.startDate} to ${course.endDate}` : 'Dates TBD'}
+                            {course.sessionName} • {course.startDate ? `${course.startDate}` : 'Dates TBD'}
                           </span>
                           {course.description}
                         </CardDescription>

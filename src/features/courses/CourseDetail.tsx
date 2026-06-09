@@ -71,6 +71,12 @@ export function CourseDetail() {
            });
         }
         
+        sessionDocs.sort((a: any, b: any) => {
+          const dateA = a.startDate || '';
+          const dateB = b.startDate || '';
+          return dateA.localeCompare(dateB);
+        });
+        
         setSessions(sessionDocs);
       } catch (e) {
         console.error(e);
@@ -248,18 +254,8 @@ export function CourseDetail() {
                               <Calendar className="w-3.5 h-3.5 text-blue-400" /> {s.startDate}
                             </div>
                             <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                              <Clock className="w-3.5 h-3.5 text-slate-400" /> {s.startTime} - {s.endTime}
-                            </div>
-                            <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                               <MapPin className="w-3.5 h-3.5 text-slate-400" /> {s.deliveryMode}
                             </div>
-                            {s.quota && (
-                              <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                                <span className={s.enrolledCount >= s.quota ? 'text-red-500' : 'text-green-500'}>
-                                  ● {s.enrolledCount || 0}/{s.quota} Filled
-                                </span>
-                              </div>
-                            )}
                             {(s.earlyBirdPrice || s.standardPrice || s.price) && (
                               <div className="flex flex-col col-span-2 pt-2 border-t border-slate-100 mt-2">
                                 {(s.earlyBirdPrice && s.earlyBirdPrice < (s.standardPrice || s.price)) ? (

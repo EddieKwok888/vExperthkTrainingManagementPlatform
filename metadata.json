@@ -2,5 +2,5 @@
   "name": "AI-Enhanced Training Management Platform",
   "description": "Comprehensive training management system with user profile management, instructor capability tracking, certification verification, and course-instructor matching.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
