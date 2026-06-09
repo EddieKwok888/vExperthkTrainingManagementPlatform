@@ -22,6 +22,7 @@ interface FinanceTabProps {
   setIsEditRegOpen: (val: boolean) => void;
   handleUpdateRegistration: (e: React.FormEvent) => void;
   confirmDelete: (id: string, type: string, name: string) => void;
+  readOnly?: boolean;
 }
 
 export const FinanceTab = React.memo(function FinanceTab({
@@ -39,6 +40,7 @@ export const FinanceTab = React.memo(function FinanceTab({
   setIsEditRegOpen,
   handleUpdateRegistration,
   confirmDelete,
+  readOnly = false,
 }: FinanceTabProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
@@ -213,17 +215,23 @@ export const FinanceTab = React.memo(function FinanceTab({
                                <FileText className="w-4 h-4" />
                              </Button>
                            )}
-                           {(r.status === 'pending_verification' || r.status === 'pending') && (
-                             <Button size="sm" variant="outline" onClick={() => handleUpdateRegStatus(r.id, 'verified')} className="h-8 border-green-200 text-green-600 hover:bg-green-50 text-[10px] font-bold uppercase tracking-widest px-4 font-sans">
-                               Verify
-                             </Button>
+                           {readOnly ? (
+                             <span className="text-[10px] text-slate-400 font-bold bg-slate-100 border border-slate-200 px-2 py-1 rounded select-none font-sans">Locked</span>
+                           ) : (
+                             <>
+                               {(r.status === 'pending_verification' || r.status === 'pending') && (
+                                 <Button size="sm" variant="outline" onClick={() => handleUpdateRegStatus(r.id, 'verified')} className="h-8 border-green-200 text-green-600 hover:bg-green-50 text-[10px] font-bold uppercase tracking-widest px-4 font-sans">
+                                   Verify
+                                 </Button>
+                               )}
+                               <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50" onClick={() => { setEditingReg(r); setIsEditRegOpen(true); }} title="Edit Record">
+                                 <Edit2 className="w-4 h-4" />
+                               </Button>
+                               <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50" onClick={() => confirmDelete(r.id, 'registration', `${r.studentName || 'Student'} - ${r.invoiceNumber || 'No Invoice'}`)} title="Delete Record">
+                                 <Trash2 className="w-4 h-4" />
+                               </Button>
+                             </>
                            )}
-                           <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50" onClick={() => { setEditingReg(r); setIsEditRegOpen(true); }} title="Edit Record">
-                             <Edit2 className="w-4 h-4" />
-                           </Button>
-                           <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50" onClick={() => confirmDelete(r.id, 'registration', `${r.studentName || 'Student'} - ${r.invoiceNumber || 'No Invoice'}`)} title="Delete Record">
-                             <Trash2 className="w-4 h-4" />
-                           </Button>
                         </div>
                      </TableCell>
                    </TableRow>

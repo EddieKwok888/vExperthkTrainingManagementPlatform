@@ -67,6 +67,7 @@ interface PromotionsTabProps {
   setIsDeletePromoModalOpen: (val: boolean) => void;
   courses?: any[];
   sessions?: any[];
+  readOnly?: boolean;
 }
 
 export function PromotionsTab({
@@ -81,6 +82,7 @@ export function PromotionsTab({
   setIsDeletePromoModalOpen,
   courses = [],
   sessions = [],
+  readOnly = false,
 }: PromotionsTabProps) {
   const [viewingPromoUsers, setViewingPromoUsers] = useState<any | null>(null);
   const [showInactive, setShowInactive] = useState<boolean>(false);
@@ -136,13 +138,15 @@ export function PromotionsTab({
           >
             {showInactive ? "Hide Inactive Promos" : "Show Inactive Promos"}
           </Button>
-          <Button onClick={() => {
-            setSelectedPromo(null);
-            setPromoForm({ name: '', code: '', type: 'code', category: 'seminar', discountType: 'fixed', discountValue: 0, status: 'active', applicableCourseIds: [], bundleCourse1: '', bundleCourse2: '', startDate: '', endDate: '', adminPassword: '' });
-            setIsPromoModalOpen(true);
-          }} className="bg-indigo-600 hover:bg-indigo-700 text-white shadow font-semibold text-xs h-9 gap-1 animate-none">
-            <Plus className="w-4 h-4" /> Add Promotion
-          </Button>
+          {!readOnly && (
+            <Button onClick={() => {
+              setSelectedPromo(null);
+              setPromoForm({ name: '', code: '', type: 'code', category: 'seminar', discountType: 'fixed', discountValue: 0, status: 'active', applicableCourseIds: [], bundleCourse1: '', bundleCourse2: '', startDate: '', endDate: '', adminPassword: '' });
+              setIsPromoModalOpen(true);
+            }} className="bg-indigo-600 hover:bg-indigo-700 text-white shadow font-semibold text-xs h-9 gap-1 animate-none">
+              <Plus className="w-4 h-4" /> Add Promotion
+            </Button>
+          )}
         </div>
       </div>
       
@@ -235,7 +239,9 @@ export function PromotionsTab({
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
-                          {!isInactiveStatus ? (
+                          {readOnly ? (
+                            <span className="text-[10px] text-slate-400 font-bold bg-slate-100 border border-slate-200 px-2 py-0.5 rounded select-none">Locked</span>
+                          ) : !isInactiveStatus ? (
                             <>
                               <Button 
                                 variant="ghost" 

@@ -2,8 +2,9 @@ import React, { useState, useEffect, useContext, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import { useTranslation } from 'react-i18next';
-import { db, auth, app } from '../../lib/firebase';
-import { collection, query, getDocs, doc, setDoc, updateDoc, serverTimestamp, orderBy, writeBatch, where, addDoc, limit, deleteDoc, increment } from 'firebase/firestore';
+import { db, auth, app, storage } from '../../lib/firebase';
+import { collection, query, getDocs, doc, setDoc, updateDoc, serverTimestamp, orderBy, writeBatch, where, addDoc, limit, deleteDoc, increment, onSnapshot } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { sendPasswordResetEmail, getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { AuthContext } from '../../App';
@@ -14,7 +15,7 @@ import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../components/ui/dialog';
-import { MonitorPlay, Loader2, Plus, Database, ExternalLink, LayoutDashboard, BookOpen, Calendar as CalendarIcon, Users, CreditCard, Clock, MessageSquare, CheckCircle, XCircle, Download, FileText, Upload, GraduationCap, BarChart2, BarChart3, TrendingUp, ShieldAlert, Building2, MapPin, CalendarRange, Share2, ArrowLeftRight, ClipboardList, Search, UserPlus, Mail, Phone, Award, ShieldCheck, Briefcase, KeyRound, Copy, Edit2, Trash2, ChevronLeft, ChevronDown, Sparkles, Star, AlertTriangle, History } from 'lucide-react';
+import { MonitorPlay, Loader2, Plus, Database, ExternalLink, LayoutDashboard, BookOpen, Calendar as CalendarIcon, Users, CreditCard, Clock, MessageSquare, CheckCircle, XCircle, Download, FileText, Upload, GraduationCap, BarChart2, BarChart3, TrendingUp, ShieldAlert, Building2, MapPin, CalendarRange, Share2, ArrowLeftRight, ClipboardList, Search, UserPlus, Mail, Phone, Award, ShieldCheck, Briefcase, KeyRound, Copy, Edit2, Trash2, ChevronLeft, ChevronDown, ChevronUp, Sparkles, Star, AlertTriangle, History } from 'lucide-react';
 import { toast } from 'sonner';
 import { jsPDF } from 'jspdf';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
@@ -95,6 +96,9 @@ export function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('overview');
   
   const [courses, setCourses] = useState<any[]>([]);
+  const [courseCategories, setCourseCategories] = useState<string[]>(['Microsoft', 'AWS', 'Technology', 'Business', 'Security', 'Data & AI']);
+  const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
+  const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
   const [regs, setRegs] = useState<any[]>([]);
   const [editingReg, setEditingReg] = useState<any>(null);
   const [isEditRegOpen, setIsEditRegOpen] = useState(false);
@@ -233,102 +237,178 @@ export function AdminDashboard() {
   // Permissions & Granular Access Control States
   const [selectedAccessRole, setSelectedAccessRole] = useState('admin');
   const [simulatedRole, setSimulatedRole] = useState('admin');
+  const [isSimulatingGlobally, setIsSimulatingGlobally] = useState<boolean>(() => {
+    return localStorage.getItem('vex_is_simulating_globally') === 'true';
+  });
   const [activeAccessSection, setActiveAccessSection] = useState<'matrix' | 'details' | 'sim' | 'docs'>('matrix');
-  const [customRolePermissions, setCustomRolePermissions] = useState<any[]>([
-    {
-      roleId: 'admin',
-      name: 'Super Admin',
-      desc: '超級管理員 - 可以看到所有東西。擁有最高權限，控制系統設定、備份及所有權限分配。',
-      maxAuthAmount: 'Unlimited',
-      restrictions: 'None',
-      permissions: {
-        overview: 'full',
-        courses: 'full',
-        sessions: 'full',
-        finance: 'full',
-        certificates: 'full',
-        scheduling: 'full',
-        tutors: 'full',
-        feedback: 'full',
-        logs: 'full',
-        promotions: 'full',
-        settings: 'full'
-      }
-    },
-    {
-      roleId: 'coordinator',
-      name: 'Course Coordinator',
-      desc: '課程統籌 - 負責課程管理、排堂排師、處理證書及學生名單，無法存取財務報表或系統設定。',
-      maxAuthAmount: 'N/A',
-      restrictions: 'Restricted from managing finance, deleting users, or viewing system audit logs.',
-      permissions: {
-        overview: 'view',
-        courses: 'full',
-        sessions: 'full',
-        finance: 'none',
-        certificates: 'full',
-        scheduling: 'full',
-        tutors: 'view',
-        feedback: 'full',
-        logs: 'none',
-        promotions: 'full',
-        settings: 'full'
-      }
-    },
-    {
-      roleId: 'finance',
-      name: 'Finance',
-      desc: '會計 - 處理財務報表、付款設定及電子收據。無法管理課程、學生或排期。',
-      maxAuthAmount: 'Unlimited (Finance only)',
-      restrictions: 'Restricted from managing courses, schedules, evaluating feedback, or issuing certificates.',
-      permissions: {
-        overview: 'view',
-        courses: 'none',
-        sessions: 'none',
-        finance: 'full',
-        certificates: 'none',
-        scheduling: 'none',
-        tutors: 'none',
-        feedback: 'none',
-        logs: 'view',
-        promotions: 'none',
-        settings: 'none'
-      }
-    },
-    {
-      roleId: 'staff',
-      name: 'Staff (Other)',
-      desc: '一般職員 - 處理基本查詢及客服。',
-      maxAuthAmount: 'HKD 2,000 / tx',
-      restrictions: 'Restricted from system settings, high-level finance, and course creations.',
-      permissions: {
-        overview: 'none',
-        courses: 'view',
-        sessions: 'view',
-        finance: 'none',
-        certificates: 'view',
-        scheduling: 'view',
-        tutors: 'view',
-        feedback: 'view',
-        logs: 'none',
-        promotions: 'view',
-        settings: 'none'
+  const [customRolePermissions, setCustomRolePermissions] = useState<any[]>(() => {
+    const saved = localStorage.getItem('vex_role_permissions');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse vex_role_permissions', e);
       }
     }
-  ]);
+    return [
+      {
+        roleId: 'admin',
+        name: 'Super Admin',
+        desc: '超級管理員 - 可以看到所有東西。擁有最高權限，控制系統設定、備份及所有權限分配。',
+        maxAuthAmount: 'Unlimited',
+        restrictions: 'None',
+        permissions: {
+          overview: 'full', courses: 'full', sessions: 'full', finance: 'full',
+          certificates: 'full', scheduling: 'full', tutors: 'full', feedback: 'full',
+          logs: 'full', staff: 'full', students: 'full', promotions: 'full',
+          permissions: 'full', settings: 'full'
+        }
+      },
+      {
+        roleId: 'coordinator',
+        name: 'Course Coordinator',
+        desc: '課程統籌 - 負責課程管理、排堂排師、處理證書及學生名單，無法存取財務報表 or 系統設定。',
+        maxAuthAmount: 'N/A',
+        restrictions: 'Restricted from managing finance, deleting users, or viewing system audit logs.',
+        permissions: {
+          overview: 'view', courses: 'full', sessions: 'full', finance: 'none',
+          certificates: 'full', scheduling: 'full', tutors: 'view', feedback: 'full',
+          logs: 'none', staff: 'full', students: 'full', promotions: 'full',
+          permissions: 'none', settings: 'full'
+        }
+      },
+      {
+        roleId: 'finance',
+        name: 'Finance',
+        desc: '會計 - 處理財務報表、付款設定及電子收據。無法管理課程、學生 or 排期。',
+        maxAuthAmount: 'Unlimited (Finance only)',
+        restrictions: 'Restricted from managing courses, schedules, evaluating feedback, or issuing certificates.',
+        permissions: {
+          overview: 'view', courses: 'none', sessions: 'none', finance: 'full',
+          certificates: 'none', scheduling: 'none', tutors: 'none', feedback: 'none',
+          logs: 'view', staff: 'none', students: 'none', promotions: 'none',
+          permissions: 'none', settings: 'none'
+        }
+      },
+      {
+        roleId: 'staff',
+        name: 'Staff (Other)',
+        desc: '一般職員 - 處理基本查詢及客服。',
+        maxAuthAmount: 'HKD 2,000 / tx',
+        restrictions: 'Restricted from system settings, high-level finance, and course creations.',
+        permissions: {
+          overview: 'none', courses: 'view', sessions: 'view', finance: 'none',
+          certificates: 'view', scheduling: 'view', tutors: 'view', feedback: 'view',
+          logs: 'none', staff: 'view', students: 'view', promotions: 'view',
+          permissions: 'none', settings: 'none'
+        }
+      }
+    ];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('vex_is_simulating_globally', isSimulatingGlobally ? 'true' : 'false');
+  }, [isSimulatingGlobally]);
+
+  // Real-time Firestore stream listener for global role permissions!
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'settings', 'role_permissions'), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        if (data && Array.isArray(data.roles)) {
+          setCustomRolePermissions(data.roles);
+          localStorage.setItem('vex_role_permissions', JSON.stringify(data.roles));
+        }
+      } else {
+        // If snapshot doc doesn't exist, seed it with default roles including all 14 keys
+        const defaultRoles = [
+          {
+            roleId: 'admin',
+            name: 'Super Admin',
+            desc: '超級管理員 - 可以看到所有東西。擁有最高權限，控制系統設定、備份及所有權限分配。',
+            maxAuthAmount: 'Unlimited',
+            restrictions: 'None',
+            permissions: {
+              overview: 'full', courses: 'full', sessions: 'full', finance: 'full',
+              certificates: 'full', scheduling: 'full', tutors: 'full', feedback: 'full',
+              logs: 'full', staff: 'full', students: 'full', promotions: 'full',
+              permissions: 'full', settings: 'full'
+            }
+          },
+          {
+            roleId: 'coordinator',
+            name: 'Course Coordinator',
+            desc: '課程統籌 - 負責課程管理、排堂排師、處理證書及學生名單，無法存取財務報表 or 系統設定。',
+            maxAuthAmount: 'N/A',
+            restrictions: 'Restricted from managing finance, deleting users, or viewing system audit logs.',
+            permissions: {
+              overview: 'view', courses: 'full', sessions: 'full', finance: 'none',
+              certificates: 'full', scheduling: 'full', tutors: 'view', feedback: 'full',
+              logs: 'none', staff: 'full', students: 'full', promotions: 'full',
+              permissions: 'none', settings: 'full'
+            }
+          },
+          {
+            roleId: 'finance',
+            name: 'Finance',
+            desc: '會計 - 處理財務報表、付款設定及電子收據。無法管理課程、學生 or 排期。',
+            maxAuthAmount: 'Unlimited (Finance only)',
+            restrictions: 'Restricted from managing courses, schedules, evaluating feedback, or issuing certificates.',
+            permissions: {
+              overview: 'view', courses: 'none', sessions: 'none', finance: 'full',
+              certificates: 'none', scheduling: 'none', tutors: 'none', feedback: 'none',
+              logs: 'view', staff: 'none', students: 'none', promotions: 'none',
+              permissions: 'none', settings: 'none'
+            }
+          },
+          {
+            roleId: 'staff',
+            name: 'Staff (Other)',
+            desc: '一般職員 - 處理基本查詢及客服。',
+            maxAuthAmount: 'HKD 2,000 / tx',
+            restrictions: 'Restricted from system settings, high-level finance, and course creations.',
+            permissions: {
+              overview: 'none', courses: 'view', sessions: 'view', finance: 'none',
+              certificates: 'view', scheduling: 'view', tutors: 'view', feedback: 'view',
+              logs: 'none', staff: 'view', students: 'view', promotions: 'view',
+              permissions: 'none', settings: 'none'
+            }
+          }
+        ];
+        setDoc(doc(db, 'settings', 'role_permissions'), { roles: defaultRoles }).catch(err => {
+          console.error("Failed to seed initial role permissions:", err);
+        });
+      }
+    }, (error) => {
+      console.error('Error listening to role_permissions changes:', error);
+    });
+    return () => unsub();
+  }, []);
+
+  const updateRolePermissionsInDb = async (newRoles: any[]) => {
+    setCustomRolePermissions(newRoles);
+    localStorage.setItem('vex_role_permissions', JSON.stringify(newRoles));
+    try {
+      await setDoc(doc(db, 'settings', 'role_permissions'), { roles: newRoles });
+    } catch (e) {
+      console.error('Failed to update role_permissions in Firestore:', e);
+      toast.error('Failed to synchronize permission adjustments globally.');
+    }
+  };
 
   // New Course Form
   const [newCourse, setNewCourse] = useState({ 
-    courseCode: 'AZ-900T00',
-    title: 'Introduction to Microsoft Azure', 
-    certName: 'Fundamental',
-    category: 'Microsoft',
-    level: 'Beginner',
-    day: '1',
-    description: 'MODULE 1: Describe cloud concepts\nMODULE 2: Describe Azure architecture and services\nMODULE 3: Describe Azure management and governance', 
+    courseCode: '',
+    title: '', 
+    certName: '',
+    category: '',
+    level: '',
+    day: '',
+    description: '', 
     outlineName: '',
-    earlyBirdPrice: 2000, 
-    standardPrice: 4000,
+    outlineData: '',
+    earlyBirdPrice: 0, 
+    standardPrice: 0,
     tutorId: '',
     requiredExpertise: [] as string[],
     requiredCertifications: [] as string[]
@@ -409,7 +489,7 @@ export function AdminDashboard() {
         fetchCollection('teaching_hours', [orderBy('createdAt', 'desc'), limit(100)]),
         fetchCollection('certificates', [limit(100)]),
         fetchCollection('audit_logs', [orderBy('createdAt', 'desc'), limit(1000)]),
-        fetchCollection('settings', [limit(1)]),
+        fetchCollection('settings', []),
         fetchCollection('branches', [orderBy('name', 'asc')]),
         fetchCollection('tutor_shifts', [limit(500)]),
         fetchCollection('users', [limit(500)]),
@@ -487,6 +567,15 @@ export function AdminDashboard() {
       const tutorShiftsRes = tsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       const promotionsRes = promoSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       const sData = schoolSnap.docs.find(d => d.id === 'school_info')?.data();
+      const catData = schoolSnap.docs.find(d => d.id === 'course_categories')?.data();
+      
+      if (catData && catData.categories) {
+         setCourseCategories(catData.categories);
+      } else {
+         // Create default if not found
+         const defaultCats = ['Microsoft', 'AWS', 'Technology', 'Business', 'Security', 'Data & AI'];
+         setCourseCategories(defaultCats);
+      }
 
       setCourses(coursesRes);
       setRegs(regsRes);
@@ -849,6 +938,7 @@ export function AdminDashboard() {
         day: '',
         description: '', 
         outlineName: '',
+        outlineData: '',
         earlyBirdPrice: 0, 
         standardPrice: 0,
         tutorId: '',
@@ -2119,18 +2209,64 @@ export function AdminDashboard() {
     { id: 'finance', label: t('nav.finance'), icon: BarChart2 }
   ];
 
+  const getPermission = (moduleKey: string) => {
+    const activeRole = isSimulatingGlobally ? simulatedRole : role;
+    if (!activeRole) return 'none';
+    
+    // Admin always gets full unless we are simulated
+    if (role === 'admin' && user?.email === 'system.admin@vexperthk.com' && !isSimulatingGlobally) return 'full';
+    if (activeRole === 'admin') return 'full';
+
+    const roleConfig = customRolePermissions.find(r => r.roleId === activeRole);
+    if (!roleConfig) {
+      if (activeRole === 'coordinator') {
+        const fallbacks: Record<string, string> = {
+          overview: 'view', courses: 'full', sessions: 'full', finance: 'none',
+          certificates: 'full', scheduling: 'full', tutors: 'view', feedback: 'full',
+          logs: 'none', promotions: 'full', settings: 'full',
+          staff: 'full', students: 'full', permissions: 'none'
+        };
+        return fallbacks[moduleKey] || 'none';
+      }
+      if (activeRole === 'finance') {
+        const fallbacks: Record<string, string> = {
+          overview: 'view', courses: 'none', sessions: 'none', finance: 'full',
+          certificates: 'none', scheduling: 'none', tutors: 'none', feedback: 'none',
+          logs: 'view', promotions: 'none', settings: 'none',
+          staff: 'none', students: 'none', permissions: 'none'
+        };
+        return fallbacks[moduleKey] || 'none';
+      }
+      if (activeRole === 'staff') {
+        const fallbacks: Record<string, string> = {
+          overview: 'none', courses: 'view', sessions: 'view', finance: 'none',
+          certificates: 'view', scheduling: 'view', tutors: 'view', feedback: 'view',
+          logs: 'none', promotions: 'view', settings: 'none',
+          staff: 'view', students: 'view', permissions: 'none'
+        };
+        return fallbacks[moduleKey] || 'none';
+      }
+      return 'none';
+    }
+
+    if (roleConfig.permissions[moduleKey] === undefined) {
+      if (moduleKey === 'permissions') return 'none';
+      if (moduleKey === 'staff' || moduleKey === 'students') return 'view';
+    }
+
+    return roleConfig.permissions[moduleKey] || 'none';
+  };
+
   const getAccessibleTabs = () => {
-    if (role === 'admin' || user?.email === 'system.admin@vexperthk.com') return allTabs;
-    if (role === 'coordinator') {
-      return allTabs.filter(t => ['courses', 'sessions', 'certificates', 'scheduling', 'feedback', 'students', 'promotions', 'settings'].includes(t.id));
-    }
-    if (role === 'finance') {
-      return allTabs.filter(t => ['finance'].includes(t.id));
-    }
-    if (role === 'staff') {
-      return allTabs.filter(t => ['sessions', 'students', 'feedback'].includes(t.id));
-    }
-    return [];
+    const activeRole = isSimulatingGlobally ? simulatedRole : role;
+    if (!activeRole) return [];
+    
+    if (role === 'admin' && user?.email === 'system.admin@vexperthk.com' && !isSimulatingGlobally) return allTabs;
+
+    return allTabs.filter(tab => {
+      const perm = getPermission(tab.id);
+      return perm === 'full' || perm === 'view';
+    });
   };
 
   useEffect(() => {
@@ -2140,10 +2276,28 @@ export function AdminDashboard() {
         setActiveTab(allowed[0]);
       }
     }
-  }, [role, activeTab, loading]);
+  }, [role, activeTab, loading, isSimulatingGlobally, simulatedRole, customRolePermissions]);
 
-  if (role !== 'admin' && role !== 'coordinator' && role !== 'finance' && role !== 'staff') {
-    return <div className="text-center py-20 font-bold text-slate-500">Access Denied: You do not have permission to view the Admin Dashboard.</div>;
+  const ReadOnlyAlert = ({ moduleKey }: { moduleKey: string }) => {
+    if (getPermission(moduleKey) === 'view') {
+      return (
+        <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl mb-6 text-xs text-amber-800 flex items-start gap-4 shadow-sm font-sans">
+          <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 animate-pulse mt-0.5" />
+          <div>
+            <span className="font-extrabold block text-amber-950 text-sm mb-0.5">👁️ Read-Only Access Mode</span>
+            <span className="text-amber-750 leading-relaxed font-semibold">Your current active role profile is set to read-only for this section. Operations such as creating records, editing profiles, and deleting data are restricted in real-time.</span>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  const activeRole = isSimulatingGlobally ? simulatedRole : role;
+  const isAuthorizedToAdmin = activeRole === 'admin' || activeRole === 'coordinator' || activeRole === 'finance' || activeRole === 'staff' || activeRole?.startsWith('custom_') || getAccessibleTabs().length > 0;
+
+  if (!isAuthorizedToAdmin) {
+    return <div className="text-center py-20 font-bold text-slate-500 font-sans mt-12 bg-white rounded-2xl border border-slate-200 max-w-md mx-auto p-8 shadow-sm">Access Denied: You do not have permission to view the Admin Dashboard.</div>;
   }
 
   const NavigationMenu = () => (
@@ -2294,7 +2448,7 @@ export function AdminDashboard() {
                              <p className="text-sm font-medium text-slate-800">Total active courses</p>
                              <p className="text-xs text-slate-500">Live in system</p>
                           </div>
-                          <span className="text-2xl font-bold text-slate-800">{courses.length}</span>
+                          <span className="text-2xl font-bold text-slate-800">{sessions.filter((s: any) => s.sessionStatus !== 'completed' && s.sessionStatus !== 'cancelled').length}</span>
                        </div>
                        <div className="flex justify-between items-center p-3 sm:p-4 bg-slate-50 rounded-lg border border-slate-100">
                           <div>
@@ -2313,26 +2467,31 @@ export function AdminDashboard() {
 
 
           {activeTab === 'finance' && (
-            <FinanceTab
-              regSearchTerm={regSearchTerm}
-              setRegSearchTerm={setRegSearchTerm}
-              regs={regs}
-              handleExportCSV={handleExportCSV}
-              formatHkDate={formatHkDate}
-              setPreviewImage={setPreviewImage}
-              handleGenerateInvoice={handleGenerateInvoice}
-              handleUpdateRegStatus={handleUpdateRegStatus}
-              editingReg={editingReg}
-              setEditingReg={setEditingReg}
-              isEditRegOpen={isEditRegOpen}
-              setIsEditRegOpen={setIsEditRegOpen}
-              handleUpdateRegistration={handleUpdateRegistration}
-              confirmDelete={confirmDelete}
-            />
+            <div className="space-y-6">
+              <ReadOnlyAlert moduleKey="finance" />
+              <FinanceTab
+                regSearchTerm={regSearchTerm}
+                setRegSearchTerm={setRegSearchTerm}
+                regs={regs}
+                handleExportCSV={handleExportCSV}
+                formatHkDate={formatHkDate}
+                setPreviewImage={setPreviewImage}
+                handleGenerateInvoice={handleGenerateInvoice}
+                handleUpdateRegStatus={handleUpdateRegStatus}
+                editingReg={editingReg}
+                setEditingReg={setEditingReg}
+                isEditRegOpen={isEditRegOpen}
+                setIsEditRegOpen={setIsEditRegOpen}
+                handleUpdateRegistration={handleUpdateRegistration}
+                confirmDelete={confirmDelete}
+                readOnly={getPermission('finance') === 'view'}
+              />
+            </div>
           )}
 
           {activeTab === 'certificates' && (
             <div className="space-y-6">
+                <ReadOnlyAlert moduleKey="certificates" />
                 <Card className="border-none shadow-xl shadow-slate-200/50 bg-white/80 backdrop-blur-sm">
                   <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-4 border-b border-slate-50 gap-4">
                     <div>
@@ -2382,7 +2541,11 @@ export function AdminDashboard() {
                         </TableHeader>
                         <TableBody>
                           {Object.entries(
-                            certificates.reduce((acc, cert) => {
+                            certificates.filter((cert: any) => {
+                               const reg = regs.find(r => r.id === cert.registrationId);
+                               const session = sessions.find(s => s.id === reg?.sessionId);
+                               return session?.sessionStatus === 'completed';
+                            }).reduce((acc, cert) => {
                               const reg = regs.find(r => r.id === cert.registrationId);
                               const session = sessions.find(s => s.id === reg?.sessionId);
                               const sessionLabel = session ? `${session.sessionName} (${session.startDate} to ${session.endDate})` : 'Unknown Course';
@@ -2395,42 +2558,64 @@ export function AdminDashboard() {
                               };
                               acc[key].certs.push(cert);
                               return acc;
-                            }, {} as Record<string, { courseTitle: string, sessionLabel: string, certs: any[] }>)
-                          ).filter(([key, data]: [string, any]) => {
-                            let match = true;
-                            if (certSearchTerm) {
-                                match = match && !!data.courseTitle?.toLowerCase().includes(certSearchTerm.toLowerCase());
-                            }
-                            if (certDateTerm) {
-                                const issuedAt = data.certs.length > 0 ? (data.certs[0].issuedAt || data.certs[0].issued_at) : null;
-                                const dateObj = issuedAt?.toDate ? issuedAt.toDate() : new Date(issuedAt);
-                                const certMonthStr = (issuedAt && !isNaN(dateObj.getTime())) ? dateObj.toLocaleString('en-US', { month: 'long', year: 'numeric' }) : '';
-                                match = match && certMonthStr === certDateTerm;
-                            }
-                            return match;
-                          }).sort(([, dataA]: [string, any], [, dataB]: [string, any]) => {
-                            const dateA = dataA.certs.length > 0 ? (dataA.certs[0].issuedAt?.toDate ? dataA.certs[0].issuedAt.toDate() : new Date(dataA.certs[0].issuedAt || dataA.certs[0].issued_at)) : new Date(0);
-                            const dateB = dataB.certs.length > 0 ? (dataB.certs[0].issuedAt?.toDate ? dataB.certs[0].issuedAt.toDate() : new Date(dataB.certs[0].issuedAt || dataB.certs[0].issued_at)) : new Date(0);
-                            return dateB.getTime() - dateA.getTime();
-                          }).map(([key, data]: [string, any]) => (
-                            <TableRow key={key} className="border-slate-50 hover:bg-slate-50/50 transition-colors">
-                              <TableCell className="px-6 py-4">
-                                <div className="font-bold text-slate-800">{data.courseTitle || "Unknown Course"}</div>
-                                <div className="text-xs font-medium text-slate-500 mt-0.5">{data.sessionLabel}</div>
-                              </TableCell>
-                              <TableCell className="px-6 py-4">
-                                <div className="text-xs font-bold text-slate-700">
-                                  {data.certs.length > 0 ? formatHkDate(data.certs[0].issuedAt || data.certs[0].issued_at) : 'N/A'}
-                                </div>
-                                <div className="text-[10px] text-slate-400 mt-0.5">
-                                  {data.certs.length} certificates
-                                </div>
-                              </TableCell>
-                              <TableCell className="px-6 py-4 text-right">
-                                 <Button size="sm" variant="outline" onClick={() => generateBulkCertificatesPDF(data.certs, `${data.courseTitle} - ${data.sessionLabel}`)} className="gap-2 h-8 px-3 text-[10px] font-bold uppercase tracking-wider text-blue-600 border-blue-100 hover:bg-blue-50/50"><Download className="w-3 h-3"/> Download {data.certs.length} PDFs</Button>
-                              </TableCell>
-                            </TableRow>
-                          ))}
+                              }, {} as Record<string, { courseTitle: string, sessionLabel: string, certs: any[] }>)
+                            ).filter(([key, data]: [string, any]) => {
+                              let match = true;
+                              if (certSearchTerm) {
+                                  match = match && !!data.courseTitle?.toLowerCase().includes(certSearchTerm.toLowerCase());
+                              }
+                              if (certDateTerm) {
+                                  const issuedAt = data.certs.length > 0 ? (data.certs[0].issuedAt || data.certs[0].issued_at) : null;
+                                  const dateObj = issuedAt?.toDate ? issuedAt.toDate() : new Date(issuedAt);
+                                  const certMonthStr = (issuedAt && !isNaN(dateObj.getTime())) ? dateObj.toLocaleString('en-US', { month: 'long', year: 'numeric' }) : '';
+                                  match = match && certMonthStr === certDateTerm;
+                              }
+                              return match;
+                            }).sort(([, dataA]: [string, any], [, dataB]: [string, any]) => {
+                              const dateA = dataA.certs.length > 0 ? (dataA.certs[0].issuedAt?.toDate ? dataA.certs[0].issuedAt.toDate() : new Date(dataA.certs[0].issuedAt || dataA.certs[0].issued_at)) : new Date(0);
+                              const dateB = dataB.certs.length > 0 ? (dataB.certs[0].issuedAt?.toDate ? dataB.certs[0].issuedAt.toDate() : new Date(dataB.certs[0].issuedAt || dataB.certs[0].issued_at)) : new Date(0);
+                              return dateB.getTime() - dateA.getTime();
+                            }).map(([key, data]: [string, any]) => (
+                              <TableRow key={key} className="border-slate-50 hover:bg-slate-50/50 transition-colors">
+                                <TableCell className="px-6 py-4">
+                                  <div className="font-bold text-slate-800">{data.courseTitle || "Unknown Course"}</div>
+                                  <div className="text-xs font-medium text-slate-500 mt-0.5">{data.sessionLabel}</div>
+                                </TableCell>
+                                <TableCell className="px-6 py-4">
+                                  <div className="text-xs font-bold text-slate-700">
+                                    {data.certs.length > 0 ? formatHkDate(data.certs[0].issuedAt || data.certs[0].issued_at) : 'N/A'}
+                                  </div>
+                                  <div className="text-[10px] text-slate-400 mt-0.5">
+                                    {data.certs.length} certificates
+                                  </div>
+                                </TableCell>
+                                <TableCell className="px-6 py-4 text-right">
+                                   <div className="flex justify-end gap-2">
+                                       <Button size="sm" variant="outline" onClick={() => generateBulkCertificatesPDF(data.certs, `${data.courseTitle} - ${data.sessionLabel}`)} className="gap-2 h-8 px-3 text-[10px] font-bold uppercase tracking-wider text-blue-600 border-blue-100 hover:bg-blue-50/50">
+                                          <Download className="w-3 h-3"/> Download {data.certs.length} PDFs
+                                       </Button>
+                                       {getPermission('certificates') !== 'view' ? (
+                                         <Button size="sm" variant="ghost" onClick={async () => {
+                                             if (window.confirm("Are you sure you want to remove all certificates for this course session? This cannot be undone.")) {
+                                                 try {
+                                                     const deletePromises = data.certs.map((c: any) => deleteDoc(doc(collection(db, 'certificates'), c.id)));
+                                                     await Promise.all(deletePromises);
+                                                     setCertificates(prev => prev.filter(p => !data.certs.some((c: any) => c.id === p.id)));
+                                                     toast.success("Certificates removed successfully");
+                                                 } catch (e: any) {
+                                                     toast.error(e.message);
+                                                 }
+                                             }
+                                         }} className="gap-2 h-8 px-3 text-[10px] font-bold uppercase tracking-wider text-red-600 hover:bg-red-50 hover:text-red-700">
+                                             <Trash2 className="w-3 h-3" /> Remove
+                                         </Button>
+                                       ) : (
+                                         <span className="text-[10px] text-slate-400 font-bold bg-slate-100 border border-slate-200 px-3 py-2 rounded">Locked</span>
+                                       )}
+                                   </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
                           {certificates.length === 0 && (
                             <TableRow><TableCell colSpan={3} className="text-center py-12 text-slate-400 text-xs italic tracking-wider">No certificates found in system records.</TableCell></TableRow>
                           )}
@@ -2999,20 +3184,24 @@ export function AdminDashboard() {
           )}
 
           {activeTab === 'courses' && (
-            <CoursesTab
-              courseSearchTerm={courseSearchTerm}
-              setCourseSearchTerm={setCourseSearchTerm}
-              setCourseCreationModalOpen={setCourseCreationModalOpen}
-              courses={courses}
-              sessions={sessions}
-              setSelectedTemplateForIntake={setSelectedTemplateForIntake}
-              newSession={newSession}
-              setNewSession={setNewSession}
-              setActiveTab={setActiveTab}
-              setSelectedCourse={setSelectedCourse}
-              setCourseModalOpen={setCourseModalOpen}
-              confirmDelete={confirmDelete}
-            />
+            <div className="space-y-4">
+              <ReadOnlyAlert moduleKey="courses" />
+              <CoursesTab
+                courseSearchTerm={courseSearchTerm}
+                setCourseSearchTerm={setCourseSearchTerm}
+                setCourseCreationModalOpen={setCourseCreationModalOpen}
+                courses={courses}
+                sessions={sessions}
+                setSelectedTemplateForIntake={setSelectedTemplateForIntake}
+                newSession={newSession}
+                setNewSession={setNewSession}
+                setActiveTab={setActiveTab}
+                setSelectedCourse={setSelectedCourse}
+                setCourseModalOpen={setCourseModalOpen}
+                confirmDelete={confirmDelete}
+                readOnly={getPermission('courses') === 'view'}
+              />
+            </div>
           )}
 
           {activeTab === 'tutors' && (
@@ -3047,6 +3236,7 @@ export function AdminDashboard() {
 
           {activeTab === 'sessions' && (
             <div className="space-y-6">
+              <ReadOnlyAlert moduleKey="sessions" />
               <div className="flex gap-2 p-1 bg-slate-100 rounded-lg w-max mb-6">
                 <Button 
                   variant={courseRunsActiveTab === 'runs' ? 'default' : 'ghost'} 
@@ -3075,13 +3265,19 @@ export function AdminDashboard() {
                           <h2 className="text-lg font-bold text-slate-800 font-sans tracking-tight">Active Courses & Intakes</h2>
                           <p className="text-xs text-slate-500">Manage your course runs and schedules</p>
                         </div>
-                        <Button 
-                          onClick={() => setSessionCreationModalOpen(true)} 
-                          className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-600/20 px-6 font-bold text-xs uppercase tracking-widest transition-all hover:scale-105 active:scale-95"
-                        >
-                          <Plus className="w-4 h-4 mr-2" /> 
-                          New Course Instance
-                        </Button>
+                        {getPermission('sessions') !== 'view' ? (
+                          <Button 
+                            onClick={() => setSessionCreationModalOpen(true)} 
+                            className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-600/20 px-6 font-bold text-xs uppercase tracking-widest transition-all hover:scale-105 active:scale-95"
+                          >
+                            <Plus className="w-4 h-4 mr-2" /> 
+                            New Course Instance
+                          </Button>
+                        ) : (
+                          <Button disabled className="bg-slate-100 text-slate-400 border border-slate-200 font-bold text-xs uppercase tracking-widest cursor-not-allowed whitespace-nowrap h-10 px-4">
+                            🔒 Read-Only
+                          </Button>
+                        )}
                       </div>
 
                   <Card className="shadow-sm">
@@ -3158,8 +3354,11 @@ export function AdminDashboard() {
                         <Table>
                           <TableHeader>
                             <TableRow>
-                              <TableHead>Code Name</TableHead>
-                              <TableHead>Course</TableHead>
+                              <TableHead>Code</TableHead>
+                              <TableHead>Title</TableHead>
+                              <TableHead>day</TableHead>
+                              <TableHead>EB Price</TableHead>
+                              <TableHead>Base Price</TableHead>
                               <TableHead>Instructor</TableHead>
                               <TableHead>Delivery & Room</TableHead>
                               <TableHead>Enrolled</TableHead>
@@ -3215,12 +3414,20 @@ export function AdminDashboard() {
                               return (
                                 <TableRow key={s.id} className="hover:bg-slate-50/50">
                                   <TableCell>
-                                    <div className="font-semibold text-slate-800 whitespace-normal break-words max-w-[200px] leading-snug">{course?.courseCode || s.sessionName}</div>
-                                    <div className="text-[10px] uppercase font-bold text-slate-400 mt-0.5">
-                                      {s.startDate || 'No date'} - {s.endDate || 'No date'}
+                                    <div className="font-bold text-slate-900 whitespace-normal break-words max-w-[124px] leading-none mb-1 text-sm">{course?.courseCode || s.sessionName}</div>
+                                    <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-600 bg-blue-50/85 border border-blue-100/80 px-2 py-0.5 rounded-full mt-1.5">
+                                      <CalendarIcon className="w-3 h-3 text-blue-500 flex-shrink-0" />
+                                      <span>{s.startDate || 'No date'} to {s.endDate || 'No date'}</span>
                                     </div>
                                   </TableCell>
-                                  <TableCell className="text-xs whitespace-normal break-words max-w-[250px] leading-tight">{course?.title || 'Unknown'}</TableCell>
+                                  <TableCell className="text-xs whitespace-normal break-words max-w-[180px] leading-tight font-medium text-slate-700">{course?.title || 'Unknown'}</TableCell>
+                                  <TableCell className="text-xs font-semibold text-indigo-600">{course?.day ? `${course.day} Days` : '-'}</TableCell>
+                                  <TableCell className="text-xs font-bold text-emerald-600">
+                                    {s.earlyBirdPrice !== undefined ? `HK$${s.earlyBirdPrice}` : (course?.earlyBirdPrice !== undefined ? `HK$${course.earlyBirdPrice}` : '-')}
+                                  </TableCell>
+                                  <TableCell className="text-xs font-bold text-slate-600">
+                                    {s.standardPrice !== undefined ? `HK$${s.standardPrice}` : (course?.standardPrice !== undefined ? `HK$${course.standardPrice}` : '-')}
+                                  </TableCell>
                                   <TableCell className="text-xs font-medium">{instructor?.name || 'Unassigned'}</TableCell>
                                   <TableCell>
                                     <div className="flex flex-col gap-1 items-start">
@@ -3253,12 +3460,16 @@ export function AdminDashboard() {
                                     </span>
                                   </TableCell>
                                   <TableCell className="text-right">
-                                    <div className="flex justify-end gap-1">
-                                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-blue-600" title="Edit" onClick={() => { setSelectedSession(s); setSessionModalOpen(true); }}><Edit2 className="w-3.5 h-3.5" /></Button>
-                                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-300 hover:text-red-600" title="Delete" onClick={() => confirmDelete(s.id, 'session', s.sessionName || 'Unknown Course')}>
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </Button>
-                                    </div>
+                                    {getPermission('sessions') === 'view' ? (
+                                      <span className="text-[10px] text-slate-400 font-bold bg-slate-100 border border-slate-200 px-2 py-1 rounded">Locked</span>
+                                    ) : (
+                                      <div className="flex justify-end gap-1">
+                                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-blue-600" title="Edit" onClick={() => { setSelectedSession(s); setSessionModalOpen(true); }}><Edit2 className="w-3.5 h-3.5" /></Button>
+                                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-300 hover:text-red-600" title="Delete" onClick={() => confirmDelete(s.id, 'session', s.sessionName || 'Unknown Course')}>
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </Button>
+                                      </div>
+                                    )}
                                   </TableCell>
                                 </TableRow>
                               )
@@ -3561,6 +3772,7 @@ export function AdminDashboard() {
 
           {(activeTab === 'staff' || activeTab === 'students') && (
             <div className="space-y-6">
+              <ReadOnlyAlert moduleKey={activeTab} />
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="relative">
@@ -3596,16 +3808,18 @@ export function AdminDashboard() {
                     <option value="suspended">Suspended</option>
                   </select>
                 </div>
-                <Button 
-                  onClick={() => {
-                    setSelectedUser(null);
-                    setUserForm({ role: activeTab === 'staff' ? 'tutor' : 'student', status: 'active', qualifiedCategories: [] });
-                    setIsUserModalOpen(true);
-                  }}
-                  className="gap-2 bg-indigo-600 hover:bg-indigo-700"
-                >
-                  <Plus className="w-4 h-4" /> {activeTab === 'staff' ? 'Add Staff' : 'Add Student'}
-                </Button>
+                {getPermission(activeTab) !== 'view' && (
+                  <Button 
+                    onClick={() => {
+                      setSelectedUser(null);
+                      setUserForm({ role: activeTab === 'staff' ? 'tutor' : 'student', status: 'active', qualifiedCategories: [] });
+                      setIsUserModalOpen(true);
+                    }}
+                    className="gap-2 bg-indigo-600 hover:bg-indigo-700"
+                  >
+                    <Plus className="w-4 h-4" /> {activeTab === 'staff' ? 'Add Staff' : 'Add Student'}
+                  </Button>
+                )}
               </div>
 
               <Card>
@@ -3695,19 +3909,22 @@ export function AdminDashboard() {
                                     <ExternalLink className="w-3.5 h-3.5" />
                                   </Button>
                                 )}
+                                {getPermission(activeTab) !== 'view' && (
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    className="h-8 px-2 text-amber-600"
+                                    onClick={() => handlePasswordReset(u.email)}
+                                    title="Reset Password"
+                                  >
+                                    <KeyRound className="w-3.5 h-3.5" />
+                                  </Button>
+                                )}
                                 <Button 
                                   variant="ghost" 
                                   size="sm" 
-                                  className="h-8 px-2 text-amber-600"
-                                  onClick={() => handlePasswordReset(u.email)}
-                                  title="Reset Password"
-                                >
-                                  <KeyRound className="w-3.5 h-3.5" />
-                                </Button>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  className="h-8 px-2"
+                                  className="h-8 px-2 text-slate-605"
+                                  title={getPermission(activeTab) === 'view' ? "View Details" : "Edit User"}
                                   onClick={() => {
                                     setSelectedUser(u);
                                     setUserForm({
@@ -3725,7 +3942,7 @@ export function AdminDashboard() {
                                 >
                                   <FileText className="w-3.5 h-3.5" />
                                 </Button>
-                                {role === 'admin' && (
+                                {role === 'admin' && getPermission(activeTab) !== 'view' && (
                                   <Button 
                                     variant="ghost" 
                                     size="sm" 
@@ -3767,40 +3984,54 @@ export function AdminDashboard() {
           )}
 
           {activeTab === 'promotions' && (
-            <PromotionsTab
-              promotions={promotions}
-              promoCategoryFilter={promoCategoryFilter}
-              setPromoCategoryFilter={setPromoCategoryFilter}
-              regs={regs}
-              setSelectedPromo={setSelectedPromo}
-              setPromoForm={setPromoForm}
-              setIsPromoModalOpen={setIsPromoModalOpen}
-              setPromoToDelete={setPromoToDelete}
-              setIsDeletePromoModalOpen={setIsDeletePromoModalOpen}
-              courses={courses}
-              sessions={sessions}
-            />
+            <div className="space-y-6">
+              <ReadOnlyAlert moduleKey="promotions" />
+              <PromotionsTab
+                promotions={promotions}
+                promoCategoryFilter={promoCategoryFilter}
+                setPromoCategoryFilter={setPromoCategoryFilter}
+                regs={regs}
+                setSelectedPromo={setSelectedPromo}
+                setPromoForm={setPromoForm}
+                setIsPromoModalOpen={setIsPromoModalOpen}
+                setPromoToDelete={setPromoToDelete}
+                setIsDeletePromoModalOpen={setIsDeletePromoModalOpen}
+                courses={courses}
+                sessions={sessions}
+                readOnly={getPermission('promotions') === 'view'}
+              />
+            </div>
           )}
 
           {activeTab === 'settings' && (
-            <SettingsTab
-              schoolInfo={schoolInfo}
-              setSchoolInfo={setSchoolInfo}
-              handleSaveSchoolInfo={handleSaveSchoolInfo}
-            />
+            <div className="space-y-6">
+              <ReadOnlyAlert moduleKey="settings" />
+              <SettingsTab
+                schoolInfo={schoolInfo}
+                setSchoolInfo={setSchoolInfo}
+                handleSaveSchoolInfo={handleSaveSchoolInfo}
+                readOnly={getPermission('settings') === 'view'}
+              />
+            </div>
           )}
 
           {activeTab === 'permissions' && (
-            <PermissionsTab
-              customRolePermissions={customRolePermissions}
-              setCustomRolePermissions={setCustomRolePermissions}
-              selectedAccessRole={selectedAccessRole}
-              setSelectedAccessRole={setSelectedAccessRole}
-              simulatedRole={simulatedRole}
-              setSimulatedRole={setSimulatedRole}
-              activeAccessSection={activeAccessSection}
-              setActiveAccessSection={setActiveAccessSection}
-            />
+            <div className="space-y-6">
+              <ReadOnlyAlert moduleKey="permissions" />
+              <PermissionsTab
+                customRolePermissions={customRolePermissions}
+                setCustomRolePermissions={updateRolePermissionsInDb}
+                selectedAccessRole={selectedAccessRole}
+                setSelectedAccessRole={setSelectedAccessRole}
+                simulatedRole={simulatedRole}
+                setSimulatedRole={setSimulatedRole}
+                activeAccessSection={activeAccessSection}
+                setActiveAccessSection={setActiveAccessSection}
+                isSimulatingGlobally={isSimulatingGlobally}
+                setIsSimulatingGlobally={setIsSimulatingGlobally}
+                readOnly={getPermission('permissions') === 'view'}
+              />
+            </div>
           )}
 
           </React.Suspense>
@@ -3847,147 +4078,181 @@ export function AdminDashboard() {
       {/* User Create/Edit Modal */}
       <Dialog open={isUserModalOpen} onOpenChange={setIsUserModalOpen}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{selectedUser ? 'Edit User' : 'Create New User'}</DialogTitle>
-            <DialogDescription>
-              {selectedUser ? `Updating profile for ${selectedUser.name}` : 'Add a new user to the system. They will need to set their password via email.'}
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={selectedUser ? handleEditUser : handleCreateUser} className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2 col-span-2">
-                <label className="text-xs font-bold uppercase text-slate-500">Full Name</label>
-                <Input 
-                  required
-                  placeholder="John Doe" 
-                  value={userForm.name || ''} 
-                  onChange={e => setUserForm({...userForm, name: e.target.value})}
-                />
-              </div>
-              <div className="space-y-2 col-span-2">
-                <label className="text-xs font-bold uppercase text-slate-500">Email Address</label>
-                <Input 
-                  required
-                  type="email"
-                  disabled={!!selectedUser}
-                  placeholder="john@example.com" 
-                  value={userForm.email || ''} 
-                  onChange={e => setUserForm({...userForm, email: e.target.value})}
-                />
-              </div>
-              {!selectedUser && (
-                <div className="space-y-2 col-span-2">
-                  <label className="text-xs font-bold uppercase text-slate-500">Custom Password (Optional)</label>
-                  <Input 
-                    type="password"
-                    placeholder="Leave blank to let user set via password reset" 
-                    value={userForm.password || ''} 
-                    onChange={e => setUserForm({...userForm, password: e.target.value})}
-                  />
-                  <p className="text-[10px] text-slate-400">If provided, the user account will be created immediately with this password (min 6 chars).</p>
-                </div>
-              )}
-              {selectedUser && (
-                <div className="space-y-2 col-span-2 mb-2">
-                   <Button type="button" variant="outline" size="sm" onClick={() => handlePasswordReset(selectedUser.email)} className="w-full gap-2 text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700">
-                     <KeyRound className="w-4 h-4" /> Send Password Reset Email
-                   </Button>
-                </div>
-              )}
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase text-slate-500">Role</label>
-                <select 
-                  className={`w-full h-9 rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm ${role !== 'admin' || selectedUser?.role === 'admin' || selectedUser?.email === 'system.admin@vexperthk.com' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  value={selectedUser?.role === 'admin' || selectedUser?.email === 'system.admin@vexperthk.com' ? 'admin' : (userForm.role || 'student')}
-                  onChange={e => setUserForm({...userForm, role: e.target.value as UserRole})}
-                  disabled={role !== 'admin' || selectedUser?.role === 'admin' || selectedUser?.email === 'system.admin@vexperthk.com'}
-                >
-                  <option value="student">Student</option>
-                  <option value="tutor">Instructor (Full-Time)</option>
-                  <option value="tutor_pt">Instructor (Part-Time)</option>
-                  <option value="coordinator">Course Coordinator</option>
-                  <option value="finance">Finance</option>
-                  <option value="staff">Staff (Other)</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase text-slate-500">Status</label>
-                <select 
-                  className={`w-full h-9 rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm ${selectedUser?.role === 'admin' || selectedUser?.email === 'system.admin@vexperthk.com' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  value={selectedUser?.role === 'admin' || selectedUser?.email === 'system.admin@vexperthk.com' ? 'active' : (userForm.status || 'active')}
-                  onChange={e => setUserForm({...userForm, status: e.target.value as UserStatus})}
-                  disabled={selectedUser?.role === 'admin' || selectedUser?.email === 'system.admin@vexperthk.com'}
-                >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                  <option value="suspended">Suspended</option>
-                </select>
-              </div>
-              <div className="space-y-2 col-span-2">
-                <label className="text-xs font-bold uppercase text-slate-500">Phone Number</label>
-                <Input 
-                  placeholder="+852 XXXX XXXX" 
-                  value={userForm.phone || ''} 
-                  onChange={e => setUserForm({...userForm, phone: e.target.value})}
-                />
-              </div>
-              <div className="space-y-2 col-span-2">
-                <label className="text-xs font-bold uppercase text-slate-500">Company Name</label>
-                <Input 
-                  placeholder="e.g. Vantix Limited" 
-                  value={userForm.company || ''} 
-                  onChange={e => setUserForm({...userForm, company: e.target.value})}
-                />
-              </div>
-              <div className="space-y-2 col-span-2">
-                <label className="text-xs font-bold uppercase text-slate-500">Admin Remarks</label>
-                <Textarea 
-                  placeholder="Internal notes about this user..." 
-                  className="min-h-[100px]"
-                  value={userForm.remarks || ''} 
-                  onChange={e => setUserForm({...userForm, remarks: e.target.value})}
-                />
-              </div>
+          {(() => {
+            const isTabReadOnly = (activeTab === 'staff' || activeTab === 'students') && getPermission(activeTab) === 'view';
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle>{isTabReadOnly ? 'User Details' : (selectedUser ? 'Edit User' : 'Create New User')}</DialogTitle>
+                  <DialogDescription>
+                    {isTabReadOnly 
+                      ? `Viewing profile indicators for ${userForm.name || 'user'}` 
+                      : (selectedUser ? `Updating profile for ${selectedUser.name}` : 'Add a new user to the system. They will need to set their password via email.')}
+                  </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={e => {
+                  e.preventDefault();
+                  if (isTabReadOnly) return;
+                  if (selectedUser) {
+                    handleEditUser(e);
+                  } else {
+                    handleCreateUser(e);
+                  }
+                }} className="space-y-4 py-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2 col-span-2">
+                      <label className="text-xs font-bold uppercase text-slate-500">Full Name</label>
+                      <Input 
+                        required
+                        disabled={isTabReadOnly}
+                        placeholder="John Doe" 
+                        value={userForm.name || ''} 
+                        onChange={e => setUserForm({...userForm, name: e.target.value})}
+                      />
+                    </div>
+                    <div className="space-y-2 col-span-2">
+                      <label className="text-xs font-bold uppercase text-slate-500">Email Address</label>
+                      <Input 
+                        required
+                        type="email"
+                        disabled={!!selectedUser || isTabReadOnly}
+                        placeholder="john@example.com" 
+                        value={userForm.email || ''} 
+                        onChange={e => setUserForm({...userForm, email: e.target.value})}
+                      />
+                    </div>
+                    {!selectedUser && (
+                      <div className="space-y-2 col-span-2">
+                        <label className="text-xs font-bold uppercase text-slate-500">Custom Password (Optional)</label>
+                        <Input 
+                          type="password"
+                          disabled={isTabReadOnly}
+                          placeholder="Leave blank to let user set via password reset" 
+                          value={userForm.password || ''} 
+                          onChange={e => setUserForm({...userForm, password: e.target.value})}
+                        />
+                        <p className="text-[10px] text-slate-400">If provided, the user account will be created immediately with this password (min 6 chars).</p>
+                      </div>
+                    )}
+                    {selectedUser && !isTabReadOnly && (
+                      <div className="space-y-2 col-span-2 mb-2">
+                         <Button type="button" variant="outline" size="sm" onClick={() => handlePasswordReset(selectedUser.email)} className="w-full gap-2 text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700">
+                           <KeyRound className="w-4 h-4" /> Send Password Reset Email
+                         </Button>
+                      </div>
+                    )}
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold uppercase text-slate-500">Role</label>
+                      <select 
+                        className={`w-full h-9 rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm ${role !== 'admin' || selectedUser?.role === 'admin' || selectedUser?.email === 'system.admin@vexperthk.com' || isTabReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        value={selectedUser?.role === 'admin' || selectedUser?.email === 'system.admin@vexperthk.com' ? 'admin' : (userForm.role || 'student')}
+                        onChange={e => setUserForm({...userForm, role: e.target.value as UserRole})}
+                        disabled={role !== 'admin' || selectedUser?.role === 'admin' || selectedUser?.email === 'system.admin@vexperthk.com' || isTabReadOnly}
+                      >
+                        <option value="student">Student</option>
+                        <option value="tutor">Instructor (Full-Time)</option>
+                        <option value="tutor_pt">Instructor (Part-Time)</option>
+                        <option value="coordinator">Course Coordinator</option>
+                        <option value="finance">Finance</option>
+                        <option value="staff">Staff (Other)</option>
+                        <option value="admin">Admin</option>
+                        {customRolePermissions
+                          .filter(r => !['admin', 'coordinator', 'finance', 'staff'].includes(r.roleId))
+                          .map(r => (
+                            <option key={r.roleId} value={r.roleId}>
+                              {r.name} (Custom)
+                            </option>
+                          ))
+                        }
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold uppercase text-slate-500">Status</label>
+                      <select 
+                        className={`w-full h-9 rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm ${selectedUser?.role === 'admin' || selectedUser?.email === 'system.admin@vexperthk.com' || isTabReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        value={selectedUser?.role === 'admin' || selectedUser?.email === 'system.admin@vexperthk.com' ? 'active' : (userForm.status || 'active')}
+                        onChange={e => setUserForm({...userForm, status: e.target.value as UserStatus})}
+                        disabled={selectedUser?.role === 'admin' || selectedUser?.email === 'system.admin@vexperthk.com' || isTabReadOnly}
+                      >
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                        <option value="suspended">Suspended</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2 col-span-2">
+                      <label className="text-xs font-bold uppercase text-slate-500">Phone Number</label>
+                      <Input 
+                        disabled={isTabReadOnly}
+                        placeholder="+852 XXXX XXXX" 
+                        value={userForm.phone || ''} 
+                        onChange={e => setUserForm({...userForm, phone: e.target.value})}
+                      />
+                    </div>
+                    <div className="space-y-2 col-span-2">
+                      <label className="text-xs font-bold uppercase text-slate-500">Company Name</label>
+                      <Input 
+                        disabled={isTabReadOnly}
+                        placeholder="e.g. Vantix Limited" 
+                        value={userForm.company || ''} 
+                        onChange={e => setUserForm({...userForm, company: e.target.value})}
+                      />
+                    </div>
+                    <div className="space-y-2 col-span-2">
+                      <label className="text-xs font-bold uppercase text-slate-500">Admin Remarks</label>
+                      <Textarea 
+                        disabled={isTabReadOnly}
+                        placeholder="Internal notes about this user..." 
+                        className="min-h-[100px]"
+                        value={userForm.remarks || ''} 
+                        onChange={e => setUserForm({...userForm, remarks: e.target.value})}
+                      />
+                    </div>
 
-              {(userForm.role === 'tutor' || userForm.role === 'tutor_pt') && (
-                <div className="space-y-2 col-span-2">
-                  <label className="text-xs font-bold uppercase text-slate-500">Qualified Categories (Can Teach)</label>
-                  <p className="text-xs text-slate-400 pb-1">Select the course categories this instructor is qualified to teach.</p>
-                  <div className="max-h-64 overflow-y-auto border border-slate-200 rounded-md p-3 bg-white flex flex-wrap gap-2">
-                    {Array.from(new Set(courses.map(c => c.category).filter(Boolean))).sort().map(category => {
-                      const isSelected = userForm.qualifiedCategories?.includes(category) || false;
-                      return (
-                        <label key={category} className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-full border text-sm transition-colors ${isSelected ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-medium' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
-                          <input 
-                            type="checkbox" 
-                            className="hidden"
-                            checked={isSelected}
-                            onChange={(e) => {
-                              const currentCats = userForm.qualifiedCategories || [];
-                              if (e.target.checked) {
-                                setUserForm({ ...userForm, qualifiedCategories: [...currentCats, category] });
-                              } else {
-                                setUserForm({ ...userForm, qualifiedCategories: currentCats.filter(c => c !== category) });
-                              }
-                            }}
-                          />
-                          {category}
-                        </label>
-                      );
-                    })}
-                    {courses.length === 0 && <span className="text-xs text-slate-500">No categories available.</span>}
+                    {(userForm.role === 'tutor' || userForm.role === 'tutor_pt') && (
+                      <div className="space-y-2 col-span-2">
+                        <label className="text-xs font-bold uppercase text-slate-500">Qualified Categories (Can Teach)</label>
+                        <p className="text-xs text-slate-400 pb-1">Select the course categories this instructor is qualified to teach.</p>
+                        <div className="max-h-64 overflow-y-auto border border-slate-200 rounded-md p-3 bg-white flex flex-wrap gap-2">
+                          {Array.from(new Set(courses.map(c => c.category).filter(Boolean))).sort().map(category => {
+                            const isSelected = userForm.qualifiedCategories?.includes(category) || false;
+                            return (
+                              <label key={category} className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-full border text-sm transition-colors ${isSelected ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-medium' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'} ${isTabReadOnly ? 'pointer-events-none opacity-80' : ''}`}>
+                                <input 
+                                  type="checkbox" 
+                                  className="hidden"
+                                  disabled={isTabReadOnly}
+                                  checked={isSelected}
+                                  onChange={(e) => {
+                                    if (isTabReadOnly) return;
+                                    const currentCats = userForm.qualifiedCategories || [];
+                                    if (e.target.checked) {
+                                      setUserForm({ ...userForm, qualifiedCategories: [...currentCats, category] });
+                                    } else {
+                                      setUserForm({ ...userForm, qualifiedCategories: currentCats.filter(c => c !== category) });
+                                    }
+                                  }}
+                                />
+                                {category}
+                              </label>
+                            );
+                          })}
+                          {courses.length === 0 && <span className="text-xs text-slate-500">No categories available.</span>}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
-            </div>
-            <DialogFooter className="pt-4">
-              <Button type="button" variant="outline" onClick={() => setIsUserModalOpen(false)}>Cancel</Button>
-              <Button type="submit" className="bg-indigo-600 hover:bg-indigo-700">
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (selectedUser ? 'Save Changes' : 'Create User')}
-              </Button>
-            </DialogFooter>
-          </form>
+                  <DialogFooter className="pt-4">
+                    <Button type="button" variant="outline" onClick={() => setIsUserModalOpen(false)}>{isTabReadOnly ? 'Close' : 'Cancel'}</Button>
+                    {!isTabReadOnly && (
+                      <Button type="submit" className="bg-indigo-600 hover:bg-indigo-700">
+                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (selectedUser ? 'Save Changes' : 'Create User')}
+                      </Button>
+                    )}
+                  </DialogFooter>
+                </form>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
@@ -4559,7 +4824,11 @@ export function AdminDashboard() {
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Early Bird Price (HKD)</label>
                     <Input 
                       type="number"
-                      value={isNaN(selectedSession.earlyBirdPrice) ? '' : selectedSession.earlyBirdPrice} 
+                      value={
+                        selectedSession.earlyBirdPrice !== undefined && selectedSession.earlyBirdPrice !== null && !isNaN(selectedSession.earlyBirdPrice)
+                          ? selectedSession.earlyBirdPrice
+                          : (courses.find((c: any) => c.id === selectedSession.courseId)?.earlyBirdPrice ?? '')
+                      } 
                       onChange={e => setSelectedSession({...selectedSession, earlyBirdPrice: parseFloat(e.target.value) || 0})}
                       className="h-10 border-slate-200"
                     />
@@ -4568,7 +4837,11 @@ export function AdminDashboard() {
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Standard Price (HKD)</label>
                     <Input 
                       type="number"
-                      value={isNaN(selectedSession.standardPrice) ? '' : selectedSession.standardPrice} 
+                      value={
+                        selectedSession.standardPrice !== undefined && selectedSession.standardPrice !== null && !isNaN(selectedSession.standardPrice)
+                          ? selectedSession.standardPrice
+                          : (courses.find((c: any) => c.id === selectedSession.courseId)?.standardPrice ?? '')
+                      } 
                       onChange={e => setSelectedSession({...selectedSession, standardPrice: parseFloat(e.target.value) || 0, price: parseFloat(e.target.value) || 0})}
                       className="h-10 border-slate-200"
                     />
@@ -4662,6 +4935,103 @@ export function AdminDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <Dialog open={categoryManagerOpen} onOpenChange={setCategoryManagerOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Manage Course Categories</DialogTitle>
+            <DialogDescription>Add, rename, or delete categories. Renaming will update all existing courses.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+             <div className="flex gap-2">
+                 <Input id="newCategoryInput" placeholder="New category name" className="h-9 text-sm" />
+                 <Button className="h-9 px-4 bg-slate-800 text-white" onClick={async () => {
+                     const val = (document.getElementById('newCategoryInput') as HTMLInputElement).value.trim();
+                     if (val && !courseCategories.includes(val)) {
+                         const newCats = [...courseCategories, val];
+                         setCourseCategories(newCats);
+                         await setDoc(doc(collection(db, 'settings'), 'course_categories'), { categories: newCats });
+                         (document.getElementById('newCategoryInput') as HTMLInputElement).value = '';
+                     }
+                 }}>Add</Button>
+             </div>
+             <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                 {courseCategories.map((cat, idx) => (
+                    <div key={cat} className="relative flex gap-1 items-center bg-slate-50 p-1.5 rounded-lg border border-slate-100">
+                        <div className="flex flex-col -space-y-1">
+                            <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-4 w-4 p-0 text-slate-400 hover:text-slate-600 disabled:opacity-30"
+                                disabled={idx === 0}
+                                onClick={async () => {
+                                    if (idx === 0) return;
+                                    const newCats = [...courseCategories];
+                                    [newCats[idx - 1], newCats[idx]] = [newCats[idx], newCats[idx - 1]];
+                                    setCourseCategories(newCats);
+                                    await setDoc(doc(collection(db, 'settings'), 'course_categories'), { categories: newCats });
+                                }}
+                            >
+                                <ChevronUp className="w-3 h-3" />
+                            </Button>
+                            <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-4 w-4 p-0 text-slate-400 hover:text-slate-600 disabled:opacity-30"
+                                disabled={idx === courseCategories.length - 1}
+                                onClick={async () => {
+                                    if (idx === courseCategories.length - 1) return;
+                                    const newCats = [...courseCategories];
+                                    [newCats[idx + 1], newCats[idx]] = [newCats[idx], newCats[idx + 1]];
+                                    setCourseCategories(newCats);
+                                    await setDoc(doc(collection(db, 'settings'), 'course_categories'), { categories: newCats });
+                                }}
+                            >
+                                <ChevronDown className="w-3 h-3" />
+                            </Button>
+                        </div>
+                        <Input defaultValue={cat} id={`cat-edit-${idx}`} className="h-8 text-sm border-transparent bg-transparent outline-none focus-visible:ring-0 focus-visible:border-blue-500 flex-1 ml-1" />
+                        <Button variant="ghost" size="sm" className="h-8 text-xs text-blue-600 font-medium" onClick={async () => {
+                             const newVal = (document.getElementById(`cat-edit-${idx}`) as HTMLInputElement).value.trim();
+                             if (newVal && newVal !== cat) {
+                                 const newCats = [...courseCategories];
+                                 newCats[idx] = newVal;
+                                 setCourseCategories(newCats);
+                                 await setDoc(doc(collection(db, 'settings'), 'course_categories'), { categories: newCats });
+                                 const toUpdate = courses.filter(c => c.category === cat);
+                                 toUpdate.forEach(async c => {
+                                     await updateDoc(doc(collection(db, 'courses'), c.id), { category: newVal });
+                                 });
+                                 setCourses(prev => prev.map(c => c.category === cat ? { ...c, category: newVal } : c));
+                                 toast.success('Category updated for all affected courses.');
+                             }
+                        }}>Save</Button>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={async () => {
+                             setCategoryToDelete(cat);
+                        }}><Trash2 className="w-4 h-4" /></Button>
+                        {categoryToDelete === cat && (
+                            <div className="absolute right-2 top-1.5 flex gap-1 bg-white p-1 shadow-lg rounded-md border border-red-100 z-10 animate-in fade-in slide-in-from-right-2">
+                                <Button size="sm" className="h-6 text-[10px] bg-red-500 hover:bg-red-600 px-2" onClick={async () => {
+                                    const newCats = courseCategories.filter(c => c !== cat);
+                                    setCourseCategories(newCats);
+                                    await setDoc(doc(collection(db, 'settings'), 'course_categories'), { categories: newCats });
+                                    const toUpdate = courses.filter(c => c.category === cat);
+                                    toUpdate.forEach(async c => {
+                                        await updateDoc(doc(collection(db, 'courses'), c.id), { category: '' });
+                                    });
+                                    setCourses(prev => prev.map(c => c.category === cat ? { ...c, category: '' } : c));
+                                    setCategoryToDelete(null);
+                                    toast.success(`Category "${cat}" removed.`);
+                                }}>Confirm</Button>
+                                <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2" onClick={() => setCategoryToDelete(null)}>Cancel</Button>
+                            </div>
+                        )}
+                    </div>
+                 ))}
+             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
       <Dialog open={courseCreationModalOpen} onOpenChange={setCourseCreationModalOpen}>
         <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-hidden flex flex-col p-0 border-none shadow-2xl">
           <DialogHeader className="p-6 pb-2 bg-slate-50/50 rounded-t-lg border-b border-slate-100">
@@ -4682,47 +5052,29 @@ export function AdminDashboard() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Course Category</label>
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Course Category</label>
+                    <button type="button" onClick={() => setCategoryManagerOpen(true)} className="text-[10px] text-blue-600 font-bold hover:underline">Manage</button>
+                  </div>
                   <select 
                     value={newCourse.category || ''} 
                     onChange={e => setNewCourse({...newCourse, category: e.target.value})} 
                     className="flex h-10 w-full rounded-md border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 outline-none transition-all"
                   >
                     <option value="">Select Category</option>
-                    <option value="Microsoft">Microsoft</option>
-                    <option value="AWS">AWS</option>
-                    <option value="Technology">Technology</option>
-                    <option value="Business">Business</option>
-                    <option value="Design">Design</option>
+                    {courseCategories.map((c, idx) => (
+                       <option key={idx} value={c}>{c}</option>
+                    ))}
                   </select>
                 </div>
 
                 <div className="space-y-1.5 mt-2">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Supporting Documents (PDF)</label>
-                  <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 h-[140px] flex flex-col items-center justify-center text-center bg-slate-50/30 hover:bg-slate-50 transition-colors">
-                    <FileText className="w-8 h-8 text-slate-400 mb-2" />
-                    <p className="text-xs font-semibold text-slate-600">Course Outline Upload</p>
-                    <label className="mt-3 cursor-pointer bg-white border border-slate-200 px-4 py-2 rounded-md text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-sm transition-all active:scale-95">
-                      SELECT FILE
-                      <input 
-                        type="file" 
-                        accept=".pdf" 
-                        className="hidden" 
-                        onChange={(e) => {
-                           const file = e.target.files?.[0];
-                           if (file) {
-                             setNewCourse({...newCourse, outlineName: file.name});
-                           }
-                        }} 
-                      />
-                    </label>
-                    {newCourse.outlineName && (
-                      <div className="mt-3 flex items-center gap-2 text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
-                        <FileText className="w-3 h-3" />
-                        {newCourse.outlineName}
-                      </div>
-                    )}
-                  </div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Course Outline (Microsoft Link)</label>
+                  <Input 
+                    placeholder="https://... (SharePoint/OneDrive/Docs)" 
+                    value={newCourse.outlineData || ''}
+                    onChange={e => setNewCourse({...newCourse, outlineData: e.target.value, outlineName: e.target.value ? 'Microsoft Document Link' : ''})} 
+                  />
                 </div>
               </div>
               <div className="space-y-4">
@@ -4740,8 +5092,8 @@ export function AdminDashboard() {
                   <textarea 
                     value={newCourse.description}
                     onChange={e => setNewCourse({...newCourse, description: e.target.value})}
-                    placeholder="Enter detailed course framework..."
-                    className="w-full min-h-[140px] rounded-md border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 outline-none transition-all resize-none"
+                    placeholder={"e.g.\nMODULE 1: Describe cloud concepts\nMODULE 2: Describe Azure architecture and services"}
+                    className="w-full min-h-[140px] rounded-md border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 outline-none transition-all resize-none placeholder:text-slate-300"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -4834,47 +5186,29 @@ export function AdminDashboard() {
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Course Category</label>
+                      <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Course Category</label>
+                        <button type="button" onClick={() => setCategoryManagerOpen(true)} className="text-[10px] text-blue-600 font-bold hover:underline">Manage</button>
+                      </div>
                       <select 
                         value={selectedCourse.category || ''} 
                         onChange={e => setSelectedCourse({...selectedCourse, category: e.target.value})} 
                         className="flex h-10 w-full rounded-md border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 outline-none transition-all"
                       >
                         <option value="">Select Category</option>
-                        <option value="Microsoft">Microsoft</option>
-                        <option value="AWS">AWS</option>
-                        <option value="Technology">Technology</option>
-                        <option value="Business">Business</option>
-                        <option value="Design">Design</option>
+                        {courseCategories.map((c, idx) => (
+                           <option key={idx} value={c}>{c}</option>
+                        ))}
                       </select>
                     </div>
 
                 <div className="space-y-1.5 mt-2">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Supporting Documents (PDF)</label>
-                  <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 h-[140px] flex flex-col items-center justify-center text-center bg-slate-50/30 hover:bg-slate-50 transition-colors">
-                    <FileText className="w-8 h-8 text-slate-400 mb-2" />
-                    <p className="text-xs font-semibold text-slate-600">Course Outline Upload</p>
-                    <label className="mt-3 cursor-pointer bg-white border border-slate-200 px-4 py-2 rounded-md text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-sm transition-all active:scale-95">
-                      SELECT FILE
-                      <input 
-                        type="file" 
-                        accept=".pdf" 
-                        className="hidden" 
-                        onChange={(e) => {
-                           const file = e.target.files?.[0];
-                           if (file) {
-                             setSelectedCourse({...selectedCourse, outlineName: file.name});
-                           }
-                        }} 
-                      />
-                    </label>
-                    {selectedCourse.outlineName && (
-                      <div className="mt-3 flex items-center gap-2 text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
-                        <FileText className="w-3 h-3" />
-                        {selectedCourse.outlineName}
-                      </div>
-                    )}
-                  </div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Course Outline (Microsoft Link)</label>
+                  <Input 
+                    placeholder="https://... (SharePoint/OneDrive/Docs)" 
+                    value={selectedCourse.outlineData || ''}
+                    onChange={e => setSelectedCourse({...selectedCourse, outlineData: e.target.value, outlineName: e.target.value ? 'Microsoft Document Link' : ''})} 
+                  />
                 </div>
                   </div>
                   <div className="space-y-4">

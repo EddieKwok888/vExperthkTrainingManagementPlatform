@@ -1,5 +1,5 @@
 
-export type UserRole = 'admin' | 'tutor' | 'tutor_pt' | 'staff' | 'coordinator' | 'finance' | 'student';
+export type UserRole = 'admin' | 'tutor' | 'tutor_pt' | 'staff' | 'coordinator' | 'finance' | 'student' | string;
 export type UserStatus = 'active' | 'inactive' | 'suspended';
 export type EmploymentType = 'full_time' | 'part_time' | 'freelance';
 export type SkillLevel = 'beginner' | 'intermediate' | 'advanced' | 'expert';

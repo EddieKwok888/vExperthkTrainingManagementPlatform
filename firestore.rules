@@ -23,8 +23,10 @@ service cloud.firestore {
         (request.auth.token.email != null && request.auth.token.email.lower() == 'aieddie0310@gmail.com') ||
         (request.auth.token.email != null && request.auth.token.email.lower() == 'system.admin@vexperthk.com') ||
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'coordinator', 'finance', 'staff'])
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'coordinator', 'finance', 'staff'] ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role.matches('^custom_.*')
+        ))
       );
     }
 
@@ -33,8 +35,10 @@ service cloud.firestore {
         (request.auth.token.email != null && request.auth.token.email.lower() == 'aieddie0310@gmail.com') ||
         (request.auth.token.email != null && request.auth.token.email.lower() == 'trainer@vexperthk.com') ||
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'coordinator', 'finance', 'staff', 'tutor', 'tutor_pt'])
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'coordinator', 'finance', 'staff', 'tutor', 'tutor_pt'] ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role.matches('^custom_.*')
+        ))
       );
     }
 
@@ -55,7 +59,7 @@ service cloud.firestore {
     function isValidUser(data) {
       return data.keys().hasAll(['email', 'role', 'name', 'status', 'createdAt']) &&
              data.email is string &&
-             data.role in ['student', 'tutor', 'tutor_pt', 'admin', 'coordinator', 'finance', 'staff'] &&
+             (data.role in ['student', 'tutor', 'tutor_pt', 'admin', 'coordinator', 'finance', 'staff'] || data.role.matches('^custom_.*')) &&
              data.name is string && data.name.size() <= 100 &&
              data.status in ['active', 'inactive', 'suspended'];
     }

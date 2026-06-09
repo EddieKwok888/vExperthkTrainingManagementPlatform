@@ -156,7 +156,10 @@ export function Home() {
                             </span>
                           )}
                         </div>
-                        <CardTitle className="text-slate-800 line-clamp-1">{course.courseTitle}</CardTitle>
+                        <CardTitle className="text-slate-800 line-clamp-1">
+                          {course.courseCode && <span className="font-mono text-sm text-slate-500 mr-2">{course.courseCode}</span>}
+                          {course.courseTitle}
+                        </CardTitle>
                         <CardDescription className="line-clamp-2 text-slate-500 mt-1">
                           <span className="block font-semibold text-blue-600 tracking-tight text-xs uppercase mb-1">
                             {course.sessionName} • {course.startDate && course.endDate ? `${course.startDate} to ${course.endDate}` : 'Dates TBD'}
@@ -169,7 +172,10 @@ export function Home() {
                           {course.duration_hours && <span><span className="font-medium text-slate-700">Duration:</span> {course.duration_hours} hours</span>}
                           {course.deliveryMode && <span className="uppercase text-[10px] font-bold tracking-widest bg-slate-100 px-1.5 py-0.5 rounded">{course.deliveryMode}</span>}
                         </div>
-                        {course.certificate_available && <p className="text-green-600 text-xs font-bold uppercase tracking-wider">✓ Certificate Available</p>}
+                        <div className="flex justify-between items-center pt-2">
+                          {course.certificate_available ? <span className="text-green-600 text-[10px] font-bold uppercase tracking-wider bg-green-50 px-2 py-0.5 rounded">✓ Certificate</span> : <span />}
+                          {course.outlineName && <span className="text-purple-600 text-[10px] font-bold uppercase tracking-wider bg-purple-50 px-2 py-0.5 rounded line-clamp-1 truncate ml-2">📄 Outline</span>}
+                        </div>
                         
                         <div className="mt-2">
                           {(course.earlyBirdPrice && course.earlyBirdPrice < (course.standardPrice || course.price)) ? (

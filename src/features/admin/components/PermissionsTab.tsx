@@ -1,4 +1,4 @@
-import React from 'react';
+import React from 'react'; // Freshly compiled and validated module for dynamic imports
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
@@ -8,13 +8,16 @@ import { toast } from 'sonner';
 
 interface PermissionsTabProps {
   customRolePermissions: any[];
-  setCustomRolePermissions: React.Dispatch<React.SetStateAction<any[]>>;
+  setCustomRolePermissions: (newRoles: any[]) => void;
   selectedAccessRole: string;
   setSelectedAccessRole: (roleId: string) => void;
   simulatedRole: string;
   setSimulatedRole: (roleId: string) => void;
   activeAccessSection: 'matrix' | 'details' | 'sim' | 'docs';
   setActiveAccessSection: (sec: 'matrix' | 'details' | 'sim' | 'docs') => void;
+  isSimulatingGlobally: boolean;
+  setIsSimulatingGlobally: (val: boolean) => void;
+  readOnly?: boolean;
 }
 
 export function PermissionsTab({
@@ -25,7 +28,10 @@ export function PermissionsTab({
   simulatedRole,
   setSimulatedRole,
   activeAccessSection,
-  setActiveAccessSection
+  setActiveAccessSection,
+  isSimulatingGlobally,
+  setIsSimulatingGlobally,
+  readOnly = false,
 }: PermissionsTabProps) {
   return (
     <div className="space-y-6">
@@ -39,27 +45,29 @@ export function PermissionsTab({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button
-            onClick={() => {
-              const newId = `custom_${Date.now()}`;
-              const cloneFrom = customRolePermissions.find(r => r.roleId === selectedAccessRole) || customRolePermissions[0];
-              const newRoleObj = {
-                roleId: newId,
-                name: `Custom Role ${customRolePermissions.length + 1}`,
-                desc: 'Custom-tailored role for specialized staff or outsourced partner administration.',
-                maxAuthAmount: cloneFrom.maxAuthAmount,
-                restrictions: 'No restrictions specified. Modify dynamically in configuration inputs below.',
-                permissions: { ...cloneFrom.permissions }
-              };
-              setCustomRolePermissions([...customRolePermissions, newRoleObj]);
-              setSelectedAccessRole(newId);
-              setActiveAccessSection('details');
-              toast.success('Successfully created new custom role based on selection!');
-            }}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white shadow font-semibold text-xs h-9 gap-1"
-          >
-            <Plus className="w-4 h-4" /> Create Custom Role
-          </Button>
+          {!readOnly && (
+            <Button
+              onClick={() => {
+                const newId = `custom_${Date.now()}`;
+                const cloneFrom = customRolePermissions.find(r => r.roleId === selectedAccessRole) || customRolePermissions[0];
+                const newRoleObj = {
+                  roleId: newId,
+                  name: `Custom Role ${customRolePermissions.length + 1}`,
+                  desc: 'Custom-tailored role for specialized staff or outsourced partner administration.',
+                  maxAuthAmount: cloneFrom.maxAuthAmount,
+                  restrictions: 'No restrictions specified. Modify dynamically in configuration inputs below.',
+                  permissions: { ...cloneFrom.permissions }
+                };
+                setCustomRolePermissions([...customRolePermissions, newRoleObj]);
+                setSelectedAccessRole(newId);
+                setActiveAccessSection('details');
+                toast.success('Successfully created new custom role based on selection!');
+              }}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white shadow font-semibold text-xs h-9 gap-1"
+            >
+              <Plus className="w-4 h-4" /> Create Custom Role
+            </Button>
+          )}
         </div>
       </div>
 
@@ -133,17 +141,20 @@ export function PermissionsTab({
               </TableHeader>
               <TableBody>
                 {[
-                  { key: 'overview', name: '📊 Analytics & Dashboard (Overview)', desc: 'Analyze total revenue registers, multi-channel ROI conversions, and historical indicators.' },
-                  { key: 'courses', name: '📝 Curriculum Standards (Syllabus)', desc: 'Publish official curriculum guidelines, list required prerequisite skills, and assign standards.' },
-                  { key: 'sessions', name: '📅 Classroom & Intakes (Sessions)', desc: 'Open active intakes, view virtual lesson rooms, establish regional sub-centers, and assign materials.' },
-                  { key: 'finance', name: '💰 Finance & Payroll Ledger', desc: 'Settle tuition streams, issue authorized invoice receipts, verify refund policies, and balance salaries.' },
-                  { key: 'certificates', name: '🎓 Certificates Ledger', desc: 'Generate tamper-proof hash serials, download printable certificates, and adjust award rules.' },
-                  { key: 'scheduling', name: '🏫 Scheduling & Reservations', desc: 'Drag-and-drop live rooms, schedule exam sessions, schedule teachers, and analyze scheduling clashes.' },
-                  { key: 'tutors', name: '⏳ Instructor Timecard Reconciliation', desc: 'Verify billable hourly logs from instructors, conduct claims auditing, and release payroll approvals.' },
-                  { key: 'feedback', name: '💬 Student Course Evaluations (Feedback)', desc: 'Inspect student course logs, feedback ratings, and record follow-up CS complaint tickets.' },
-                  { key: 'logs', name: '🛡️ Operator System Logs (Audit Trails)', desc: 'Monitor every single click, record changes to invoices, IP tags, timestamps, and active operators.' },
-                  { key: 'promotions', name: '✨ Promos & Coupons (Promotions)', desc: 'Configure referral programs, discount campaigns, KOL partner codes, and countdown specials.' },
-                  { key: 'settings', name: '⚙️ Global School Settings', desc: 'Configure invoice templates, replace school logos, set system variables, and rotate master passwords.' }
+                  { key: 'overview', name: '📊 Overview (概覽)', desc: 'Analyze total course registrations, active sessions, financial totals, and general system overview indicators.' },
+                  { key: 'courses', name: '📝 Templates (課程模板)', desc: 'Add, edit, or configure base course definitions, course outlines, syllabus, and base standard prices.' },
+                  { key: 'sessions', name: '📅 Courses (開班/期次)', desc: 'Add, schedule, or configure specific course runs/sessions, assign rooms/prices, manage quotas, and lesson schedules.' },
+                  { key: 'certificates', name: '🎓 Certificates (證書)', desc: 'Generate bulk certificate PDFs, download printable completion logs, adjust award dates, and delete certificate records.' },
+                  { key: 'scheduling', name: '🏫 Instructor & Room Schedule (導師及場地日程)', desc: 'Drag-and-drop live rooms, view comprehensive calendars, schedule teachers, and verify timetable clashes.' },
+                  { key: 'tutors', name: '⏳ Part-time Instructor', desc: 'Verify billable hourly timecards from teachers, conduct payroll/claims audits, and approve payouts.' },
+                  { key: 'feedback', name: '💬 Feedback (反饋)', desc: 'Inspect student course evaluations, view feedback satisfaction ratings, and manage class feedback templates.' },
+                  { key: 'logs', name: '🛡️ System Logs (系統日誌)', desc: 'Audit operations and admin activity trails, search chronological logs, and manage deleted action backups.' },
+                  { key: 'staff', name: '👥 Staff Directory (職員名錄)', desc: 'Manage active system administrators, tutors/instructors roster, edit remarks, and update staff states.' },
+                  { key: 'students', name: '🎓 Student Directory (學生名錄)', desc: 'Manage registered student rosters, retrieve certificates logs, filter phone digits, and audit student entries.' },
+                  { key: 'promotions', name: '✨ Promotions', desc: 'Configure referral programs, student bundled deals, coupon campaigns, and discount structures.' },
+                  { key: 'permissions', name: '🛡️ Access Control (權限控制)', desc: 'Design customized roles, alter interactive matrix cells under RBAC, and apply global previews.' },
+                  { key: 'settings', name: '⚙️ School Settings (學校設置)', desc: 'Set invoice layouts, upload school logo/address, define available center classrooms, and update parameters.' },
+                  { key: 'finance', name: '💰 Financial Reports (財務報表)', desc: 'Settle tuition payments, update payments, verify course registrations status, print invoices, and audit revenue streams.' }
                 ].map(mod => (
                   <TableRow key={mod.key} className="hover:bg-slate-50/20 transition-all border-b border-slate-100">
                     <TableCell className="py-3">
@@ -168,7 +179,7 @@ export function PermissionsTab({
                           return r;
                         });
                         setCustomRolePermissions(updated);
-                        toast.success(`Updated "${role.name}" permission for "${mod.name.slice(2)}" to ${nextVal === 'full' ? 'Full Access' : nextVal === 'view' ? 'Read Only' : 'Blocked'}`);
+                        toast.success(`Updated "${role.name}" permission for "${mod.name}" to ${nextVal === 'full' ? 'Full Access' : nextVal === 'view' ? 'Read Only' : 'Blocked'}`);
                       };
 
                       let badgeClasses = 'bg-red-50 text-red-700 border-red-100';
@@ -188,8 +199,9 @@ export function PermissionsTab({
                       return (
                         <TableCell key={role.roleId} className="text-center py-3">
                           <button
-                            onClick={handleRotate}
-                            className={`inline-flex items-center justify-center px-2.5 py-1 rounded text-[10px] font-bold border cursor-pointer active:scale-95 transition-all min-w-[120px] ${badgeClasses}`}
+                            onClick={readOnly ? undefined : handleRotate}
+                            disabled={readOnly}
+                            className={`inline-flex items-center justify-center px-2.5 py-1 rounded text-[10px] font-bold border transition-all min-w-[120px] ${readOnly ? 'cursor-not-allowed opacity-80' : 'cursor-pointer active:scale-95'} ${badgeClasses}`}
                           >
                             {badgeIcon}
                             {badgeLabel}
@@ -249,7 +261,7 @@ export function PermissionsTab({
                           Configure structural descriptions, individual authority ceilings, security safeguards, and granular section permissions.
                         </CardDescription>
                       </div>
-                      {role.roleId.startsWith('custom') && (
+                      {!readOnly && role.roleId.startsWith('custom') && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -267,48 +279,52 @@ export function PermissionsTab({
                   </CardHeader>
                   <CardContent className="space-y-4 py-4">
                     <div className="space-y-2">
-                      <label className="text-xs font-bold uppercase tracking-wide text-slate-500 font-sans">Role Name</label>
-                      <Input
-                        value={role.name}
-                        onChange={e => {
-                          const val = e.target.value;
-                          setCustomRolePermissions(customRolePermissions.map(r => (r.roleId === role.roleId ? { ...r, name: val } : r)));
-                        }}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold uppercase tracking-wide text-slate-500 font-sans">Role Description</label>
-                      <Input
-                        value={role.desc}
-                        onChange={e => {
-                          const val = e.target.value;
-                          setCustomRolePermissions(customRolePermissions.map(r => (r.roleId === role.roleId ? { ...r, desc: val } : r)));
-                        }}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold uppercase tracking-wide text-slate-500 font-sans">Financial Signing Authority Limit</label>
-                        <Input
-                          value={role.maxAuthAmount}
-                          onChange={e => {
-                            const val = e.target.value;
-                            setCustomRolePermissions(customRolePermissions.map(r => (r.roleId === role.roleId ? { ...r, maxAuthAmount: val } : r)));
-                          }}
-                          placeholder="e.g. HKD 10,000"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold uppercase tracking-wide text-slate-500 font-sans">Security Limitations & Safe Rules</label>
-                        <Input
-                          value={role.restrictions}
-                          onChange={e => {
-                            const val = e.target.value;
-                            setCustomRolePermissions(customRolePermissions.map(r => (r.roleId === role.roleId ? { ...r, restrictions: val } : r)));
-                          }}
-                          placeholder="e.g. Restricted from core school parameters modifications"
-                        />
+                       <label className="text-xs font-bold uppercase tracking-wide text-slate-500 font-sans">Role Name</label>
+                       <Input
+                         value={role.name}
+                         onChange={e => {
+                           const val = e.target.value;
+                           setCustomRolePermissions(customRolePermissions.map(r => (r.roleId === role.roleId ? { ...r, name: val } : r)));
+                         }}
+                         disabled={readOnly}
+                       />
+                     </div>
+                     <div className="space-y-2">
+                       <label className="text-xs font-bold uppercase tracking-wide text-slate-500 font-sans">Role Description</label>
+                       <Input
+                         value={role.desc}
+                         onChange={e => {
+                           const val = e.target.value;
+                           setCustomRolePermissions(customRolePermissions.map(r => (r.roleId === role.roleId ? { ...r, desc: val } : r)));
+                         }}
+                         disabled={readOnly}
+                       />
+                     </div>
+ 
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                       <div className="space-y-2">
+                         <label className="text-xs font-bold uppercase tracking-wide text-slate-500 font-sans">Financial Signing Authority Limit</label>
+                         <Input
+                           value={role.maxAuthAmount}
+                           onChange={e => {
+                             const val = e.target.value;
+                             setCustomRolePermissions(customRolePermissions.map(r => (r.roleId === role.roleId ? { ...r, maxAuthAmount: val } : r)));
+                           }}
+                           placeholder="e.g. HKD 10,000"
+                           disabled={readOnly}
+                         />
+                       </div>
+                       <div className="space-y-2">
+                         <label className="text-xs font-bold uppercase tracking-wide text-slate-500 font-sans">Security Limitations & Safe Rules</label>
+                         <Input
+                           value={role.restrictions}
+                           onChange={e => {
+                             const val = e.target.value;
+                             setCustomRolePermissions(customRolePermissions.map(r => (r.roleId === role.roleId ? { ...r, restrictions: val } : r)));
+                           }}
+                           placeholder="e.g. Restricted from core school parameters modifications"
+                           disabled={readOnly}
+                         />
                       </div>
                     </div>
 
@@ -316,36 +332,40 @@ export function PermissionsTab({
                       <h5 className="text-xs font-extrabold uppercase tracking-wide text-slate-500 mb-2 font-sans">Granular Permission Toggles per Panel:</h5>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {[
-                          { key: 'overview', name: '📊 Overview Analytics' },
-                          { key: 'courses', name: '📝 Curriculum Guidelines' },
-                          { key: 'sessions', name: '📅 Academic Intakes' },
-                          { key: 'finance', name: '💰 Tuition & Finance' },
-                          { key: 'certificates', name: '🎓 Certificate Issuance' },
-                          { key: 'scheduling', name: '🏫 Timecard Scheduling' },
-                          { key: 'tutors', name: '⏳ Instructor Auditing' },
-                          { key: 'feedback', name: '💬 Satisfactory Evaluations' },
-                          { key: 'logs', name: '🛡️ Operations Audit Logs' },
-                          { key: 'promotions', name: '✨ Promotions & Codes' },
-                          { key: 'settings', name: '⚙️ Global Settings' }
+                          { key: 'overview', name: '📊 Overview (概覽)' },
+                          { key: 'courses', name: '📝 Templates (課程模板)' },
+                          { key: 'sessions', name: '📅 Courses (開班/期次)' },
+                          { key: 'certificates', name: '🎓 Certificates (證書)' },
+                          { key: 'scheduling', name: '🏫 Instructor & Room Schedule (導師及場地日程)' },
+                          { key: 'tutors', name: '⏳ Part-time Instructor' },
+                          { key: 'feedback', name: '💬 Feedback (反饋)' },
+                          { key: 'logs', name: '🛡️ System Logs (系統日誌)' },
+                          { key: 'staff', name: '👥 Staff Directory (職員名錄)' },
+                          { key: 'students', name: '🎓 Student Directory (學生名錄)' },
+                          { key: 'promotions', name: '✨ Promotions' },
+                          { key: 'permissions', name: '🛡️ Access Control (權限控制)' },
+                          { key: 'settings', name: '⚙️ School Settings (學校設置)' },
+                          { key: 'finance', name: '💰 Financial Reports (財務報表)' }
                         ].map(mod => {
                           const val = role.permissions[mod.key] || 'none';
                           return (
                             <div key={mod.key} className="flex justify-between items-center p-2 rounded border border-slate-100 hover:border-indigo-100 transition-all bg-slate-50/30">
                               <span className="text-xs font-semibold text-slate-705 font-sans">{mod.name}</span>
                               <select
-                                className="h-8 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500 font-sans cursor-pointer"
+                                className="h-8 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500 font-sans disabled:cursor-not-allowed disabled:bg-slate-100"
                                 value={val}
-                                        onChange={e => {
-                                          const upVal = e.target.value;
-                                          setCustomRolePermissions(customRolePermissions.map(r => r.roleId === role.roleId ? {
-                                            ...r,
-                                            permissions: {
-                                              ...r.permissions,
-                                              [mod.key]: upVal
-                                            }
-                                          } : r));
-                                          toast.success(`Updated ${mod.name} permission to ${upVal}`);
-                                        }}
+                                disabled={readOnly}
+                                onChange={e => {
+                                  const upVal = e.target.value;
+                                  setCustomRolePermissions(customRolePermissions.map(r => r.roleId === role.roleId ? {
+                                    ...r,
+                                    permissions: {
+                                      ...r.permissions,
+                                      [mod.key]: upVal
+                                    }
+                                  } : r));
+                                  toast.success(`Updated ${mod.name} permission to ${upVal}`);
+                                }}
                               >
                                 <option value="full">🟢 Full Control</option>
                                 <option value="view">🟡 Read Only</option>
@@ -376,26 +396,50 @@ export function PermissionsTab({
 
       {activeAccessSection === 'sim' && (
         <div className="space-y-4">
-          <div className="bg-slate-50 border border-slate-200 p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-            <div>
-              <h4 className="text-sm font-bold text-slate-800 font-sans">💻 Live Viewport Simulator & Testing Unit</h4>
-              <p className="text-xs text-slate-500 mt-1 font-sans">
-                Select a role below to load the live preview. Observe exactly what panels are rendered, which actions are read-only, and where access blocks are enforced.
-              </p>
+          <div className="bg-slate-50 border border-slate-200 p-4 rounded-lg flex flex-col gap-3">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div>
+                <h4 className="text-sm font-bold text-slate-800 font-sans">💻 Live Viewport Simulator & Testing Unit</h4>
+                <p className="text-xs text-slate-500 mt-1 font-sans">
+                  Select a role below to load the live preview. Observe exactly what panels are rendered, which actions are read-only, and where access blocks are enforced.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-600 font-bold font-sans">Simulate Logged-in Role:</span>
+                <select
+                  className="h-9 rounded border border-slate-200 bg-white px-3 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 font-sans cursor-pointer"
+                  value={simulatedRole}
+                  onChange={e => setSimulatedRole(e.target.value)}
+                >
+                  {customRolePermissions.map(r => (
+                    <option key={r.roleId} value={r.roleId}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-600 font-bold font-sans">Simulate Logged-in Role:</span>
-              <select
-                className="h-9 rounded border border-slate-200 bg-white px-3 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 font-sans cursor-pointer"
-                value={simulatedRole}
-                onChange={e => setSimulatedRole(e.target.value)}
-              >
-                {customRolePermissions.map(r => (
-                  <option key={r.roleId} value={r.roleId}>
-                    {r.name}
-                  </option>
-                ))}
-              </select>
+
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 border-t border-slate-200/80 pt-3 mt-1 w-full">
+              <label className="relative inline-flex items-center gap-3 cursor-pointer group bg-indigo-50/50 hover:bg-indigo-50 border border-indigo-100/80 rounded-lg px-4 py-2 select-none transition-all w-full">
+                <input 
+                  type="checkbox"
+                  checked={isSimulatingGlobally}
+                  onChange={e => {
+                    setIsSimulatingGlobally(e.target.checked);
+                    const selName = customRolePermissions.find(r => r.roleId === simulatedRole)?.name || simulatedRole;
+                    toast.info(e.target.checked 
+                      ? `Global Sandbox active! The entire admin dashboard is now rendered under the "${selName}" perspective.` 
+                      : 'Admin view restored.'
+                    );
+                  }}
+                  className="w-4.5 h-4.5 text-indigo-600 border-indigo-300 rounded focus:ring-indigo-500 cursor-pointer"
+                />
+                <div className="text-left font-sans">
+                  <span className="text-xs font-extrabold text-indigo-900 block leading-tight">🌐 Apply Perspective Simulation Globally (Instantly Affects Real-Time Sidebar Tabs)</span>
+                  <span className="text-[10px] text-indigo-650 leading-snug">When enabled, this custom perspective will override your admin role to restrict or open actual main navigation menu items and inline actions.</span>
+                </div>
+              </label>
             </div>
           </div>
 
@@ -421,17 +465,20 @@ export function PermissionsTab({
                   <div className="space-y-1">
                     <div className="text-[9px] uppercase tracking-wider text-slate-600 font-semibold mb-1">Simulated Main Menu</div>
                     {[
-                      { key: 'overview', label: '📊 Dashboard Overview' },
-                      { key: 'courses', label: '📝 Curriculum Standard' },
-                      { key: 'sessions', label: '📅 Academic Intakes' },
-                      { key: 'finance', label: '💰 Tuition Finance' },
-                      { key: 'certificates', label: '🎓 Certificates Registry' },
-                      { key: 'scheduling', label: '🏫 Classroom Scheduling' },
-                      { key: 'tutors', label: '⏳ Instructor Auditing' },
-                      { key: 'feedback', label: '💬 Satisfactory Feedback' },
-                      { key: 'logs', label: '🛡️ Audit Logging' },
-                      { key: 'promotions', label: '✨ Promotions & Codes' },
-                      { key: 'settings', label: '⚙️ Global Settings' }
+                      { key: 'overview', label: '📊 Overview (概覽)' },
+                      { key: 'courses', label: '📝 Templates (課程模板)' },
+                      { key: 'sessions', label: '📅 Courses (開班/期次)' },
+                      { key: 'certificates', label: '🎓 Certificates (證書)' },
+                      { key: 'scheduling', label: '🏫 Instructor & Room Schedule (導師及場地日程)' },
+                      { key: 'tutors', label: '⏳ Part-time Instructor' },
+                      { key: 'feedback', label: '💬 Feedback (反饋)' },
+                      { key: 'logs', label: '🛡️ System Logs (系統日誌)' },
+                      { key: 'staff', label: '👥 Staff Directory (職員名錄)' },
+                      { key: 'students', label: '🎓 Student Directory (學生名錄)' },
+                      { key: 'promotions', label: '✨ Promotions' },
+                      { key: 'permissions', label: '🛡️ Access Control (權限控制)' },
+                      { key: 'settings', label: '⚙️ School Settings (學校設置)' },
+                      { key: 'finance', label: '💰 Financial Reports (財務報表)' }
                     ].map(item => {
                       const v = perms[item.key] || 'none';
                       let badge = null;

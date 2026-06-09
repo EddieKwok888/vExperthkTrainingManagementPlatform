@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useContext } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { doc, getDoc, collection, query, where, getDocs, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { AuthContext } from '../../App';
@@ -8,6 +8,7 @@ import { Button } from '../../components/ui/button';
 import { Loader2, ArrowLeft, CheckCircle2, Calendar, Clock, MapPin, Sparkles, GraduationCap, FileText } from 'lucide-react';
 import { handleFirestoreError, OperationType } from '../../lib/error';
 import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
 
 import { jsPDF } from 'jspdf';
 
@@ -17,9 +18,14 @@ export function CourseDetail() {
   const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingSessions, setLoadingSessions] = useState(true);
+  const [isOutlineModalOpen, setIsOutlineModalOpen] = useState(false);
   const [schoolSettings, setSchoolSettings] = useState<any>(null);
   const { user, role, login } = useContext(AuthContext);
   const navigate = useNavigate();
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const fromPath = searchParams.get('from') || '/';
+  const fromText = fromPath.includes('student') ? 'Back to Student Dashboard' : 'Back to Course Catalog';
 
   useEffect(() => {
     const fetchCourse = async () => {
@@ -107,8 +113,8 @@ export function CourseDetail() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-20">
-      <Link to="/" className="group text-slate-500 hover:text-blue-600 flex items-center gap-2 w-fit font-bold uppercase text-[10px] tracking-widest transition-colors">
-        <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" /> Back to Course Catalog
+      <Link to={fromPath} className="group text-slate-500 hover:text-blue-600 flex items-center gap-2 w-fit font-bold uppercase text-[10px] tracking-widest transition-colors">
+        <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" /> {fromText}
       </Link>
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -179,6 +185,20 @@ export function CourseDetail() {
                           <div>
                             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Duration</p>
                             <p className="text-slate-800 font-bold">{course.durationHours} Teaching Hours</p>
+                          </div>
+                        </div>
+                      )}
+                      {course.outlineData && course.outlineData.startsWith('http') && (
+                        <div className="flex items-center gap-4 bg-slate-50 p-5 rounded-2xl border border-slate-100 transition-all hover:bg-white hover:shadow-md group cursor-pointer" onClick={() => {
+                             window.open(course.outlineData, '_blank');
+                             toast.success('Course outline opened!');
+                        }}>
+                          <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600 group-hover:scale-110 transition-transform">
+                            <FileText className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Course Outline</p>
+                            <p className="text-slate-800 font-bold line-clamp-1">View Document</p>
                           </div>
                         </div>
                       )}

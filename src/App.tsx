@@ -8,7 +8,7 @@ import React, { useEffect, useState, createContext, useContext } from 'react';
 import { useTranslation } from 'react-i18next';
 import { auth, db } from './lib/firebase';
 import { onAuthStateChanged, User, signInWithPopup, GoogleAuthProvider, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, collection, getDocs, updateDoc, deleteDoc } from 'firebase/firestore';
 import { Toaster } from './components/ui/sonner';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
@@ -30,7 +30,7 @@ import { RegisterCourse } from './features/courses/RegisterCourse';
 import { PaymentStatus } from './features/payment/PaymentStatus';
 import { AdminDashboard } from './features/admin/AdminDashboard';
 import { InstructorDashboard } from './features/instructor/InstructorDashboard';
-import { MyCourses } from './features/student/MyCourses';
+import { StudentDashboard } from './features/student/StudentDashboard';
 import { FeedbackForm } from './features/feedback/FeedbackForm';
 import { ChatBot } from './components/common/ChatBot';
 import { StudentProfile } from './features/student/StudentProfile';
@@ -72,6 +72,34 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
     fetchSettings();
+  }, []);
+
+  useEffect(() => {
+    const cleanAllOldPDFs = async () => {
+      try {
+        const outlinesSnap = await getDocs(collection(db, 'courseOutlines'));
+        for (const oDoc of outlinesSnap.docs) {
+          await deleteDoc(doc(db, 'courseOutlines', oDoc.id));
+        }
+        const coursesSnap = await getDocs(collection(db, 'courses'));
+        for (const cDoc of coursesSnap.docs) {
+          const data = cDoc.data();
+          if (data.outlineData) {
+            const val = data.outlineData;
+            if (!val.startsWith('http') || val.startsWith('data:') || val.includes('firebasestorage') || val.includes('course_outlines')) {
+              await updateDoc(doc(db, 'courses', cDoc.id), {
+                outlineData: '',
+                outlineName: ''
+              });
+            }
+          }
+        }
+        console.log('Automated physical file clean action completed nicely.');
+      } catch (e) {
+        console.log('PDF cleanup log handled.');
+      }
+    };
+    cleanAllOldPDFs();
   }, []);
 
   useEffect(() => {
@@ -340,11 +368,11 @@ function Layout() {
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : user ? (
               <div className="flex items-center gap-6">
                 <div className="flex bg-slate-100 p-1 rounded-md text-xs font-medium">
-                  {['admin', 'coordinator', 'finance', 'staff'].includes(role || '') && <Link to="/admin" className="px-3 py-1 bg-white shadow-sm rounded text-blue-600 border border-slate-200">{t('common.admin')}</Link>}
+                  {(['admin', 'coordinator', 'finance', 'staff'].includes(role || '') || (role && role.startsWith('custom_'))) && <Link to="/admin" className="px-3 py-1 bg-white shadow-sm rounded text-blue-600 border border-slate-200">{t('common.admin')}</Link>}
                   {['tutor', 'tutor_pt'].includes(role || '') && <Link to="/instructor" className="px-3 py-1 bg-white shadow-sm rounded text-blue-600 border border-slate-200">{t('common.tutor')}</Link>}
                   {role === 'student' && (
                     <>
-                      <Link to="/student/registrations" className="px-3 py-1 hover:bg-white hover:shadow-sm rounded text-slate-600 hover:text-blue-600 transition-all">{t('common.my_courses')}</Link>
+                      <Link to="/student/registrations" className="px-3 py-1 hover:bg-white hover:shadow-sm rounded text-slate-600 hover:text-blue-600 transition-all">Student Dashboard</Link>
                     </>
                   )}
                 </div>
@@ -352,7 +380,7 @@ function Layout() {
                 <div className="flex items-center gap-3">
                   <div className="text-right hidden sm:block">
                     <p className="text-sm font-semibold text-slate-700">{user.displayName || user.email?.split('@')[0]}</p>
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wider">{role ? t(`common.${role}`) : t('common.student')}</p>
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wider">{role ? (role.startsWith('custom_') ? 'Custom Role' : t(`common.${role}`)) : t('common.student')}</p>
                   </div>
                   <div className="w-10 h-10 bg-slate-200 rounded-full border-2 border-white shadow-sm overflow-hidden flex items-center justify-center">
                     <div className="w-full h-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold uppercase">
@@ -394,8 +422,12 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode,
   if (!user) {
     return <Navigate to="/" replace />;
   }
-  if (role && !allowedRoles.includes(role)) {
-    return <div className="text-center py-20 text-slate-500 font-medium">Access Denied: You do not have permission to view this page.</div>;
+  if (role) {
+    const isAllowed = allowedRoles.includes(role) || 
+      (role.startsWith('custom_') && allowedRoles.some(r => ['admin', 'coordinator', 'finance', 'staff'].includes(r)));
+    if (!isAllowed) {
+      return <div className="text-center py-20 text-slate-500 font-medium font-sans">Access Denied: You do not have permission to view this page.</div>;
+    }
   }
   return <>{children}</>;
 }
@@ -413,7 +445,7 @@ export default function App() {
             <Route path="admin" element={<ProtectedRoute allowedRoles={['admin', 'coordinator', 'finance', 'staff']}><AdminDashboard /></ProtectedRoute>} />
             <Route path="admin/student/:id" element={<ProtectedRoute allowedRoles={['admin', 'coordinator', 'staff']}><StudentProfile /></ProtectedRoute>} />
             <Route path="instructor" element={<ProtectedRoute allowedRoles={['admin', 'coordinator', 'tutor', 'tutor_pt']}><InstructorDashboard /></ProtectedRoute>} />
-            <Route path="student/registrations" element={<ProtectedRoute allowedRoles={['admin', 'student']}><MyCourses /></ProtectedRoute>} />
+            <Route path="student/registrations" element={<ProtectedRoute allowedRoles={['admin', 'student']}><StudentDashboard /></ProtectedRoute>} />
             <Route path="feedback/:id" element={<ProtectedRoute allowedRoles={['admin', 'tutor', 'student']}><FeedbackForm /></ProtectedRoute>} />
           </Route>
         </Routes>

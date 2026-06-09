@@ -17,12 +17,14 @@ interface SettingsTabProps {
   };
   setSchoolInfo: (info: any) => void;
   handleSaveSchoolInfo: () => void;
+  readOnly?: boolean;
 }
 
 export function SettingsTab({
   schoolInfo,
   setSchoolInfo,
   handleSaveSchoolInfo,
+  readOnly = false,
 }: SettingsTabProps) {
   return (
     <Card>
@@ -38,6 +40,7 @@ export function SettingsTab({
               value={schoolInfo.name} 
               onChange={e => setSchoolInfo({...schoolInfo, name: e.target.value})}
               placeholder="e.g. Training Academy"
+              disabled={readOnly}
             />
           </div>
           <div className="space-y-2">
@@ -62,6 +65,7 @@ export function SettingsTab({
                       reader.readAsDataURL(file);
                     }
                   }}
+                  disabled={readOnly}
                 />
               </div>
             </div>
@@ -72,6 +76,7 @@ export function SettingsTab({
               value={schoolInfo.address} 
               onChange={e => setSchoolInfo({...schoolInfo, address: e.target.value})}
               placeholder="Full address for invoices"
+              disabled={readOnly}
             />
           </div>
           <div className="space-y-2">
@@ -80,6 +85,7 @@ export function SettingsTab({
               value={schoolInfo.phone} 
               onChange={e => setSchoolInfo({...schoolInfo, phone: e.target.value})}
               placeholder="+852 XXXX XXXX"
+              disabled={readOnly}
             />
           </div>
           <div className="space-y-2">
@@ -88,6 +94,7 @@ export function SettingsTab({
               value={schoolInfo.email || ''} 
               onChange={e => setSchoolInfo({...schoolInfo, email: e.target.value})}
               placeholder="sales@example.com"
+              disabled={readOnly}
             />
           </div>
           <div className="space-y-2">
@@ -96,6 +103,7 @@ export function SettingsTab({
               value={schoolInfo.invoice_prefix} 
               onChange={e => setSchoolInfo({...schoolInfo, invoice_prefix: e.target.value})}
               placeholder="e.g. INV"
+              disabled={readOnly}
             />
           </div>
         </div>
@@ -107,6 +115,7 @@ export function SettingsTab({
             onChange={e => setSchoolInfo({...schoolInfo, terms_conditions: e.target.value})}
             className="min-h-[100px]"
             placeholder="Enter center fee terms, policies, etc."
+            disabled={readOnly}
           />
         </div>
 
@@ -117,15 +126,18 @@ export function SettingsTab({
             onChange={e => setSchoolInfo({...schoolInfo, rooms: e.target.value})}
             className="min-h-[100px]"
             placeholder="e.g. Room 101 (20), Room 102 (30), Main Hall (100)"
+            disabled={readOnly}
           />
           <p className="text-xs text-slate-500">List of rooms available for classes with capacity. Separate by commas (e.g. Room A (20), Room B (30)).</p>
         </div>
         
-        <div className="flex justify-end">
-          <Button onClick={handleSaveSchoolInfo} className="bg-blue-600 hover:bg-blue-700 font-semibold text-sm">
-            Save Settings
-          </Button>
-        </div>
+        {!readOnly && (
+          <div className="flex justify-end">
+            <Button onClick={handleSaveSchoolInfo} className="bg-blue-600 hover:bg-blue-700 font-semibold text-sm">
+              Save Settings
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
