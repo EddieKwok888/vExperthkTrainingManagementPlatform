@@ -66,6 +66,7 @@ import {
 export interface CertificateModalProps {
   courses: any;
   handleToggleAttendanceConfirm: any;
+  handleUpdateSingleAttendance?: any;
   isCertLoading: any;
   isCertModalOpen: any;
   lessons: any;
@@ -80,6 +81,7 @@ export interface CertificateModalProps {
 export function CertificateModal({
   courses,
   handleToggleAttendanceConfirm,
+  handleUpdateSingleAttendance,
   isCertLoading,
   isCertModalOpen,
   lessons,
@@ -100,7 +102,7 @@ export function CertificateModal({
                 <div className="p-2 bg-yellow-400 rounded-lg text-slate-900 shadow-lg shadow-yellow-400/20">
                   <Award className="w-6 h-6" />
                 </div>
-                Certificate Management
+                Attendance Management
               </DialogTitle>
               <DialogDescription className="text-slate-400 font-medium text-sm mt-2">
                 Course:{" "}
@@ -214,68 +216,25 @@ export function CertificateModal({
                 </div>
                 <div className="border border-slate-100 rounded-xl overflow-x-auto bg-white shadow-sm">
                   {(() => {
-                    let baseDates: string[] = [];
                     const sessionLessons = lessons.filter(
-                      (l) =>
+                      (l: any) =>
                         l.sessionId === selectedSessionCert?.id ||
                         l.session_id === selectedSessionCert?.id,
-                    );
-                    if (sessionLessons.length > 0) {
-                      baseDates = sessionLessons
-                        .map((l) => l.lessonDate || l.lesson_date)
-                        .filter(Boolean);
-                    } else {
-                      const start = selectedSessionCert?.startDate;
-                      const end = selectedSessionCert?.endDate;
-                      if (start && end && start !== end) {
-                        let current = new Date(start);
-                        const endD = new Date(end);
-                        while (current <= endD) {
-                          baseDates.push(current.toISOString().split("T")[0]);
-                          current.setDate(current.getDate() + 1);
-                        }
-                      } else if (start) {
-                        baseDates.push(start);
-                      } else {
-                        baseDates.push("N/A");
-                      }
+                    ).sort((a: any, b: any) => (a.lessonDate || "").localeCompare(b.lessonDate || ""));
+
+                    if (sessionLessons.length === 0) {
+                      return <div className="p-8 text-center text-slate-400 font-bold">No classes scheduled yet.</div>;
                     }
 
-                    baseDates = Array.from(new Set(baseDates))
-                      .filter((d) => d !== "N/A")
-                      .sort();
-
-                    const todayStr = new Date().toLocaleDateString("en-CA", {
-                      timeZone: "Asia/Hong_Kong",
-                    });
-                    let displayDates = new Set<string>();
-
-                    let currentIndex = -1;
-
-                    if (baseDates.includes(todayStr)) {
-                      currentIndex = baseDates.indexOf(todayStr);
-                    } else {
-                      const pastDates = baseDates.filter((d) => d <= todayStr);
-                      if (pastDates.length > 0) {
-                        currentIndex = baseDates.indexOf(
-                          pastDates[pastDates.length - 1],
-                        );
-                      } else if (baseDates.length > 0) {
-                        currentIndex = 0;
-                      }
+                    const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Hong_Kong" });
+                    let displayLessons = [...sessionLessons];
+                    
+                    const todayIndex = displayLessons.findIndex(l => l.lessonDate === todayStr);
+                    if (todayIndex !== -1 || pastDaysToShow > 0) {
+                       const endIndex = todayIndex !== -1 ? todayIndex : displayLessons.length - 1;
+                       const startIndex = Math.max(0, endIndex - pastDaysToShow);
+                       displayLessons = displayLessons.slice(startIndex, endIndex + 1);
                     }
-
-                    if (currentIndex !== -1) {
-                      displayDates.add(baseDates[currentIndex]);
-                      for (let i = 1; i <= pastDaysToShow; i++) {
-                        if (currentIndex - i >= 0) {
-                          displayDates.add(baseDates[currentIndex - i]);
-                        }
-                      }
-                    }
-
-                    let sessionDates = Array.from(displayDates).sort();
-                    if (sessionDates.length === 0) sessionDates.push("N/A");
 
                     return (
                       <Table>
@@ -290,7 +249,8 @@ export function CertificateModal({
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {sessionStudentsData.map((student) => {
+                          {sessionStudentsData.map((student: any) => {
+                            const raw = student.rawAttendance || {};
                             return (
                               <TableRow
                                 key={student.id}
@@ -306,66 +266,70 @@ export function CertificateModal({
                                 </TableCell>
                                 <TableCell className="px-6 py-4 text-right">
                                   <div className="flex flex-col gap-2 justify-end items-end w-full">
-                                    {sessionDates.map((date, idx) => (
-                                      <div
-                                        key={date}
-                                        className="flex flex-row items-center gap-3 bg-slate-50/50 p-1.5 rounded-lg border border-slate-100/60 w-max shrink-0"
-                                      >
-                                        <span className="text-[10px] font-bold text-slate-500 w-20 text-right">
-                                          {date}
-                                        </span>
-                                        <div className="flex gap-1">
-                                          {(["am", "pm"] as const).map(
-                                            (type) => {
-                                              const isRecordPresent =
-                                                student.attendanceRecords &&
-                                                student.attendanceRecords[
-                                                  date
-                                                ] &&
-                                                typeof student
-                                                  .attendanceRecords[date][
-                                                  type
-                                                ] !== "undefined";
-                                              const isFirstDay =
-                                                baseDates.length > 0 &&
-                                                date === baseDates[0];
-                                              const isConfirmed =
-                                                isRecordPresent
-                                                  ? student.attendanceRecords[
-                                                      date
-                                                    ][type]
-                                                  : isFirstDay &&
-                                                    student[`${type}Confirmed`];
+                                    {displayLessons.map((lesson: any) => {
+                                      const status = raw[lesson.id] || "unmarked";
+                                      
+                                      const getButtons = (s: string) => {
+                                        return [
+                                          { id: 'present_am', label: 'AM Present', color: 'bg-emerald-600 border-emerald-600' },
+                                          { id: 'present_pm', label: 'PM Present', color: 'bg-indigo-600 border-indigo-600' },
+                                          { id: 'absent', label: 'Absent', color: 'bg-red-600 border-red-600' }
+                                        ].map(item => {
+                                          const isMarked = s === item.id || ((item.id === 'present_am' || item.id === 'present_pm') && s === 'present');
+                                          return (
+                                            <button
+                                              key={item.id}
+                                              onClick={() => {
+                                                let nextStatus = item.id;
+                                                if (item.id === 'absent') {
+                                                  nextStatus = s === 'absent' ? '' : 'absent';
+                                                } else if (item.id === 'present_am') {
+                                                  if (s === 'present_am') nextStatus = '';
+                                                  else if (s === 'present_pm') nextStatus = 'present';
+                                                  else if (s === 'present') nextStatus = 'present_pm';
+                                                } else if (item.id === 'present_pm') {
+                                                  if (s === 'present_pm') nextStatus = '';
+                                                  else if (s === 'present_am') nextStatus = 'present';
+                                                  else if (s === 'present') nextStatus = 'present_am';
+                                                }
+                                                handleUpdateSingleAttendance && handleUpdateSingleAttendance(
+                                                  student.studentId,
+                                                  lesson.id,
+                                                  lesson.sessionId,
+                                                  nextStatus
+                                                );
+                                              }}
+                                              className={`px-2 py-1 rounded-md text-[9px] font-black uppercase transition-all tracking-wider border ${
+                                                isMarked
+                                                  ? `${item.color} text-white shadow-md`
+                                                  : "border-slate-200 text-slate-400 bg-white hover:border-slate-300 hover:text-slate-700"
+                                              }`}
+                                            >
+                                              {item.label}
+                                            </button>
+                                          );
+                                        });
+                                      };
 
-                                              return (
-                                                <Button
-                                                  key={type}
-                                                  size="sm"
-                                                  onClick={() =>
-                                                    handleToggleAttendanceConfirm(
-                                                      student.id,
-                                                      date,
-                                                      type,
-                                                      !!isConfirmed,
-                                                    )
-                                                  }
-                                                  className={`h-7 px-2.5 text-[9px] font-black uppercase tracking-wider transition-all ${
-                                                    isConfirmed
-                                                      ? "bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
-                                                      : "bg-white border border-slate-200 hover:bg-slate-50 text-slate-400 shadow-none"
-                                                  }`}
-                                                >
-                                                  {isConfirmed && (
-                                                    <CheckCircle className="w-3 h-3 mr-1" />
-                                                  )}
-                                                  {type}
-                                                </Button>
-                                              );
-                                            },
-                                          )}
+                                      return (
+                                        <div
+                                          key={lesson.id}
+                                          className="flex flex-row items-center gap-3 bg-slate-50/50 p-1.5 rounded-lg border border-slate-100/60 w-max shrink-0"
+                                        >
+                                          <div className="flex flex-col items-end">
+                                              <span className="text-[10px] font-bold text-slate-500 text-right truncate">
+                                                {lesson.lessonTitle || `Lesson`}
+                                              </span>
+                                              <span className="text-[9px] font-medium text-slate-400 text-right truncate">
+                                                {lesson.lessonDate}
+                                              </span>
+                                          </div>
+                                          <div className="flex gap-1 min-w-[70px] justify-end">
+                                            {getButtons(status)}
+                                          </div>
                                         </div>
-                                      </div>
-                                    ))}
+                                      );
+                                    })}
                                   </div>
                                 </TableCell>
                               </TableRow>

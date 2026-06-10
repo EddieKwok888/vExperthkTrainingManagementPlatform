@@ -118,169 +118,181 @@ export function CourseDetail() {
   if (!course) return <div className="text-center py-20 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400">Course not found</div>;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 pb-20">
-      <Link to={fromPath} className="group text-slate-500 hover:text-blue-600 flex items-center gap-2 w-fit font-bold uppercase text-[10px] tracking-widest transition-colors">
-        <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" /> {fromText}
-      </Link>
-      
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
-          <Card className="shadow-2xl shadow-slate-200/50 border-0 overflow-hidden ring-1 ring-slate-100">
-            <CardHeader className="bg-gradient-to-br from-slate-900 to-slate-800 border-b pb-12 pt-10 px-8 relative">
-              <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-                 <GraduationCap className="w-40 h-40 text-white rotate-12" />
-              </div>
-              <div className="space-y-6 relative z-10">
-                <CardTitle className="text-4xl md:text-5xl font-black leading-tight text-white tracking-tighter italic">{course.title}</CardTitle>
-                <div className="flex flex-wrap items-center gap-3">
-                  {course.courseCode && (
-                    <span className="bg-white/20 text-white px-3 py-1 rounded-[4px] text-xs font-bold uppercase tracking-widest font-mono">
-                      {course.courseCode}
-                    </span>
-                  )}
-                  {course.category && (
-                    <span className="bg-blue-500/30 text-blue-100 px-3 py-1 rounded-[4px] text-xs font-bold uppercase tracking-widest">
-                      {course.category}
-                    </span>
-                  )}
-                  {course.level && (
-                    <span className="bg-emerald-500/30 text-emerald-100 px-3 py-1 rounded-[4px] text-xs font-bold uppercase tracking-widest">
-                      {course.level}
-                    </span>
-                  )}
+    <div className="bg-[#0A0F1C] min-h-screen px-4 pt-6 pb-20">
+      <div className="max-w-5xl mx-auto space-y-8">
+        <Link to={fromPath} className="group text-slate-400 hover:text-blue-400 flex items-center gap-2 w-fit font-black uppercase text-[10px] tracking-widest transition-colors mb-6">
+          <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" /> {fromText}
+        </Link>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 space-y-8">
+            <Card className="bg-[#111827] border border-slate-800 shadow-[0_0_50px_-10px_rgba(59,130,246,0.15)] overflow-hidden rounded-3xl relative">
+              <div className="absolute inset-0 bg-gradient-to-b from-blue-500/5 to-transparent pointer-events-none z-10"></div>
+              <CardHeader className="bg-[#0D1426] border-b border-slate-800 pb-16 pt-12 px-10 relative overflow-hidden">
+                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10 mix-blend-color-dodge"></div>
+                <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none transform translate-x-10 -translate-y-10">
+                   <GraduationCap className="w-64 h-64 text-blue-500 rotate-12 blur-[2px]" />
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent className="py-10 px-8">
-              <div className="space-y-10">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {course.targetAudience && (
-                    <div className="space-y-2">
-                      <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                        <MapPin className="w-3 h-3 text-blue-500" /> Target Audience
-                      </h3>
-                      <p className="text-slate-600 text-sm leading-relaxed font-medium whitespace-pre-wrap">{formatTextWithWarning(course.targetAudience)}</p>
-                    </div>
-                  )}
-                  {course.prerequisites && (
-                    <div className="space-y-2">
-                      <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                        <CheckCircle2 className="w-3 h-3 text-green-500" /> Prerequisites
-                      </h3>
-                      <p className="text-slate-600 text-sm leading-relaxed font-medium whitespace-pre-wrap">{formatTextWithWarning(course.prerequisites)}</p>
-                    </div>
-                  )}
+                <div className="absolute bottom-0 left-0 p-8 opacity-20 pointer-events-none blur-3xl">
+                  <div className="w-64 h-64 bg-indigo-500 rounded-full"></div>
                 </div>
-
-                <div className="h-px bg-slate-100" />
-
-                <div>
-                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">Course Framework & Modules</h3>
-                  <div className="space-y-6">
-                    {course.description && (
-                      <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 italic text-slate-600 text-sm leading-relaxed whitespace-pre-wrap">
-                        {formatTextWithWarning(course.description)}
+                <div className="space-y-8 relative z-20">
+                  <CardTitle className="text-4xl md:text-5xl font-black leading-tight text-white tracking-tighter drop-shadow-md">{course.title}</CardTitle>
+                  <div className="flex flex-wrap items-center gap-3">
+                    {course.courseCode && (
+                      <span className="bg-blue-500/10 border border-blue-500/20 text-blue-400 px-4 py-1.5 rounded-sm text-[10px] font-black uppercase tracking-widest font-mono shadow-[0_0_15px_rgba(59,130,246,0.2)]">
+                        {course.courseCode}
+                      </span>
+                    )}
+                    {course.category && (
+                      <span className="bg-slate-800 border border-slate-700 text-slate-300 px-4 py-1.5 rounded-sm text-[10px] font-black uppercase tracking-widest">
+                        {course.category}
+                      </span>
+                    )}
+                    {course.level && (
+                      <span className="bg-slate-800 border border-slate-700 text-slate-300 px-4 py-1.5 rounded-sm text-[10px] font-black uppercase tracking-widest">
+                        {course.level}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="py-12 px-10 relative z-20">
+                <div className="space-y-10">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {course.targetAudience && (
+                      <div className="space-y-2">
+                        <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                          <MapPin className="w-3 h-3 text-indigo-400" /> Target Audience
+                        </h3>
+                        <p className="text-slate-300 text-sm leading-relaxed font-medium whitespace-pre-wrap">{formatTextWithWarning(course.targetAudience)}</p>
                       </div>
                     )}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {course.durationHours && (
-                        <div className="flex items-center gap-4 bg-slate-50 p-5 rounded-2xl border border-slate-100 transition-all hover:bg-white hover:shadow-md group">
-                          <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">
-                            <Clock className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Duration</p>
-                            <p className="text-slate-800 font-bold">{course.durationHours} Teaching Hours</p>
-                          </div>
+                    {course.prerequisites && (
+                      <div className="space-y-2">
+                        <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Prerequisites
+                        </h3>
+                        <p className="text-slate-300 text-sm leading-relaxed font-medium whitespace-pre-wrap">{formatTextWithWarning(course.prerequisites)}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="h-px bg-slate-800" />
+
+                  <div>
+                    <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6">Course Framework & Modules</h3>
+                    <div className="space-y-6">
+                      {course.description && (
+                        <div className="bg-[#0D1426] p-6 rounded-2xl border border-slate-800 text-slate-400 text-sm leading-relaxed whitespace-pre-wrap shadow-inner font-medium">
+                          {formatTextWithWarning(course.description)}
                         </div>
                       )}
-                      {course.outlineData && course.outlineData.startsWith('http') && (
-                        <div className="flex items-center gap-4 bg-slate-50 p-5 rounded-2xl border border-slate-100 transition-all hover:bg-white hover:shadow-md group cursor-pointer" onClick={() => {
-                             window.open(course.outlineData, '_blank');
-                             toast.success('Course outline opened!');
-                        }}>
-                          <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600 group-hover:scale-110 transition-transform">
-                            <FileText className="w-5 h-5" />
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {course.durationHours && (
+                          <div className="flex items-center gap-4 bg-[#111827] p-5 rounded-2xl border border-slate-800 transition-all hover:border-blue-500/30 group">
+                            <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400 group-hover:scale-110 transition-transform border border-blue-500/20 shadow-[0_0_10px_rgba(59,130,246,0.1)]">
+                              <Clock className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">Total Duration</p>
+                              <p className="text-slate-200 font-bold tracking-tight">{course.durationHours} Teaching Hours</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Course Outline</p>
-                            <p className="text-slate-800 font-bold line-clamp-1">View Document</p>
+                        )}
+                        {course.outlineData && course.outlineData.startsWith('http') && (
+                          <div className="flex items-center gap-4 bg-[#111827] p-5 rounded-2xl border border-slate-800 transition-all hover:border-purple-500/30 group cursor-pointer" onClick={() => {
+                               window.open(course.outlineData, '_blank');
+                               toast.success('Course outline opened!');
+                          }}>
+                            <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400 group-hover:scale-110 transition-transform border border-purple-500/20 shadow-[0_0_10px_rgba(168,85,247,0.1)]">
+                              <FileText className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">Course Outline</p>
+                              <p className="text-slate-200 font-bold tracking-tight line-clamp-1">View Document</p>
+                            </div>
                           </div>
-                        </div>
-                      )}
-                      {course.certificateAvailable && (
-                        <div className="flex items-center gap-4 bg-slate-50 p-5 rounded-2xl border border-slate-100 transition-all hover:bg-white hover:shadow-md group">
-                          <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center text-green-600 group-hover:scale-110 transition-transform">
-                            <CheckCircle2 className="w-5 h-5" />
+                        )}
+                        {course.certificateAvailable && (
+                          <div className="flex items-center gap-4 bg-[#111827] p-5 rounded-2xl border border-slate-800 transition-all hover:border-emerald-500/30 group">
+                            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400 group-hover:scale-110 transition-transform border border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.1)]">
+                              <CheckCircle2 className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">Certification</p>
+                              <p className="text-slate-200 font-bold tracking-tight">{course.certName || 'Professional Certificate'}</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Certification</p>
-                            <p className="text-slate-800 font-bold">{course.certName || 'Professional Certificate'}</p>
-                          </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          <Card className="shadow-xl shadow-slate-200/50 border-0 ring-1 ring-slate-100 overflow-hidden">
-             <CardHeader className="bg-slate-50/50 pb-6 border-b border-slate-100">
-                <CardTitle className="text-lg font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-blue-600" /> Upcoming Intakes
+          <Card className="shadow-[0_0_40px_-15px_rgba(59,130,246,0.2)] border border-slate-800 bg-[#111827] overflow-hidden rounded-3xl mt-12 relative">
+             <div className="absolute top-0 right-0 p-8 opacity-20 pointer-events-none blur-3xl">
+               <div className="w-64 h-64 bg-indigo-500 rounded-full"></div>
+             </div>
+             <CardHeader className="bg-[#0D1426]/50 border-b border-slate-800 px-8 py-8 relative z-10">
+                <CardTitle className="text-2xl font-black text-white tracking-tight flex items-center gap-3">
+                  <div className="p-2 bg-blue-500/10 text-blue-400 rounded-xl border border-blue-500/20"><Calendar className="w-6 h-6" /></div> Upcoming Intakes
                 </CardTitle>
-                <CardDescription className="text-xs font-bold uppercase tracking-widest text-slate-400">Secure your spot in the next session</CardDescription>
+                <CardDescription className="text-sm font-semibold uppercase tracking-widest text-slate-500 mt-2">Secure your spot in the next session</CardDescription>
              </CardHeader>
-             <CardContent className="p-0">
+             <CardContent className="p-0 relative z-10">
                 {loadingSessions ? (
-                  <div className="p-12 flex justify-center"><Loader2 className="animate-spin text-blue-300 w-8 h-8" /></div>
+                  <div className="p-16 flex justify-center"><Loader2 className="animate-spin text-blue-500 w-10 h-10" /></div>
                 ) : sessions.length === 0 ? (
-                  <div className="p-12 text-center text-slate-400 italic font-medium flex flex-col items-center gap-4">
-                    <Calendar className="w-12 h-12 opacity-10" />
-                    <p>No active intakes currently scheduled.</p>
+                  <div className="p-16 text-center text-slate-600 italic font-medium flex flex-col items-center gap-4">
+                    <Calendar className="w-16 h-16 opacity-10" />
+                    <p className="text-lg">No active intakes currently scheduled.</p>
                   </div>
                 ) : (
-                  <div className="divide-y divide-slate-50">
+                  <div className="divide-y divide-slate-800">
                     {sessions.map(s => (
-                      <div key={s.id} className="p-6 flex flex-col sm:flex-row justify-between sm:items-center gap-6 hover:bg-slate-50/50 transition-colors group">
-                        <div className="space-y-3">
-                          <div className="flex items-center gap-2 font-black text-slate-800 tracking-tight text-lg">
-                            {s.sessionName || 'Intake Session'}
+                      <div key={s.id} className="p-8 flex flex-col md:flex-row justify-between md:items-center gap-8 hover:bg-[#1f2937]/50 transition-all duration-300 group">
+                        <div className="space-y-4 flex-1">
+                          <div className="flex items-center gap-2 font-black text-white tracking-tight text-xl" title={`${course.courseCode ? course.courseCode + ' ' : ''}${course.title} - ${s.startDate || 'TBD'}`}>
+                            {course.courseCode ? <span className="text-blue-400 font-mono">{course.courseCode}</span> : ''} {course.title} <span className="text-slate-700 font-normal mx-1">|</span> <span className="text-slate-400">{s.startDate || 'TBD'}</span>
                           </div>
-                          <div className="grid grid-cols-2 gap-x-8 gap-y-2">
-                            <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                              <Calendar className="w-3.5 h-3.5 text-blue-400" /> {s.startDate}
+                          <div className="flex flex-wrap gap-x-8 gap-y-3">
+                            <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest bg-slate-800 border border-slate-700 px-3 py-1 rounded-md">
+                              <Calendar className="w-4 h-4 text-blue-400" /> {s.startDate}
                             </div>
-                            <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                              <MapPin className="w-3.5 h-3.5 text-slate-400" /> {s.deliveryMode}
+                            <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest bg-slate-800 border border-slate-700 px-3 py-1 rounded-md">
+                              <MapPin className="w-4 h-4 text-emerald-400" /> {s.deliveryMode}
                             </div>
-                            {(s.earlyBirdPrice || s.standardPrice || s.price) && (
-                              <div className="flex flex-col col-span-2 pt-2 border-t border-slate-100 mt-2">
-                                {(s.earlyBirdPrice && s.earlyBirdPrice < (s.standardPrice || s.price)) ? (
-                                  <div className="flex flex-wrap items-baseline gap-2">
-                                    <span className="text-[10px] font-black uppercase tracking-widest bg-amber-100 text-amber-800 px-2 py-0.5 rounded-sm">Early Bird</span>
-                                    <span className="text-xl font-bold text-amber-600">HK${s.earlyBirdPrice.toLocaleString()}</span>
-                                    <span className="text-xs font-medium text-slate-400 line-through">HK${(s.standardPrice || s.price).toLocaleString()}</span>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-baseline gap-2">
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Standard Fee</span>
-                                    <span className="text-lg font-bold text-slate-800">HK${(s.standardPrice || s.price)?.toLocaleString()}</span>
-                                  </div>
-                                )}
-                              </div>
-                            )}
                           </div>
                         </div>
-                        <Button 
-                          onClick={() => handleEnroll(s.id)} 
-                          className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 h-11 px-8 font-black uppercase tracking-widest text-[10px] group-hover:scale-105 transition-transform"
-                          disabled={s.enrolledCount >= s.quota}
-                        >
-                          {s.enrolledCount >= s.quota ? 'Waitlist Only' : 'Register Now'}
-                        </Button>
+                        
+                        <div className="flex flex-col items-end gap-4 min-w-[200px]">
+                          {(s.earlyBirdPrice || s.standardPrice || s.price) && (
+                            <div className="flex flex-col items-end text-right">
+                              {(s.earlyBirdPrice && s.earlyBirdPrice < (s.standardPrice || s.price)) ? (
+                                <>
+                                  <span className="text-[10px] font-black uppercase tracking-widest bg-amber-500/10 text-amber-500 px-2.5 py-0.5 rounded-full mb-1 border border-amber-500/20">Early Bird Offer</span>
+                                  <span className="text-3xl font-black text-white tracking-tighter">HK${s.earlyBirdPrice.toLocaleString()}</span>
+                                  <span className="text-sm font-medium text-slate-500 line-through">HK${(s.standardPrice || s.price).toLocaleString()}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Standard Fee</span>
+                                  <span className="text-3xl font-black text-white tracking-tighter">HK${(s.standardPrice || s.price)?.toLocaleString()}</span>
+                                </>
+                              )}
+                            </div>
+                          )}
+                          <Button 
+                            onClick={() => handleEnroll(s.id)} 
+                            className={`w-full h-12 font-black uppercase tracking-widest text-[10px] transition-all duration-300 ${s.enrolledCount >= s.quota ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed hover:bg-slate-800' : 'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.3)] hover:shadow-[0_0_25px_rgba(59,130,246,0.5)] hover:-translate-y-0.5'}`}
+                            disabled={s.enrolledCount >= s.quota}
+                          >
+                            {s.enrolledCount >= s.quota ? 'Waitlist Only' : 'Register Now'}
+                          </Button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -290,44 +302,45 @@ export function CourseDetail() {
         </div>
 
         <div className="space-y-8">
-           <Card className="border-0 shadow-2xl shadow-blue-900/10 ring-1 ring-blue-100 overflow-hidden sticky top-8">
-             <CardContent className="pt-8 space-y-8">
+           <Card className="bg-[#111827] border border-slate-800 shadow-[0_0_40px_-15px_rgba(59,130,246,0.15)] overflow-hidden sticky top-8">
+             <CardContent className="pt-8 space-y-8 relative z-10">
                 <div className="space-y-4">
-                  <div className="flex items-center gap-3 text-slate-600">
-                    <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
+                  <div className="flex items-center gap-3 text-slate-400">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
                     <span className="text-sm font-medium">Life-time access to materials</span>
                   </div>
-                  <div className="flex items-center gap-3 text-slate-600">
-                    <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
+                  <div className="flex items-center gap-3 text-slate-400">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
                     <span className="text-sm font-medium">Expert-led instruction</span>
                   </div>
-                  <div className="flex items-center gap-3 text-slate-600">
-                    <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
+                  <div className="flex items-center gap-3 text-slate-400">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
                     <span className="text-sm font-medium">Graduation certificate included</span>
                   </div>
                 </div>
 
-                <div className="h-px bg-slate-100" />
+                <div className="h-px bg-slate-800" />
 
                 <div className="space-y-3">
-                  <Button className="w-full h-14 text-xs font-black uppercase tracking-[0.2em] shadow-xl shadow-blue-200 bg-blue-600 hover:bg-blue-700" onClick={() => handleEnroll()}>
+                  <Button className="w-full h-14 text-xs font-black uppercase tracking-[0.2em] shadow-[0_0_20px_rgba(59,130,246,0.3)] hover:shadow-[0_0_30px_rgba(59,130,246,0.5)] bg-blue-600 hover:bg-blue-500 transition-all" onClick={() => handleEnroll()}>
                     Start Registration
                   </Button>
                 </div>
 
-                <p className="text-[9px] text-center text-slate-400 font-bold uppercase tracking-widest leading-relaxed">
+                <p className="text-[9px] text-center text-slate-500 font-bold uppercase tracking-widest leading-relaxed">
                   Need corporate pricing? <br/>
                   {schoolSettings?.email ? (
-                    <a href={`mailto:${schoolSettings.email}`} className="text-blue-500 hover:text-blue-600 transition-colors">
+                    <a href={`mailto:${schoolSettings.email}`} className="text-blue-400 hover:text-blue-300 transition-colors">
                       Contact our sales team
                     </a>
                   ) : (
-                    <span className="text-blue-500">Contact our sales team</span>
+                    <span className="text-blue-400">Contact our sales team</span>
                   )}
                 </p>
              </CardContent>
            </Card>
         </div>
+      </div>
       </div>
     </div>
   );

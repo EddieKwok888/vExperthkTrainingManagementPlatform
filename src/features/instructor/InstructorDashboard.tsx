@@ -9,6 +9,7 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { 
   Loader2, CheckCircle, XCircle, Clock, Calendar, GraduationCap, 
   ClipboardList, Send, RefreshCw, CreditCard, FileText, Download, 
@@ -278,6 +279,34 @@ export function InstructorDashboard() {
     }
   };
 
+  const handleCreateQuickLesson = async () => {
+    if (!selectedSessionId) return;
+    const session = sessions.find(s => s.id === selectedSessionId);
+    if (!session) return;
+    
+    try {
+      const newLesson = {
+        sessionId: selectedSessionId,
+        session_id: selectedSessionId,
+        tutorId: user?.uid,
+        lessonDate: getHkDateString(),
+        lessonTitle: `Class ${getHkDateString()}`,
+        startTime: session.startTime || '09:00',
+        endTime: session.endTime || '18:00',
+        createdAt: serverTimestamp()
+      };
+      
+      const docRef = await addDoc(collection(db, 'lessons'), newLesson);
+      const addedLesson = { id: docRef.id, ...newLesson };
+      
+      setLessons(prev => [...prev, addedLesson]);
+      handleSelectLesson(addedLesson);
+      toast.success("Created today's class successfully! You can now take attendance.");
+    } catch (e: any) {
+      toast.error("Failed to create class: " + e.message);
+    }
+  };
+
   const handleSaveAttendance = async () => {
     if (!selectedLesson) return;
     setSubmittingAttendance(true);
@@ -310,15 +339,27 @@ export function InstructorDashboard() {
   };
 
   // Bulk operation to mark everyone
-  const handleBulkMarkAttendance = (status: 'present' | 'absent' | 'late' | 'excused' | 'present_am' | 'present_pm') => {
+  const handleBulkMarkAttendance = (status: 'absent' | 'present_am' | 'present_pm' | 'clear') => {
     if (registrations.length === 0) return;
     const updated = { ...attendanceData };
     registrations.forEach(r => {
-      updated[r.studentId] = status;
+      if (status === 'clear') {
+         updated[r.studentId] = '';
+      } else if (status === 'absent') {
+         updated[r.studentId] = 'absent';
+      } else if (status === 'present_am') {
+         const cur = updated[r.studentId];
+         if (cur === 'present_pm') updated[r.studentId] = 'present';
+         else if (cur !== 'present') updated[r.studentId] = 'present_am';
+      } else if (status === 'present_pm') {
+         const cur = updated[r.studentId];
+         if (cur === 'present_am') updated[r.studentId] = 'present';
+         else if (cur !== 'present') updated[r.studentId] = 'present_pm';
+      }
     });
     setAttendanceData(updated);
-    const label = status === 'present_am' ? 'AM Present' : status === 'present_pm' ? 'PM Present' : status.toUpperCase();
-    toast.success(`Marked all as ${label}`);
+    const label = status === 'present_am' ? 'AM Present' : status === 'present_pm' ? 'PM Present' : status === 'clear' ? 'Cleared' : 'Absent';
+    toast.success(status === 'clear' ? '已重置所有點名紀錄 (Cleared all)' : `Marked all as ${label}`);
   };
 
   const generateMTMReport = async () => {
@@ -490,20 +531,16 @@ export function InstructorDashboard() {
     );
   });
 
-  // Filter out completed courses, and put confirmed/full courses first
+  // Filter ONLY confirmed/full courses, and put closest upcoming dates first
   const visibleSessions = sessions
     .filter(s => {
       const statusLower = (s?.sessionStatus || '').toLowerCase();
-      return statusLower !== 'completed';
+      return statusLower === 'confirmed' || statusLower === 'full';
     })
     .sort((a, b) => {
-      const aStatus = (a?.sessionStatus || '').toLowerCase();
-      const bStatus = (b?.sessionStatus || '').toLowerCase();
-      const aIsConfirmed = aStatus === 'confirmed' || aStatus === 'full';
-      const bIsConfirmed = bStatus === 'confirmed' || bStatus === 'full';
-      if (aIsConfirmed && !bIsConfirmed) return -1;
-      if (!aIsConfirmed && bIsConfirmed) return 1;
-      return 0;
+      const aDate = a.startDate || '9999-12-31';
+      const bDate = b.startDate || '9999-12-31';
+      return new Date(aDate).getTime() - new Date(bDate).getTime();
     });
 
   // Filtering upcoming lectures for the instructor dashboard list (today or future + session open/full/confirmed)
@@ -542,135 +579,74 @@ export function InstructorDashboard() {
       <div className="max-w-7xl mx-auto space-y-8">
         
         {/* Banner with Greeting and Context */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">
-                {t('tutor.portal_title')}
-              </h1>
-              <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold tracking-wide ${
-                userProfile?.role === 'tutor' 
-                  ? 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-700/10' 
-                  : 'bg-indigo-50/80 text-slate-600 ring-1 ring-slate-400/10'
-              }`}>
-                {userProfile?.role === 'tutor' ? 'Full-Time Instructor' : 'Part-Time Instructor'}
-              </span>
-            </div>
-            <p className="text-sm text-slate-500 font-medium">
-              Manage class attendance, log teaching hours, and download audit reports.
-            </p>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-blue-600 text-white p-6 rounded-xl shadow-sm mb-8">
+          <div>
+             <h1 className="text-3xl font-bold flex items-center gap-3">
+               Instructor Dashboard
+               <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold tracking-wide bg-blue-500 text-white ring-1 ring-white/20">
+                 {userProfile?.role === 'tutor' ? 'Full-Time' : 'Part-Time'}
+               </span>
+             </h1>
+             <p className="opacity-80 mt-1">Welcome back, {user?.displayName || user?.email?.split('@')[0]}!</p>
           </div>
-          
-          <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="flex items-center gap-4">
             <Button 
               variant="outline" 
               size="sm" 
               onClick={fetchTutorData} 
-              className="gap-2 text-slate-600 bg-white shadow-sm border-slate-200 h-10 px-4 hover:border-indigo-400 hover:text-indigo-600 transition-all rounded-xl"
+              className="gap-2 text-blue-600 bg-white shadow-sm border-white h-10 px-4 hover:bg-blue-50 transition-all rounded-xl font-bold"
             >
-              <RefreshCw className="w-4 h-4 text-indigo-600" />
-              <span>Sync DB</span>
+              <RefreshCw className="w-4 h-4" />
+              <span className="hidden sm:inline">Sync DB</span>
             </Button>
-            <div className="flex items-center gap-2.5 text-sm font-semibold text-slate-700 bg-gradient-to-r from-slate-100 to-slate-50 border border-slate-200 px-4 h-10 rounded-xl shadow-inner">
-              <GraduationCap className="w-4.5 h-4.5 text-indigo-500" />
-              <span>{user?.displayName || user?.email?.split('@')[0]}</span>
-            </div>
+            <GraduationCap className="w-12 h-12 opacity-50 hidden sm:block" />
           </div>
         </div>
 
         {/* Bento Statistics Showcase */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          
-          {/* Upcoming sessions */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between group hover:border-indigo-200 transition-all">
-            <div className="space-y-1">
-              <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">Scheduled Courses</p>
-              <p className="text-3xl font-extrabold text-slate-800 tracking-tight group-hover:text-indigo-600 transition-colors">
-                {stats.upcomingSessions}
-              </p>
-              <p className="text-[10px] text-slate-400">Assigned future lessons</p>
-            </div>
-            <div className="p-3.5 bg-indigo-50 rounded-xl text-indigo-600">
-              <Calendar className="w-6 h-6 animate-pulse" />
-            </div>
-          </div>
-
-          {/* Active students */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between group hover:border-emerald-200 transition-all">
-            <div className="space-y-1">
-              <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">Total Enrolled</p>
-              <p className="text-3xl font-extrabold text-slate-800 tracking-tight group-hover:text-emerald-600 transition-colors">
-                {stats.activeStudents}
-              </p>
-              <p className="text-[10px] text-slate-400">Active students in intakes</p>
-            </div>
-            <div className="p-3.5 bg-emerald-50 rounded-xl text-emerald-600">
-              <CheckSquare className="w-6 h-6" />
-            </div>
-          </div>
-
-          {/* Average satisfaction */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between group hover:border-amber-200 transition-all">
-            <div className="space-y-1">
-              <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">Student Rating</p>
-              <div className="flex items-center gap-1.5">
-                <span className="text-3xl font-extrabold text-slate-800 tracking-tight">
-                  {stats.averageRating > 0 ? stats.averageRating.toFixed(1) : 'N/A'}
-                </span>
-                {stats.averageRating > 0 && <span className="text-[11px] text-slate-400 font-bold">/ 5.0</span>}
-              </div>
-              <div className="flex items-center gap-0.5 mt-0.5">
-                {stats.averageRating > 0 ? (
-                  [...Array(5)].map((_, i) => (
-                    <Star 
-                      key={i} 
-                      className={`w-3.5 h-3.5 ${
-                        i < Math.round(stats.averageRating) 
-                          ? 'text-amber-500 fill-amber-400' 
-                          : 'text-slate-200'
-                      }`} 
-                    />
-                  ))
-                ) : (
-                  <span className="text-[10px] text-slate-400">No evaluations received</span>
-                )}
-              </div>
-            </div>
-            <div className="p-3.5 bg-amber-50 rounded-xl text-amber-600">
-              <Award className="w-6 h-6" />
-            </div>
-          </div>
-
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          <Card className="bg-gradient-to-br from-indigo-50 to-white">
+            <CardHeader>
+               <CardTitle className="text-indigo-800 text-sm font-black uppercase tracking-wider">Scheduled Courses</CardTitle>
+            </CardHeader>
+            <CardContent>
+               <div className="text-4xl font-bold text-indigo-600 flex items-center justify-between">
+                 {stats.upcomingSessions}
+                 <Calendar className="w-8 h-8 text-indigo-200" />
+               </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-emerald-50 to-white">
+            <CardHeader>
+               <CardTitle className="text-emerald-800 text-sm font-black uppercase tracking-wider">Total Enrolled</CardTitle>
+            </CardHeader>
+            <CardContent>
+               <div className="text-4xl font-bold text-emerald-600 flex items-center justify-between">
+                 {stats.activeStudents}
+                 <CheckSquare className="w-8 h-8 text-emerald-200" />
+               </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-amber-50 to-white">
+            <CardHeader>
+               <CardTitle className="text-amber-800 text-sm font-black uppercase tracking-wider">Student Rating</CardTitle>
+            </CardHeader>
+            <CardContent>
+               <div className="text-4xl font-bold text-amber-600 flex items-center justify-between">
+                 {stats.averageRating > 0 ? stats.averageRating.toFixed(1) : 'N/A'}
+                 <Award className="w-8 h-8 text-amber-200" />
+               </div>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Modular Tabs Selector */}
-        <div className="flex items-center gap-1 border-b border-slate-200 pb-px overflow-x-auto overflow-y-hidden hide-scrollbar">
-          {[
-            { id: 'overview', label: 'Dashboard Overview', icon: LayoutDashboard },
-            { id: 'attendance', label: 'Attendance Management', icon: CheckSquare },
-            { id: 'hours', label: 'Course History', icon: GraduationCap }
-          ].map(tab => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center gap-2 px-5 py-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all relative ${
-                  isActive 
-                    ? 'border-indigo-600 text-indigo-600' 
-                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
-                }`}
-              >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} />
-                <span>{tab.label}</span>
-                {isActive && (
-                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-t-full shadow" />
-                )}
-              </button>
-            );
-          })}
-        </div>
+        <Tabs value={activeTab} onValueChange={(val: any) => setActiveTab(val)}>
+          <TabsList className="mb-6 bg-slate-200/50">
+            <TabsTrigger value="overview">Dashboard Overview</TabsTrigger>
+            <TabsTrigger value="attendance">Attendance Management</TabsTrigger>
+            <TabsTrigger value="hours">Course History</TabsTrigger>
+          </TabsList>
+        </Tabs>
 
         {/* Tab content renders */}
         <div className="space-y-6">
@@ -684,7 +660,7 @@ export function InstructorDashboard() {
                   <CardHeader className="bg-slate-50/50 border-b border-slate-100">
                     <div className="flex justify-between items-center bg-transparent">
                       <div>
-                        <CardTitle className="text-base font-bold text-slate-800">My Assigned Intakes (Course Runs)</CardTitle>
+                        <CardTitle className="text-base font-bold text-slate-800">My Assigned Intakes</CardTitle>
                         <CardDescription className="text-xs text-slate-400 font-medium">
                           Overview of all course runs assigned to you and their currently registered students directory.
                         </CardDescription>
@@ -950,7 +926,17 @@ export function InstructorDashboard() {
                                   ))}
                                 </select>
                               </div>
-                            ) : null}
+                            ) : (
+                              <div className="mt-4 bg-amber-50/80 border border-amber-200 p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+                                <div className="space-y-1">
+                                  <span className="text-amber-800 text-xs font-bold block">No classes scheduled for this intake yet.</span>
+                                  <span className="text-amber-600 text-[10px] font-medium block">You must add a class to take student attendance.</span>
+                                </div>
+                                <Button onClick={handleCreateQuickLesson} className="bg-amber-600 hover:bg-amber-700 text-white shadow-sm font-bold text-xs h-9">
+                                  + Add Today's Class
+                                </Button>
+                              </div>
+                            )}
                           </div>
 
                           {/* Progress checklist & Bulk controls */}
@@ -1008,6 +994,12 @@ export function InstructorDashboard() {
                                 >
                                   All Absent
                                 </button>
+                                <button
+                                  onClick={() => handleBulkMarkAttendance('clear')}
+                                  className="bg-slate-50 border border-slate-250 hover:border-slate-400 hover:bg-slate-100 text-slate-700 text-[10px] md:text-xs font-extrabold uppercase px-3 md:px-5 py-2 md:py-2.5 rounded-full transition-all cursor-pointer shadow-sm hover:shadow-md hover:-translate-y-0.5 hidden sm:block"
+                                >
+                                  一鍵重置
+                                </button>
                               </div>
                               
                               <div className="pl-3 md:pl-5 border-l border-slate-200/80">
@@ -1037,7 +1029,7 @@ export function InstructorDashboard() {
                               </TableHeader>
                               <TableBody>
                                 {filteredRegistrations.map(r => {
-                                  const currentStatus = attendanceData[r.studentId] || 'present';
+                                  const currentStatus = attendanceData[r.studentId] ?? '';
                                   return (
                                     <TableRow key={r.id} className="hover:bg-slate-50/40 transition-colors border-b border-slate-50">
                                       <TableCell className="pl-6 py-4.5">
@@ -1057,15 +1049,28 @@ export function InstructorDashboard() {
                                             {[
                                               { id: 'present_am', label: 'AM Present', color: 'bg-emerald-600 border-emerald-600' },
                                               { id: 'present_pm', label: 'PM Present', color: 'bg-indigo-600 border-indigo-600' },
-                                              { id: 'absent', label: 'Absent', color: 'bg-red-650 border-red-655' },
-                                              { id: 'late', label: 'Late', color: 'bg-amber-500 border-amber-500' },
-                                              { id: 'excused', label: 'EXC', color: 'bg-slate-500 border-slate-505' }
+                                              { id: 'absent', label: 'Absent', color: 'bg-red-600 border-red-600' }
                                             ].map(item => {
-                                              const isMarked = currentStatus === item.id || (item.id === 'present_am' && currentStatus === 'present');
+                                              const isMarked = currentStatus === item.id || ((item.id === 'present_am' || item.id === 'present_pm') && currentStatus === 'present');
                                               return (
                                                 <button
                                                   key={item.id}
-                                                  onClick={() => setAttendanceData(prev => ({ ...prev, [r.studentId]: item.id }))}
+                                                  onClick={() => setAttendanceData(prev => {
+                                                    const cur = prev[r.studentId] || '';
+                                                    let nextStatus = item.id;
+                                                    if (item.id === 'absent') {
+                                                      nextStatus = cur === 'absent' ? '' : 'absent';
+                                                    } else if (item.id === 'present_am') {
+                                                      if (cur === 'present_am') nextStatus = '';
+                                                      else if (cur === 'present_pm') nextStatus = 'present';
+                                                      else if (cur === 'present') nextStatus = 'present_pm';
+                                                    } else if (item.id === 'present_pm') {
+                                                      if (cur === 'present_pm') nextStatus = '';
+                                                      else if (cur === 'present_am') nextStatus = 'present';
+                                                      else if (cur === 'present') nextStatus = 'present_am';
+                                                    }
+                                                    return { ...prev, [r.studentId]: nextStatus };
+                                                  })}
                                                   className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all border ${
                                                     isMarked 
                                                       ? `${item.color} text-white shadow-sm font-black animate-scaleIn` 

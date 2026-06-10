@@ -349,27 +349,12 @@ function Layout() {
           <span>{loadingSettings ? <span className="block w-24 h-6 bg-slate-200 animate-pulse rounded"></span> : schoolSettings?.name ? schoolSettings.name : <>School <span className="text-blue-600">Portal</span></>}</span>
         </Link>
         <div className="flex items-center gap-6">
-          <DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant="ghost" size="sm" className="gap-2" />}>
-              <Languages className="w-4 h-4" />
-              <span className="hidden sm:inline">{i18n.language === 'en' ? 'English' : '繁體中文'}</span>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => changeLanguage('en')}>
-                English
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => changeLanguage('zh-HK')}>
-                繁體中文 (廣東話)
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
           <nav className="flex items-center gap-4">
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : user ? (
               <div className="flex items-center gap-6">
                 <div className="flex bg-slate-100 p-1 rounded-md text-xs font-medium">
-                  {(['admin', 'coordinator', 'finance', 'staff'].includes(role || '') || (role && role.startsWith('custom_'))) && <Link to="/admin" className="px-3 py-1 bg-white shadow-sm rounded text-blue-600 border border-slate-200">{t('common.admin')}</Link>}
-                  {['tutor', 'tutor_pt'].includes(role || '') && <Link to="/instructor" className="px-3 py-1 bg-white shadow-sm rounded text-blue-600 border border-slate-200">{t('common.tutor')}</Link>}
+                  {(['admin', 'coordinator', 'finance', 'staff'].includes(role || '') || (role && role.startsWith('custom_'))) && <Link to="/admin" className="px-3 py-1 bg-white shadow-sm rounded text-blue-600 border border-slate-200">Admin Dashboard</Link>}
+                  {['tutor', 'tutor_pt'].includes(role || '') && <Link to="/instructor" className="px-3 py-1 bg-white shadow-sm rounded text-blue-600 border border-slate-200">Instructor Dashboard</Link>}
                   {role === 'student' && (
                     <>
                       <Link to="/student/registrations" className="px-3 py-1 hover:bg-white hover:shadow-sm rounded text-slate-600 hover:text-blue-600 transition-all">Student Dashboard</Link>

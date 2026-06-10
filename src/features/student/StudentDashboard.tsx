@@ -55,6 +55,7 @@ export function StudentDashboard() {
   const [lessons, setLessons] = useState<any[]>([]);
   const [enrolledSessions, setEnrolledSessions] = useState<any[]>([]);
   const [feedbacks, setFeedbacks] = useState<any[]>([]);
+  const [attendanceLogs, setAttendanceLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
 
@@ -62,9 +63,16 @@ export function StudentDashboard() {
     if (role === 'student' && user) {
       const fetchData = async () => {
         try {
-          const rq = query(collection(db, 'registrations'), where('studentEmail', '==', user.email));
-          const rSnap = await getDocs(rq);
-          const regsData = rSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+          const rqEmail = query(collection(db, 'registrations'), where('studentEmail', '==', user.email));
+          const rqId = query(collection(db, 'registrations'), where('studentId', '==', user.uid));
+          
+          const [rSnapEmail, rSnapId] = await Promise.all([getDocs(rqEmail), getDocs(rqId)]);
+          
+          const regsMap = new Map();
+          rSnapEmail.docs.forEach(d => regsMap.set(d.id, { id: d.id, ...(d.data() as any) }));
+          rSnapId.docs.forEach(d => regsMap.set(d.id, { id: d.id, ...(d.data() as any) }));
+          
+          const regsData = Array.from(regsMap.values());
           setRegs(regsData);
           
           try {
@@ -75,7 +83,7 @@ export function StudentDashboard() {
              // Ignore
           }
           
-          const courseIds = Array.from(new Set(regsData.map((r: any) => r.courseId)));
+          const courseIds = Array.from(new Set(regsData.map((r: any) => r.courseId).filter(Boolean)));
           const sessionIds = Array.from(new Set(regsData.map((r: any) => r.sessionId).filter(Boolean)));
 
           if (courseIds.length > 0) {
@@ -132,6 +140,12 @@ export function StudentDashboard() {
                 const certSnap = await getDocs(cq);
                 setCertificates(certSnap.docs.map(d => ({ id: d.id, ...d.data() })));
              } catch (e) {}
+
+             try {
+                const aq = query(collection(db, 'attendance'), where('studentId', '==', user.uid));
+                const attSnap = await getDocs(aq);
+                setAttendanceLogs(attSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+             } catch (e) {}
           }
         } catch (e) {
           console.error(e);
@@ -171,7 +185,7 @@ export function StudentDashboard() {
       <div className="flex justify-between items-center bg-blue-600 text-white p-6 rounded-xl shadow-sm mb-8">
         <div>
            <h1 className="text-3xl font-bold">Student Dashboard</h1>
-           <p className="opacity-80">Welcome back, {user?.displayName || user?.email}!</p>
+           <p className="opacity-80">Welcome back, {regs.length > 0 ? regs[0].studentName : (user?.displayName || user?.email)}!</p>
         </div>
         <GraduationCap className="w-12 h-12 opacity-50" />
       </div>
@@ -180,7 +194,6 @@ export function StudentDashboard() {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="progress">Course Progress</TabsTrigger>
-          <TabsTrigger value="schedule">Schedule</TabsTrigger>
           <TabsTrigger value="certificates">Certificates</TabsTrigger>
         </TabsList>
 
@@ -226,9 +239,9 @@ export function StudentDashboard() {
                 <Card key={c.id} className="flex flex-col hover:border-blue-300 transition-colors cursor-pointer" onClick={() => navigate(`/course/${c.id}?from=/student/registrations`)}>
                   <CardHeader className="pb-3">
                     <div className="flex bg-transparent mb-2">
-                       {c.hasOpenSession ? (
+                       {c.hasOpenSession && c.earliestDate !== '9999-12-31' ? (
                          <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase w-max flex items-center gap-1">
-                           <Calendar className="w-3 h-3" /> Scheduled
+                           <Calendar className="w-3 h-3" /> Upcoming: {c.earliestDate}
                          </span>
                        ) : (
                          <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase w-max">
@@ -236,9 +249,8 @@ export function StudentDashboard() {
                          </span>
                        )}
                     </div>
-                    <CardTitle className="text-md line-clamp-2">
-                       {c.courseCode && <span className="font-mono text-sm text-slate-500 mr-2">{c.courseCode}</span>}
-                       {c.title}
+                    <CardTitle className="text-md line-clamp-2" title={`${c.courseCode ? c.courseCode + ' ' : ''}${c.title} - ${c.earliestDate !== '9999-12-31' ? c.earliestDate : 'TBD'}`}>
+                       {c.courseCode ? `${c.courseCode} ` : ''}{c.title} - {c.earliestDate !== '9999-12-31' ? c.earliestDate : 'TBD'}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="flex-1">
@@ -284,43 +296,76 @@ export function StudentDashboard() {
                 const sessionLessons = lessons.filter(l => l.sessionId === r.sessionId);
                 
                 // Calculate progress
-                const totalLessons = sessionLessons.length;
-                let completedLessons = 0;
+                // Calculate progress based on course duration (days)
+                const totalCourseDays = parseFloat(course?.day || '1');
+                let attendedDays = 0;
                 let nextLesson = null;
                 const today = getHkDateString();
                 
-                const attendanceRecords = r.attendanceRecords || {};
-
                 sessionLessons.forEach(l => {
-                    // Consider lesson completed if attendance is marked (am or pm or eve) or if it's strictly in the past
-                    const rec = l.lessonDate && attendanceRecords[l.lessonDate];
-                    const attended = rec && (rec.am || rec.pm || rec.eve);
-                    const isPast = l.lessonDate && l.lessonDate < today;
-                    if (attended || isPast) {
-                        completedLessons++;
-                    } else if (!nextLesson && l.lessonDate && l.lessonDate >= today) {
+                    const attsForLesson = attendanceLogs.filter(a => a.lessonId === l.id);
+                    const amMark = attsForLesson.some(a => a.status === 'present_am');
+                    const pmMark = attsForLesson.some(a => a.status === 'present_pm');
+                    const fullMark = attsForLesson.some(a => a.status === 'present');
+
+                    if (fullMark) {
+                        attendedDays += 1.0;
+                    } else if (amMark || pmMark) {
+                        attendedDays += 0.5;
+                    }
+
+                    if (!nextLesson && l.lessonDate && l.lessonDate >= today) {
                         nextLesson = l;
                     }
                 });
 
-                const progressPercent = totalLessons === 0 ? 0 : Math.round((completedLessons / totalLessons) * 100);
+                const progressPercent = totalCourseDays <= 0 ? 0 : Math.min(100, Math.round((attendedDays / totalCourseDays) * 100));
 
                 return (
                  <Card key={r.id} className="flex flex-col border-slate-200 shadow-sm overflow-hidden">
-                   <div className="bg-slate-50 border-b border-slate-100 p-5">
-                       <div className="flex justify-between items-start gap-4">
-                           <div>
-                                <h3 className="text-lg font-bold text-slate-800">
-                                    {course?.courseCode && <span className="font-mono text-sm text-slate-500 mr-2">{course.courseCode}</span>}
-                                    {course?.title || 'Unknown Course'}
-                                 </h3>
-                                <div className="mt-2 flex flex-col gap-2">
-                                     {session && session.startDate && session.endDate && (
-                                       <div className="text-sm font-semibold text-slate-600 flex items-center gap-1.5 bg-slate-100/80 w-fit px-2.5 py-1 rounded-md">
-                                         <Calendar className="w-4 h-4 text-slate-400" />
-                                         {session.startDate} to {session.endDate}
-                                       </div>
-                                     )}
+                    <div className="bg-white p-5 border-b border-slate-100">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> My Class Schedule</h4>
+                        
+                        <h3 className="text-lg font-bold text-slate-800 mb-4">
+                            {course?.courseCode && <span className="font-mono text-sm text-slate-500 mr-2">{course.courseCode}</span>}
+                            {course?.title || 'Unknown Course'}
+                        </h3>
+                        
+                        {sessionLessons.length > 0 ? (
+                            <div className="space-y-2">
+                                {sessionLessons.map((l: any) => {
+                                    const roomName = String(l.classroom || l.room || session?.room || session?.classroom || 'TBA').replace(/\s*\(.*?\)/g, '').trim();
+                                    return (
+                                        <div key={l.id} className="flex flex-col sm:flex-row sm:items-center justify-start gap-1 sm:gap-8 text-sm py-2 border-b border-slate-50 last:border-0">
+                                            <div className="font-medium text-slate-700">
+                                                <span className="text-blue-600 font-bold mr-2">{l.lessonDate}</span> 
+                                                {l.startTime} - {l.endTime}
+                                            </div>
+                                            <div className="text-slate-500 text-xs text-left sm:text-right">
+                                                Classroom: <span className="font-semibold text-slate-700 ml-1">{roomName}</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : session ? (
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-start gap-1 sm:gap-8 text-sm py-2">
+                                <div className="font-medium text-slate-700">
+                                    <span className="text-blue-600 font-bold mr-2">{session.startDate} to {session.endDate}</span>
+                                </div>
+                                <div className="text-slate-500 text-xs text-left sm:text-right">
+                                    Classroom: <span className="font-semibold text-slate-700 ml-1">{String(session.classroom || session.room || 'TBA').replace(/\s*\(.*?\)/g, '').trim()}</span>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="text-sm text-slate-400 italic">Schedule not available</div>
+                        )}
+                    </div>
+                    
+                    <div className="bg-slate-50 p-5">
+                        <div className="flex justify-between items-start gap-4">
+                            <div>
+                                 <div className="flex flex-col gap-2">
                                      {course?.description && <p className="text-sm text-slate-600 line-clamp-2">{course.description}</p>}
                                      <div className="flex flex-wrap items-center gap-2 text-xs">
                                          {course?.category && <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded uppercase font-bold">{course.category}</span>}
@@ -342,135 +387,85 @@ export function StudentDashboard() {
                                          </Link>
                                      </div>
                                  </div>
-                           </div>
-                           <div className="text-right shrink-0">
-                               <div className="text-2xl font-black text-blue-600">{progressPercent}%</div>
-                               <div className="text-xs text-slate-500 font-medium">Completed</div>
-                           </div>
-                       </div>
-                       <div className="h-2 w-full bg-slate-200 rounded-full mt-4 overflow-hidden">
-                           <div className="h-full bg-blue-600 transition-all duration-500 ease-in-out" style={{ width: `${progressPercent}%` }} />
-                       </div>
-                   </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                                <div className="text-2xl font-black text-blue-600">{progressPercent}%</div>
+                                <div className="text-xs text-slate-500 font-medium">Completed</div>
+                            </div>
+                        </div>
+                        <div className="h-2 w-full bg-slate-200 rounded-full mt-4 overflow-hidden">
+                            <div className="h-full bg-blue-600 transition-all duration-500 ease-in-out" style={{ width: `${progressPercent}%` }} />
+                        </div>
+                    </div>
                    
                    {progressPercent >= 100 && r.status?.toLowerCase() === 'verified' && (
-                       <CardContent className="p-0">
-                           <div className="p-5 bg-slate-50/50 border-t border-slate-100 flex flex-col sm:flex-row justify-end gap-3 w-full">
-                               {(() => {
-                                   const hasSubmittedFeedback = feedbacks.some(f => f.sessionId === r.sessionId);
-                                   const cert = certificates.find(c => c.registrationId === r.id);
-                                   
-                                   if (!hasSubmittedFeedback && !cert) {
-                                       return (
-                                           <Link to={`/feedback/${r.courseId}?session=${r.sessionId}`}>
-                                           <Button variant="secondary" className="w-full sm:w-auto bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 font-bold uppercase tracking-wider text-[10px]">
-                                               <FileText className="w-3.5 h-3.5 mr-1.5" /> Submit Feedback to unlock certificate
-                                           </Button>
-                                           </Link>
-                                       );
-                                   }
+                        <CardContent className="p-0 border-t border-slate-100 bg-slate-50/50">
+                            <div className="p-5">
+                                {(() => {
+                                    const hasSubmittedFeedback = feedbacks.some(f => f.sessionId === r.sessionId);
+                                    const cert = certificates.find(c => c.registrationId === r.id);
+                                    
+                                    if (!hasSubmittedFeedback && !cert) {
+                                        return (
+                                            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-red-50 p-4 rounded-xl border border-red-100 shadow-sm">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                                                        <FileText className="w-5 h-5 text-red-600" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-red-700 font-bold">Congratulations on completing the course!</p>
+                                                        <p className="text-red-600 text-sm font-medium mt-0.5">Please submit the course feedback to unlock your certificate.</p>
+                                                    </div>
+                                                </div>
+                                                <Link to={`/feedback/${r.courseId}?session=${r.sessionId}`}>
+                                                    <Button variant="secondary" className="w-full sm:w-auto bg-red-600 text-white hover:bg-red-700 font-bold shadow-sm uppercase tracking-wider">
+                                                        Submit Feedback
+                                                    </Button>
+                                                </Link>
+                                            </div>
+                                        );
+                                    }
 
-                                   if (cert) {
-                                       return (
-                                           <Button 
-                                           variant="default" 
-                                           className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-bold uppercase tracking-wider text-[10px]"
-                                           onClick={() => generateCertificatePDF(cert)}
-                                           >
-                                           <Download className="w-3.5 h-3.5 mr-1.5" /> Download Certificate
-                                           </Button>
-                                       );
-                                   }
-                                   return null;
-                               })()}
-                           </div>
-                       </CardContent>
-                   )}
+                                    if (cert) {
+                                        return (
+                                            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-emerald-50 p-4 rounded-xl border border-emerald-100 shadow-sm">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                                                        <GraduationCap className="w-5 h-5 text-emerald-600" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-emerald-800 font-bold">Course feedback submitted!</p>
+                                                        <p className="text-emerald-700 text-sm font-medium mt-0.5">Thank you for your feedback. You can now download your course certificate.</p>
+                                                    </div>
+                                                </div>
+                                                <Button 
+                                                    variant="default" 
+                                                    className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-bold uppercase tracking-wider shadow-sm"
+                                                    onClick={() => generateCertificatePDF(cert)}
+                                                >
+                                                    <Download className="w-4 h-4 mr-2" /> Download Certificate
+                                                </Button>
+                                            </div>
+                                        );
+                                    }
+
+                                    return (
+                                        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-blue-50 p-4 rounded-xl border border-blue-100 text-blue-800 font-semibold shadow-sm">
+                                            <div className="flex items-center gap-3">
+                                                <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                                                <p>Feedback submitted! Your certificate is being prepared, please check back soon.</p>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        </CardContent>
+                    )}
                  </Card>
                 );
               })}
             </div>
           )}
-        </TabsContent>
-
-        <TabsContent value="schedule" className="pt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>My Class Schedule</CardTitle>
-              <CardDescription>View your upcoming and past lesson dates</CardDescription>
-            </CardHeader>
-            <CardContent>
-               {scheduleLessons.length > 0 ? (
-                 <div className="space-y-3">
-                   {scheduleLessons.map((l: any) => {
-                      const courseName = courses.find(c => c.id === regs.find(r => r.sessionId === l.sessionId)?.courseId)?.title || "Course Session";
-                      const isPast = l.lessonDate && l.lessonDate < getHkDateString();
-                      return (
-                        <div key={l.id} className={`flex items-start md:items-center justify-between p-4 border rounded-xl gap-4 ${isPast ? 'bg-slate-50 border-slate-200 text-slate-500' : 'bg-white border-blue-100 shadow-sm'}`}>
-                          <div className="flex items-center gap-4">
-                            <div className={`w-12 h-12 rounded-full flex flex-col items-center justify-center shrink-0 ${isPast ? 'bg-slate-200 text-slate-500' : 'bg-blue-100 text-blue-600'}`}>
-                               <Calendar className="w-5 h-5 mb-0.5" />
-                               <span className="text-[9px] font-black">{l.lessonDate?.slice(5)}</span>
-                            </div>
-                            <div>
-                               <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">{l.lessonDate} • {l.startTime} - {l.endTime}</div>
-                               <h4 className={`font-bold ${isPast ? 'text-slate-400' : 'text-slate-800'}`}>
-                                 {courseName}
-                                 {isPast && <span className="text-red-600 ml-2 font-black text-xs">已完成</span>}
-                               </h4>
-                               <p className={`text-sm font-medium mt-0.5 ${isPast ? 'text-slate-400' : ''}`}>{l.lessonTitle || `Lesson ${l.lessonNumber}`}</p>
-                            </div>
-                          </div>
-                          <div className="text-right shrink-0">
-                            <div className="text-xs text-slate-500">Classroom: <span className={`font-semibold ${isPast ? 'text-slate-400' : 'text-slate-700'}`}>{String(l.classroom || 'TBA').replace(/\s*\(?Persons:[^)]*\)?/gi, '').trim()}</span></div>
-                            {l.meetingLink && (
-                               <a href={l.meetingLink} target="_blank" rel="noreferrer" className="text-xs text-blue-600 font-bold hover:underline mt-1 inline-block">Online Link</a>
-                            )}
-                          </div>
-                        </div>
-                      );
-                   })}
-                 </div>
-               ) : scheduleSessions.length > 0 ? (
-                 <div className="space-y-3">
-                   {scheduleSessions.map((s: any) => {
-                      const courseName = courses.find(c => c.id === s.courseId)?.title || "Course Session";
-                      const isPast = s.endDate && s.endDate < getHkDateString();
-                      return (
-                        <div key={s.id} className={`flex items-start md:items-center justify-between p-4 border rounded-xl gap-4 ${isPast ? 'bg-slate-50 border-slate-200 text-slate-500' : 'bg-white border-blue-100 shadow-sm'}`}>
-                          <div className="flex items-center gap-4">
-                            <div className={`w-12 h-12 rounded-full flex flex-col items-center justify-center shrink-0 ${isPast ? 'bg-slate-200 text-slate-500' : 'bg-blue-100 text-blue-600'}`}>
-                               <Calendar className="w-5 h-5 mb-0.5" />
-                               <span className="text-[9px] font-black">{s.startDate?.slice(5)}</span>
-                            </div>
-                            <div>
-                               <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">{s.startDate} to {s.endDate}</div>
-                               <h4 className={`font-bold ${isPast ? 'text-slate-400' : 'text-slate-800'}`}>
-                                 {courseName}
-                                 {isPast && <span className="text-red-600 ml-2 font-black text-xs">已完成</span>}
-                               </h4>
-                               <p className={`text-sm font-medium mt-0.5 ${isPast ? 'text-slate-400' : ''}`}>{s.sessionName || 'Course Schedule'}</p>
-                            </div>
-                          </div>
-                          <div className="text-right shrink-0">
-                            <div className="text-xs text-slate-500">Classroom: <span className={`font-semibold ${isPast ? 'text-slate-400' : 'text-slate-700'}`}>{String(s.classroom || s.room || 'TBA').replace(/\s*\(?Persons:[^)]*\)?/gi, '').trim()}</span></div>
-                            {s.meetingLink && (
-                               <a href={s.meetingLink} target="_blank" rel="noreferrer" className="text-xs text-blue-600 font-bold hover:underline mt-1 inline-block">Online Link</a>
-                            )}
-                          </div>
-                        </div>
-                      );
-                   })}
-                 </div>
-               ) : (
-                 <div className="py-8 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50">
-                    <Calendar className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-                    <p className="text-slate-600 font-medium">No scheduled classes found.</p>
-                    <p className="text-sm text-slate-500 mt-1 max-w-md mx-auto">Your course schedule will appear here once classes have been published for your enrolled sessions.</p>
-                 </div>
-               )}
-            </CardContent>
-          </Card>
         </TabsContent>
 
         <TabsContent value="certificates" className="pt-4">

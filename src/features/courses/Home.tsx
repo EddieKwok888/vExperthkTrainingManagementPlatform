@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Loader2, Search, Filter, Sparkles, Copy, Check, Gift, Zap } from 'lucide-react';
+import { Loader2, Search, Filter, Sparkles, Copy, Check, Gift, Zap, Calendar, FileText } from 'lucide-react';
 import { handleFirestoreError, OperationType } from '../../lib/error';
 
 export function Home() {
@@ -15,10 +15,10 @@ export function Home() {
   const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   
-  // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedLevel, setSelectedLevel] = useState('');
+  const [selectedSpecificCourse, setSelectedSpecificCourse] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -82,112 +82,160 @@ export function Home() {
 
   const filteredCourses = useMemo(() => {
     return courses.filter(course => {
+      const matchesSpecific = selectedSpecificCourse ? course.courseId === selectedSpecificCourse : true;
       const matchesSearch = course.title?.toLowerCase().includes(searchQuery.toLowerCase()) || 
                             course.description?.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCategory = selectedCategory ? course.category === selectedCategory : true;
       const matchesLevel = selectedLevel ? course.level === selectedLevel : true;
-      return matchesSearch && matchesCategory && matchesLevel;
+      return matchesSpecific && matchesSearch && matchesCategory && matchesLevel;
     });
-  }, [courses, searchQuery, selectedCategory, selectedLevel]);
+  }, [courses, searchQuery, selectedCategory, selectedLevel, selectedSpecificCourse]);
 
   return (
-    <div className="space-y-8">
-      <div className="text-center space-y-4 py-16 bg-blue-600 rounded-2xl shadow-sm text-white">
-        <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight">Advance Your Career with Us</h1>
-        <p className="text-xl text-blue-100 max-w-2xl mx-auto">Explore our range of professional courses designed to equip you with the skills of tomorrow.</p>
-      </div>
-
-      <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-        <div className="relative w-full md:w-96">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <Input 
-            placeholder="Search courses..." 
-            className="pl-9 bg-slate-50 border-slate-200"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-          />
-        </div>
-        <div className="flex w-full md:w-auto gap-4">
-          <select 
-            className="flex h-10 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            value={selectedCategory}
-            onChange={e => setSelectedCategory(e.target.value)}
-          >
-            <option value="">All Categories</option>
-            {categories.map(c => <option key={c as string} value={c as string}>{c as string}</option>)}
-          </select>
-          <select 
-            className="flex h-10 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            value={selectedLevel}
-            onChange={e => setSelectedLevel(e.target.value)}
-          >
-            <option value="">All Levels</option>
-            {levels.map(l => <option key={l as string} value={l as string}>{l as string}</option>)}
-          </select>
+    <div className="space-y-12 pb-20 bg-[#0A0F1C] min-h-screen px-4 pt-6">
+      {/* Futuristic Enterprise Hero Section */}
+      <div className="relative overflow-hidden text-center space-y-4 py-16 bg-[#0D1426] rounded-[2rem] shadow-[0_0_80px_-20px_rgba(59,130,246,0.3)] border border-blue-900/30 mx-auto max-w-7xl">
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20 mix-blend-color-dodge"></div>
+        
+        {/* Glow Effects */}
+        <div className="absolute top-0 right-1/4 w-[400px] h-[400px] bg-blue-600/20 rounded-full blur-[100px] pointer-events-none"></div>
+        <div className="absolute bottom-0 left-1/4 w-[400px] h-[400px] bg-indigo-600/10 rounded-full blur-[120px] pointer-events-none"></div>
+        
+        <div className="relative z-10 px-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-mono mb-4 uppercase tracking-widest">
+            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span> Next-Gen Learning
+          </div>
+          <h1 className="text-4xl md:text-5xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-white via-blue-100 to-slate-400 drop-shadow-sm pb-2">
+            Advance Your Future.
+          </h1>
+          <p className="text-base md:text-lg text-slate-400 max-w-2xl mx-auto mt-4 font-medium tracking-wide">
+            Equip yourself with enterprise-grade skills. Explore our professional curriculum designed for tomorrow's leaders.
+          </p>
         </div>
       </div>
 
-      <div className="space-y-4">
-        <h2 className="text-2xl font-bold tracking-tight text-slate-800">Available Courses ({filteredCourses.length})</h2>
+      <div className="max-w-7xl mx-auto">
+        {/* Course List & Show All Bar */}
+        <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-[#111827]/80 backdrop-blur-xl p-4 rounded-2xl border border-slate-700/50 shadow-[0_0_30px_rgba(59,130,246,0.15)] sticky top-6 z-30 transform -translate-y-10 w-[95%] mx-auto">
+          <div className="w-full md:w-1/2 flex items-center">
+            <div className="relative w-full">
+              <select 
+                className="h-14 w-full bg-[#0A0F1C] border border-blue-500/30 hover:border-blue-400 text-white px-5 rounded-xl focus:ring-2 focus:ring-blue-500/50 outline-none transition-all cursor-pointer font-bold text-lg appearance-none shadow-inner"
+                value={selectedSpecificCourse}
+                onChange={e => setSelectedSpecificCourse(e.target.value)}
+              >
+                <option value="" disabled className="text-slate-500">Course List (By Category)...</option>
+                {categories.map(cat => (
+                  <optgroup key={cat as string} label={cat as string} className="bg-slate-900 text-blue-400 font-black">
+                    {/* Get unique courses for this category to avoid listing multiple intakes of the same course */}
+                    {Array.from(new Map(courses.filter(c => c.category === cat).map(c => [c.courseId, c])).values()).map(c => (
+                      <option key={c.courseId} value={c.courseId} className="text-white font-medium">
+                        {c.courseCode ? `${c.courseCode} - ` : ''}{c.courseTitle}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+              </div>
+            </div>
+          </div>
+          <div className="flex w-full md:w-auto">
+            <Button 
+              onClick={() => setSelectedSpecificCourse('')}
+              className={`w-full md:w-auto h-14 px-8 rounded-xl font-black uppercase tracking-widest transition-all ${
+                selectedSpecificCourse 
+                  ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_20px_rgba(59,130,246,0.4)]' 
+                  : 'bg-slate-800 text-slate-400 border border-slate-700 hover:text-white cursor-not-allowed opacity-80'
+              }`}
+              disabled={!selectedSpecificCourse}
+            >
+              Show All Courses
+            </Button>
+          </div>
+        </div>
+
+      <div className="space-y-6 max-w-7xl mx-auto px-2">
+        <div className="flex items-center justify-between">
+          <h2 className="text-3xl font-black tracking-tight text-white flex items-center gap-3">
+            Available Courses <span className="text-sm font-mono bg-blue-500/10 text-blue-400 px-3 py-1 rounded-full border border-blue-500/20">{filteredCourses.length}</span>
+          </h2>
+        </div>
+        
         {loading ? (
-          <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>
+          <div className="flex justify-center py-20"><Loader2 className="w-10 h-10 animate-spin text-blue-500" /></div>
         ) : filteredCourses.length === 0 && promotions.length === 0 ? (
-          <p className="text-slate-500 py-8 text-center text-lg">No courses match your criteria. Please try a different search.</p>
+          <div className="py-20 text-center border border-dashed border-slate-800 rounded-3xl bg-[#111827]/30 backdrop-blur-sm">
+            <p className="text-slate-500 text-lg font-medium">No active curriculum matches your criteria.</p>
+          </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
             {/* Courses list */}
             <div className={`${promotions.length > 0 ? 'lg:col-span-8 xl:col-span-9' : 'lg:col-span-12'} space-y-6`}>
               {filteredCourses.length === 0 ? (
-                <p className="text-slate-500 py-8 text-center text-lg">No courses match your criteria. Please try a different search.</p>
+                <div className="py-20 text-center border border-dashed border-slate-800 rounded-3xl bg-[#111827]/30 backdrop-blur-sm">
+                  <p className="text-slate-500 text-lg font-medium">No active curriculum matches your criteria.</p>
+                </div>
               ) : (
                 <div className={`grid grid-cols-1 md:grid-cols-2 ${promotions.length > 0 ? 'lg:grid-cols-2 xl:grid-cols-3' : 'lg:grid-cols-3'} gap-6`}>
                   {filteredCourses.map(course => (
-                    <Card key={course.sessionId} className="flex flex-col shadow-sm border-slate-200 hover:shadow-md transition-shadow">
-                      <CardHeader>
-                        <div className="flex justify-between items-start mb-2">
+                    <Card key={course.sessionId} className="group relative flex flex-col bg-[#111827] rounded-2xl overflow-hidden border border-slate-800 hover:border-blue-500/50 shadow-none hover:shadow-[0_0_30px_-5px_rgba(59,130,246,0.3)] transition-all duration-500 hover:-translate-y-2">
+                      <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-blue-500/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                      <div className="absolute inset-0 bg-gradient-to-b from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+                      
+                      <CardHeader className="p-6 pb-4 relative z-10">
+                        <div className="flex justify-between items-start mb-4">
                           {course.category && (
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-1 rounded-sm">
+                            <span className="text-[9px] font-black uppercase tracking-widest text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2.5 py-1 rounded-sm shadow-[0_0_10px_rgba(59,130,246,0.1)]">
                               {course.category}
                             </span>
                           )}
                           {course.level && (
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 bg-slate-100 px-2 py-1 rounded-sm">
+                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 bg-slate-800 border border-slate-700 px-2.5 py-1 rounded-sm">
                               {course.level}
                             </span>
                           )}
                         </div>
-                        <CardTitle className="text-slate-800 line-clamp-1">
-                          {course.courseCode && <span className="font-mono text-sm text-slate-500 mr-2">{course.courseCode}</span>}
-                          {course.courseTitle}
+                        <CardTitle className="text-slate-100 line-clamp-2 text-xl font-black group-hover:text-white transition-colors tracking-tight" title={`${course.courseCode ? course.courseCode + ' ' : ''}${course.courseTitle} - ${course.startDate || 'TBD'}`}>
+                          {course.courseCode && <span className="font-mono text-xs text-blue-400 bg-blue-950 px-2 py-0.5 rounded mr-2 border border-blue-900/50">{course.courseCode}</span>}
+                          {course.courseTitle} <span className="text-slate-600 font-normal">- {course.startDate || 'TBD'}</span>
                         </CardTitle>
-                        <CardDescription className="line-clamp-2 text-slate-500 mt-1">
-                          <span className="block font-semibold text-blue-600 tracking-tight text-xs uppercase mb-1">
-                            {course.sessionName} • {course.startDate ? `${course.startDate}` : 'Dates TBD'}
+                        <CardDescription className="line-clamp-2 text-slate-400 mt-3 text-sm leading-relaxed">
+                          <span className="inline-flex items-center gap-1.5 font-bold text-indigo-400 text-[10px] uppercase tracking-widest mb-2 bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-1 rounded-sm">
+                            <Calendar className="w-3 h-3" /> {course.startDate ? `${course.startDate} to ${course.endDate || 'TBD'}` : 'Dates TBD'}
                           </span>
+                          <br/>
                           {course.description}
                         </CardDescription>
                       </CardHeader>
-                      <CardContent className="flex-1 text-sm space-y-2">
-                        <div className="flex justify-between items-center text-slate-600">
-                          {course.duration_hours && <span><span className="font-medium text-slate-700">Duration:</span> {course.duration_hours} hours</span>}
-                          {course.deliveryMode && <span className="uppercase text-[10px] font-bold tracking-widest bg-slate-100 px-1.5 py-0.5 rounded">{course.deliveryMode}</span>}
+                      <CardContent className="flex-1 text-sm space-y-4 px-6 relative z-10">
+                        <div className="flex justify-between items-center text-slate-400 pb-4 border-b border-slate-800">
+                          {course.duration_hours && <span className="font-medium text-xs"><span className="text-slate-500">Duration:</span> <span className="text-slate-200">{course.duration_hours}H</span></span>}
+                          {course.deliveryMode && <span className="uppercase text-[9px] font-black tracking-widest bg-slate-800 border border-slate-700 text-slate-300 px-2 py-0.5 rounded-sm">{course.deliveryMode}</span>}
                         </div>
-                        <div className="flex justify-between items-center pt-2">
-                          {course.certificate_available ? <span className="text-green-600 text-[10px] font-bold uppercase tracking-wider bg-green-50 px-2 py-0.5 rounded">✓ Certificate</span> : <span />}
-                          {course.outlineName && <span className="text-purple-600 text-[10px] font-bold uppercase tracking-wider bg-purple-50 px-2 py-0.5 rounded line-clamp-1 truncate ml-2">📄 Outline</span>}
+                        <div className="flex justify-between items-center pt-1">
+                          {course.certificate_available ? <span className="text-emerald-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-1"><Check className="w-3 h-3"/> Certified</span> : <span />}
+                          {course.outlineName && <span className="text-purple-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-1"><FileText className="w-3 h-3"/> Outline</span>}
                         </div>
                         
-                        <div className="mt-2">
+                        <div className="mt-6 pt-2">
                           {(course.earlyBirdPrice && course.earlyBirdPrice < (course.standardPrice || course.price)) ? (
-                            <p className="font-bold text-amber-600 text-2xl">${course.earlyBirdPrice?.toLocaleString()} <span className="text-sm font-normal text-slate-500 line-through ml-1">${(course.standardPrice || course.price)?.toLocaleString()}</span></p>
+                            <div className="flex flex-col">
+                              <span className="text-[9px] font-black uppercase tracking-widest text-amber-500 mb-1">Early Bird Offer</span>
+                              <p className="font-black text-white text-3xl tracking-tighter">${course.earlyBirdPrice?.toLocaleString()} <span className="text-sm font-semibold text-slate-500 line-through ml-1">${(course.standardPrice || course.price)?.toLocaleString()}</span></p>
+                            </div>
                           ) : (
-                            <p className="font-bold text-2xl text-blue-600">${(course.standardPrice || course.price)?.toLocaleString()}</p>
+                            <div className="flex flex-col">
+                              <span className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">Standard Fee</span>
+                              <p className="font-black text-3xl text-white tracking-tighter">${(course.standardPrice || course.price)?.toLocaleString()}</p>
+                            </div>
                           )}
                         </div>
                       </CardContent>
-                      <CardFooter className="flex gap-2">
-                        <Link to={`/course/${course.courseId}`} className="flex-1">
-                          <Button className="w-full bg-slate-800 hover:bg-slate-700 text-white">View Details</Button>
+                      <CardFooter className="p-6 pt-4 mt-auto relative z-10">
+                        <Link to={`/course/${course.courseId}`} className="w-full">
+                          <Button className="w-full h-12 bg-slate-800 hover:bg-blue-600 text-white font-black uppercase tracking-widest text-[10px] transition-all border border-slate-700 hover:border-blue-500 group-hover:shadow-[0_0_20px_rgba(59,130,246,0.4)]">View Details</Button>
                         </Link>
                       </CardFooter>
                     </Card>
@@ -196,16 +244,17 @@ export function Home() {
               )}
             </div>
 
-            {/* Sidebar with active promotions */}
             {promotions.length > 0 && (
               <div className="lg:col-span-4 xl:col-span-3">
-                <div className="bg-gradient-to-br from-indigo-50/70 via-white to-white p-5 rounded-xl border border-indigo-100 shadow-sm sticky top-6 space-y-4">
-                  <div className="flex items-center gap-2 pb-1 border-b border-indigo-100/50">
-                    <Sparkles className="w-5 h-5 text-indigo-600 animate-pulse" />
-                    <h3 className="text-sm font-bold text-slate-800 tracking-tight">Special Deals & Bundles</h3>
+                <div className="bg-[#0D1426] p-8 rounded-[2rem] border border-indigo-500/50 shadow-[0_0_60px_-15px_rgba(79,70,229,0.3)] sticky top-24 space-y-6 relative overflow-hidden group">
+                  <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-transparent to-purple-500/10 pointer-events-none z-0"></div>
+                  <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/20 blur-[50px] pointer-events-none rounded-full group-hover:bg-indigo-400/30 transition-all duration-700"></div>
+                  <div className="flex items-center gap-3 pb-4 border-b border-indigo-500/30 relative z-10">
+                    <Sparkles className="w-6 h-6 text-indigo-400 animate-pulse drop-shadow-[0_0_10px_rgba(129,140,248,0.8)]" />
+                    <h3 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-indigo-200 to-indigo-400 tracking-widest uppercase drop-shadow-md">Special Deals</h3>
                   </div>
 
-                  <div className="space-y-4 max-h-[80vh] overflow-y-auto pr-1">
+                  <div className="space-y-5 relative z-10">
                     {promotions.map((p: any) => {
                       const isBundle = p.type === 'bundle';
                       let course1Title = 'Course A';
@@ -224,49 +273,41 @@ export function Home() {
                       }
 
                       return (
-                        <div key={p.id} className={`p-4 rounded-xl border transition-all ${isBundle ? 'bg-indigo-50/50 border-indigo-200 hover:border-indigo-300' : 'bg-rose-50/30 border-rose-100 hover:border-rose-200'} space-y-3`}>
+                        <div key={p.id} className={`p-4 rounded-xl border transition-all ${isBundle ? 'bg-[#1e1b4b]/60 border-indigo-400/50 shadow-[0_0_20px_rgba(79,70,229,0.1)] hover:border-indigo-300 hover:shadow-[0_0_30px_rgba(79,70,229,0.25)]' : 'bg-rose-950/40 border-rose-400/50 shadow-[0_0_20px_rgba(244,63,94,0.1)] hover:border-rose-300 hover:shadow-[0_0_30px_rgba(244,63,94,0.25)]'} space-y-3 group/card hover:-translate-y-1 duration-300`}>
                           <div className="flex items-start justify-between gap-2">
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${isBundle ? 'bg-indigo-100 text-indigo-700' : 'bg-rose-100 text-rose-700'}`}>
-                              {isBundle ? '📦 2-Course Bundle' : '🎟️ Promo Coupon'}
+                            <span className={`text-[9px] px-2 py-1 rounded text-white font-black uppercase tracking-widest ${isBundle ? 'bg-indigo-500 border border-indigo-400 shadow-[0_0_10px_rgba(99,102,241,0.5)]' : 'bg-rose-500 border border-rose-400 shadow-[0_0_10px_rgba(244,63,94,0.5)]'}`}>
+                              {isBundle ? '📦 Bundle' : '🎟️ Coupon'}
                             </span>
-                            <span className="text-xs font-black text-rose-600">
+                            <span className="text-[10px] font-black text-white bg-white/10 px-2 py-0.5 rounded-full backdrop-blur-md border border-white/20">
                               -HKD {p.discountValue}
                             </span>
                           </div>
-
-                          <div className="space-y-1">
-                            <h4 className="text-xs font-black text-slate-800 leading-snug">{p.name}</h4>
+                          <div className="space-y-2">
+                            <h4 className="text-sm font-bold text-white leading-tight drop-shadow-sm">{p.name}</h4>
                             {isBundle ? (
-                              <div className="space-y-1 pt-1.5 text-[11px] text-slate-600">
-                                <p className="font-semibold text-[10px] text-slate-500 uppercase tracking-wider">Bundle course set:</p>
-                                <ul className="list-disc pl-4 space-y-1">
-                                  <li className="font-bold line-clamp-1 text-indigo-900">
+                              <div className="space-y-2 pt-2 text-xs text-indigo-100 border-t border-indigo-500/30 mt-2">
+                                <p className="font-bold text-[9px] text-indigo-300 uppercase tracking-widest bg-indigo-500/10 px-1.5 py-0.5 rounded w-fit">Included in bundle:</p>
+                                <ul className="space-y-1.5 px-1">
+                                  <li className="font-medium text-[11px] line-clamp-2 text-white flex items-start gap-2">
+                                    <span className="mt-1 w-1 h-1 rounded-full bg-indigo-400 shrink-0 shadow-[0_0_5px_rgba(129,140,248,0.8)]"></span>
                                     {course1Id ? (
-                                      <Link to={`/course/${course1Id}`} className="hover:underline hover:text-indigo-700 transition-colors">
+                                      <Link to={`/course/${course1Id}`} className="hover:text-indigo-200 transition-colors">
                                         {course1Title}
                                       </Link>
                                     ) : course1Title}
                                   </li>
-                                  <li className="font-bold line-clamp-1 text-indigo-900">
+                                  <li className="font-medium text-[11px] line-clamp-2 text-white flex items-start gap-2">
+                                    <span className="mt-1 w-1 h-1 rounded-full bg-indigo-400 shrink-0 shadow-[0_0_5px_rgba(129,140,248,0.8)]"></span>
                                     {course2Id ? (
-                                      <Link to={`/course/${course2Id}`} className="hover:underline hover:text-indigo-700 transition-colors">
+                                      <Link to={`/course/${course2Id}`} className="hover:text-indigo-300 hover:underline transition-colors">
                                         {course2Title}
                                       </Link>
                                     ) : course2Title}
                                   </li>
                                 </ul>
-                                {course1Id && (
-                                  <div className="mt-3.5 pt-1.5">
-                                    <Link to={`/register/${course1Id}?bundlePromoId=${p.id}`} className="block">
-                                      <Button className="w-full h-8.5 text-[11px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm flex items-center justify-center gap-1.5 uppercase tracking-wider rounded-lg transition-all active:scale-[0.98]">
-                                        <span>Register Bundle Now</span>
-                                        <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
-                                      </Button>
-                                    </Link>
-                                  </div>
-                                )}
-                                <p className="text-[9px] text-slate-400 mt-2 font-medium leading-normal italic">
-                                  *Automatically applied when purchasing both courses together during registration!
+
+                                <p className="text-[9px] text-indigo-300 mt-2 font-medium leading-relaxed bg-indigo-900/40 p-2 rounded-lg border border-indigo-500/20">
+                                  *Automatically applied when purchasing both courses together!
                                 </p>
                               </div>
                             ) : (
@@ -310,6 +351,7 @@ export function Home() {
             )}
           </div>
         )}
+      </div>
       </div>
     </div>
   );

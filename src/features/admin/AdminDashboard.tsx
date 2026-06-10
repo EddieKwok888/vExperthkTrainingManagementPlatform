@@ -2534,7 +2534,7 @@ export function AdminDashboard() {
         (r) => r.sessionId === session.id && r.status === "verified",
       );
       const sessionLessons = lessons.filter(
-        (l) => l.sessionId === session.id && l.lessonStatus === "completed",
+        (l) => l.sessionId === session.id,
       );
 
       if (sessionLessons.length === 0) {
@@ -2577,12 +2577,21 @@ export function AdminDashboard() {
           ),
         );
 
+        const rawAttendance: Record<string, string> = {};
+        attSnap.docs.forEach((d) => {
+          const data = d.data();
+          if (data.lessonId) {
+            rawAttendance[data.lessonId] = data.status;
+          }
+        });
+
         return {
           ...student,
           attendanceRate: rate,
           lessonsAttended: attendedCount,
           totalLessons: totalPossible,
           alreadyIssued: !certSnap.empty,
+          rawAttendance,
         };
       });
 
@@ -2632,6 +2641,50 @@ export function AdminDashboard() {
           }
           return s;
         }),
+      );
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  };
+
+  const handleUpdateSingleAttendance = async (
+    studentId: string,
+    lessonId: string,
+    sessionId: string,
+    status: string
+  ) => {
+    try {
+      const compositeId = `${lessonId}_${studentId}`;
+      const attRef = doc(db, "attendance", compositeId);
+      
+      if (status === "") {
+        await deleteDoc(attRef);
+      } else {
+        await setDoc(attRef, {
+          lessonId,
+          sessionId,
+          studentId,
+          status,
+          recordedAt: serverTimestamp(),
+          recordedBy: user?.uid
+        }, { merge: true });
+      }
+
+      toast.success("Attendance updated successfully");
+
+      setSessionStudentsData((prev) =>
+        prev.map((s) => {
+          if (s.studentId === studentId) {
+            const newRaw = { ...(s.rawAttendance || {}) };
+            if (status === "") {
+               delete newRaw[lessonId];
+            } else {
+               newRaw[lessonId] = status;
+            }
+            return { ...s, rawAttendance: newRaw };
+          }
+          return s;
+        })
       );
     } catch (e: any) {
       toast.error(e.message);
@@ -3350,7 +3403,7 @@ export function AdminDashboard() {
 
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-2">
         <h1 className="text-2xl md:text-3xl font-bold text-slate-800">
-          {t("admin.dashboard_title")}
+          Admin Dashboard
         </h1>
       </div>
 
@@ -4064,6 +4117,7 @@ export function AdminDashboard() {
       <CertificateModal
         courses={courses}
         handleToggleAttendanceConfirm={handleToggleAttendanceConfirm}
+        handleUpdateSingleAttendance={handleUpdateSingleAttendance}
         isCertLoading={isCertLoading}
         isCertModalOpen={isCertModalOpen}
         lessons={lessons}

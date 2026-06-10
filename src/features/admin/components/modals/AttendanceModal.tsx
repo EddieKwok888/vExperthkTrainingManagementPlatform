@@ -143,31 +143,44 @@ export function AttendanceModal({
                       </TableCell>
                       <TableCell className="text-center">
                         <div className="flex justify-center gap-1.5 sm:gap-2">
-                          {["present", "absent", "late", "excused"].map(
-                            (status) => (
+                          {[
+                            { id: 'present_am', label: 'AM Present', color: 'bg-emerald-600 border-emerald-600' },
+                            { id: 'present_pm', label: 'PM Present', color: 'bg-indigo-600 border-indigo-600' },
+                            { id: 'absent', label: 'Absent', color: 'bg-red-600 border-red-600' }
+                          ].map(
+                            (item) => {
+                              const currentStatus = attendanceData[r.studentId] ?? '';
+                              const isMarked = currentStatus === item.id || ((item.id === 'present_am' || item.id === 'present_pm') && currentStatus === 'present');
+                              return (
                               <button
-                                key={status}
+                                key={item.id}
                                 onClick={() =>
-                                  setAttendanceData((prev) => ({
-                                    ...prev,
-                                    [r.studentId]: status,
-                                  }))
+                                  setAttendanceData((prev: any) => {
+                                    const cur = prev[r.studentId] || '';
+                                    let nextStatus = item.id;
+                                    if (item.id === 'absent') {
+                                      nextStatus = cur === 'absent' ? '' : 'absent';
+                                    } else if (item.id === 'present_am') {
+                                      if (cur === 'present_am') nextStatus = '';
+                                      else if (cur === 'present_pm') nextStatus = 'present';
+                                      else if (cur === 'present') nextStatus = 'present_pm';
+                                    } else if (item.id === 'present_pm') {
+                                      if (cur === 'present_pm') nextStatus = '';
+                                      else if (cur === 'present_am') nextStatus = 'present';
+                                      else if (cur === 'present') nextStatus = 'present_am';
+                                    }
+                                    return { ...prev, [r.studentId]: nextStatus };
+                                  })
                                 }
-                                className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all tracking-wider border-2 ${
-                                  attendanceData[r.studentId] === status
-                                    ? status === "present"
-                                      ? "bg-green-600 border-green-600 text-white shadow-md"
-                                      : status === "absent"
-                                        ? "bg-red-600 border-red-600 text-white shadow-md"
-                                        : status === "late"
-                                          ? "bg-amber-500 border-amber-500 text-white shadow-md"
-                                          : "bg-blue-600 border-blue-600 text-white shadow-md"
-                                    : "border-slate-200 text-slate-400 bg-white hover:border-slate-300"
+                                className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all tracking-wider border ${
+                                  isMarked
+                                    ? `${item.color} text-white shadow-md`
+                                    : "border-slate-200 text-slate-400 bg-white hover:border-slate-300 hover:text-slate-700"
                                 }`}
                               >
-                                {status}
+                                {item.label}
                               </button>
-                            ),
+                            )}
                           )}
                         </div>
                       </TableCell>

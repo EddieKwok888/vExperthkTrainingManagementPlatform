@@ -436,7 +436,7 @@ export function RegisterCourse() {
               {isBundleMode ? (
                 <div className="space-y-2 mt-2">
                   <div className="flex justify-between items-start gap-4">
-                     <span className="font-bold text-sm text-slate-800">1. {course.title}</span>
+                     <span className="font-bold text-sm text-slate-800">1. {course.courseCode ? course.courseCode + ' ' : ''}{course.title}</span>
                      {(() => {
                         const s = sessions.find(s => s.id === formData.sessionId);
                         const early = s?.earlyBirdPrice || course.earlyBirdPrice;
@@ -446,7 +446,7 @@ export function RegisterCourse() {
                      })()}
                   </div>
                   <div className="flex justify-between items-start gap-4">
-                     <span className="font-bold text-sm text-slate-800">2. {course2?.title || 'Loading second course...'}</span>
+                     <span className="font-bold text-sm text-slate-800">2. {course2?.courseCode ? course2.courseCode + ' ' : ''}{course2?.title || 'Loading second course...'}</span>
                      {(() => {
                         const s = sessions2.find(s => s.id === formSession2Id);
                         const early = s?.earlyBirdPrice || course2?.earlyBirdPrice;
@@ -457,7 +457,10 @@ export function RegisterCourse() {
                   </div>
                 </div>
               ) : (
-                <p className="font-semibold text-lg text-slate-800">{course.title}</p>
+                <p className="font-semibold text-lg text-slate-800">
+                  {course.courseCode && <span className="text-indigo-600 font-mono mr-2">{course.courseCode}</span>}
+                  {course.title}
+                </p>
               )}
             </div>
 
@@ -567,7 +570,7 @@ export function RegisterCourse() {
                     <option value="" disabled>Select a session</option>
                     {sessions.map(s => (
                       <option key={s.id} value={s.id}>
-                        {s.sessionName} (Starts: {s.startDate})
+                        {course.courseCode ? `${course.courseCode} ` : ''}{course.title} - {s.startDate || 'TBD'}
                       </option>
                     ))}
                   </select>
@@ -588,7 +591,7 @@ export function RegisterCourse() {
                     <option value="" disabled>Select a session</option>
                     {sessions2.map(s => (
                       <option key={s.id} value={s.id}>
-                        {s.sessionName} (Starts: {s.startDate})
+                        {course2?.courseCode ? `${course2.courseCode} ` : ''}{course2?.title || 'Course'} - {s.startDate || 'TBD'}
                       </option>
                     ))}
                   </select>
@@ -608,7 +611,7 @@ export function RegisterCourse() {
                   <option value="" disabled>Select a session</option>
                   {sessions.map(s => (
                     <option key={s.id} value={s.id}>
-                      {s.sessionName} (Starts: {s.startDate})
+                      {course.courseCode ? `${course.courseCode} ` : ''}{course.title} - {s.startDate || 'TBD'}
                     </option>
                   ))}
                 </select>
