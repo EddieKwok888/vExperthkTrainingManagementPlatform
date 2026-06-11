@@ -81,7 +81,7 @@ export function PermissionsTab({
               : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
           }`}
         >
-          儲存格權限 Matrix Grid (Permission Matrix)
+          Permission Matrix Grid
         </button>
         <button
           onClick={() => setActiveAccessSection('details')}
@@ -91,7 +91,7 @@ export function PermissionsTab({
               : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
           }`}
         >
-          角色明細與限制 (Role Configurator)
+          Role Configurator
         </button>
         <button
           onClick={() => setActiveAccessSection('sim')}
@@ -101,7 +101,7 @@ export function PermissionsTab({
               : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
           }`}
         >
-          模擬視角 Sandbox (Simulator)
+          Sandbox Simulator
         </button>
         <button
           onClick={() => setActiveAccessSection('docs')}
@@ -111,7 +111,7 @@ export function PermissionsTab({
               : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
           }`}
         >
-          SoD 職責分離指引 (Guidelines)
+          SoD Guidelines
         </button>
       </div>
 
@@ -141,20 +141,20 @@ export function PermissionsTab({
               </TableHeader>
               <TableBody>
                 {[
-                  { key: 'overview', name: '📊 Overview (概覽)', desc: 'Analyze total course registrations, active sessions, financial totals, and general system overview indicators.' },
-                  { key: 'courses', name: '📝 Templates (課程模板)', desc: 'Add, edit, or configure base course definitions, course outlines, syllabus, and base standard prices.' },
-                  { key: 'sessions', name: '📅 Courses (開班/期次)', desc: 'Add, schedule, or configure specific course runs/sessions, assign rooms/prices, manage quotas, and lesson schedules.' },
-                  { key: 'certificates', name: '🎓 Certificates (證書)', desc: 'Generate bulk certificate PDFs, download printable completion logs, adjust award dates, and delete certificate records.' },
-                  { key: 'scheduling', name: '🏫 Instructor & Room Schedule (導師及場地日程)', desc: 'Drag-and-drop live rooms, view comprehensive calendars, schedule teachers, and verify timetable clashes.' },
+                  { key: 'overview', name: '📊 Overview', desc: 'Analyze total course registrations, active sessions, financial totals, and general system overview indicators.' },
+                  { key: 'courses', name: '📝 Templates', desc: 'Add, edit, or configure base course definitions, course outlines, syllabus, and base standard prices.' },
+                  { key: 'sessions', name: '📅 Courses', desc: 'Add, schedule, or configure specific course runs/sessions, assign rooms/prices, manage quotas, and lesson schedules.' },
+                  { key: 'certificates', name: '🎓 Certificates', desc: 'Generate bulk certificate PDFs, download printable completion logs, adjust award dates, and delete certificate records.' },
+                  { key: 'scheduling', name: '🏫 Instructor & Room Schedule', desc: 'Drag-and-drop live rooms, view comprehensive calendars, schedule teachers, and verify timetable clashes.' },
                   { key: 'tutors', name: '⏳ Part-time Instructor', desc: 'Verify billable hourly timecards from teachers, conduct payroll/claims audits, and approve payouts.' },
-                  { key: 'feedback', name: '💬 Feedback (反饋)', desc: 'Inspect student course evaluations, view feedback satisfaction ratings, and manage class feedback templates.' },
-                  { key: 'logs', name: '🛡️ System Logs (系統日誌)', desc: 'Audit operations and admin activity trails, search chronological logs, and manage deleted action backups.' },
-                  { key: 'staff', name: '👥 Staff Directory (職員名錄)', desc: 'Manage active system administrators, tutors/instructors roster, edit remarks, and update staff states.' },
-                  { key: 'students', name: '🎓 Student Directory (學生名錄)', desc: 'Manage registered student rosters, retrieve certificates logs, filter phone digits, and audit student entries.' },
+                  { key: 'feedback', name: '💬 Feedback', desc: 'Inspect student course evaluations, view feedback satisfaction ratings, and manage class feedback templates.' },
+                  { key: 'logs', name: '🛡️ System Logs', desc: 'Audit operations and admin activity trails, search chronological logs, and manage deleted action backups.' },
+                  { key: 'staff', name: '👥 Staff Directory', desc: 'Manage active system administrators, tutors/instructors roster, edit remarks, and update staff states.' },
+                  { key: 'students', name: '🎓 Student Directory', desc: 'Manage registered student rosters, retrieve certificates logs, filter phone digits, and audit student entries.' },
                   { key: 'promotions', name: '✨ Promotions', desc: 'Configure referral programs, student bundled deals, coupon campaigns, and discount structures.' },
-                  { key: 'permissions', name: '🛡️ Access Control (權限控制)', desc: 'Design customized roles, alter interactive matrix cells under RBAC, and apply global previews.' },
-                  { key: 'settings', name: '⚙️ School Settings (學校設置)', desc: 'Set invoice layouts, upload school logo/address, define available center classrooms, and update parameters.' },
-                  { key: 'finance', name: '💰 Financial Reports (財務報表)', desc: 'Settle tuition payments, update payments, verify course registrations status, print invoices, and audit revenue streams.' }
+                  { key: 'permissions', name: '🛡️ Access Control', desc: 'Design customized roles, alter interactive matrix cells under RBAC, and apply global previews.' },
+                  { key: 'settings', name: '⚙️ School Settings', desc: 'Set invoice layouts, upload school logo/address, define available center classrooms, and update parameters.' },
+                  { key: 'finance', name: '💰 Financial Reports', desc: 'Settle tuition payments, update payments, verify course registrations status, print invoices, and audit revenue streams.' }
                 ].map(mod => (
                   <TableRow key={mod.key} className="hover:bg-slate-50/20 transition-all border-b border-slate-100">
                     <TableCell className="py-3">
@@ -332,20 +332,20 @@ export function PermissionsTab({
                       <h5 className="text-xs font-extrabold uppercase tracking-wide text-slate-500 mb-2 font-sans">Granular Permission Toggles per Panel:</h5>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {[
-                          { key: 'overview', name: '📊 Overview (概覽)' },
-                          { key: 'courses', name: '📝 Templates (課程模板)' },
-                          { key: 'sessions', name: '📅 Courses (開班/期次)' },
-                          { key: 'certificates', name: '🎓 Certificates (證書)' },
-                          { key: 'scheduling', name: '🏫 Instructor & Room Schedule (導師及場地日程)' },
+                          { key: 'overview', name: '📊 Overview' },
+                          { key: 'courses', name: '📝 Templates' },
+                          { key: 'sessions', name: '📅 Courses' },
+                          { key: 'certificates', name: '🎓 Certificates' },
+                          { key: 'scheduling', name: '🏫 Instructor & Room Schedule' },
                           { key: 'tutors', name: '⏳ Part-time Instructor' },
-                          { key: 'feedback', name: '💬 Feedback (反饋)' },
-                          { key: 'logs', name: '🛡️ System Logs (系統日誌)' },
-                          { key: 'staff', name: '👥 Staff Directory (職員名錄)' },
-                          { key: 'students', name: '🎓 Student Directory (學生名錄)' },
+                          { key: 'feedback', name: '💬 Feedback' },
+                          { key: 'logs', name: '🛡️ System Logs' },
+                          { key: 'staff', name: '👥 Staff Directory' },
+                          { key: 'students', name: '🎓 Student Directory' },
                           { key: 'promotions', name: '✨ Promotions' },
-                          { key: 'permissions', name: '🛡️ Access Control (權限控制)' },
-                          { key: 'settings', name: '⚙️ School Settings (學校設置)' },
-                          { key: 'finance', name: '💰 Financial Reports (財務報表)' }
+                          { key: 'permissions', name: '🛡️ Access Control' },
+                          { key: 'settings', name: '⚙️ School Settings' },
+                          { key: 'finance', name: '💰 Financial Reports' }
                         ].map(mod => {
                           const val = role.permissions[mod.key] || 'none';
                           return (
@@ -465,20 +465,20 @@ export function PermissionsTab({
                   <div className="space-y-1">
                     <div className="text-[9px] uppercase tracking-wider text-slate-600 font-semibold mb-1">Simulated Main Menu</div>
                     {[
-                      { key: 'overview', label: '📊 Overview (概覽)' },
-                      { key: 'courses', label: '📝 Templates (課程模板)' },
-                      { key: 'sessions', label: '📅 Courses (開班/期次)' },
-                      { key: 'certificates', label: '🎓 Certificates (證書)' },
-                      { key: 'scheduling', label: '🏫 Instructor & Room Schedule (導師及場地日程)' },
+                      { key: 'overview', label: '📊 Overview' },
+                      { key: 'courses', label: '📝 Templates' },
+                      { key: 'sessions', label: '📅 Courses' },
+                      { key: 'certificates', label: '🎓 Certificates' },
+                      { key: 'scheduling', label: '🏫 Instructor & Room Schedule' },
                       { key: 'tutors', label: '⏳ Part-time Instructor' },
-                      { key: 'feedback', label: '💬 Feedback (反饋)' },
-                      { key: 'logs', label: '🛡️ System Logs (系統日誌)' },
-                      { key: 'staff', label: '👥 Staff Directory (職員名錄)' },
-                      { key: 'students', label: '🎓 Student Directory (學生名錄)' },
+                      { key: 'feedback', label: '💬 Feedback' },
+                      { key: 'logs', label: '🛡️ System Logs' },
+                      { key: 'staff', label: '👥 Staff Directory' },
+                      { key: 'students', label: '🎓 Student Directory' },
                       { key: 'promotions', label: '✨ Promotions' },
-                      { key: 'permissions', label: '🛡️ Access Control (權限控制)' },
-                      { key: 'settings', label: '⚙️ School Settings (學校設置)' },
-                      { key: 'finance', label: '💰 Financial Reports (財務報表)' }
+                      { key: 'permissions', label: '🛡️ Access Control' },
+                      { key: 'settings', label: '⚙️ School Settings' },
+                      { key: 'finance', label: '💰 Financial Reports' }
                     ].map(item => {
                       const v = perms[item.key] || 'none';
                       let badge = null;

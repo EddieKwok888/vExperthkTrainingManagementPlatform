@@ -115,13 +115,13 @@ export function FeedbackTab({
     const lowerText = text.toLowerCase();
     
     if (/(好|good|great|excellent|實用|滿意|清晰|專業|可以|豐富|讚|nice)/.test(lowerText)) {
-      tags.push({ label: '正面', className: 'bg-green-100 text-green-700 border-green-200' });
+      tags.push({ label: 'Positive', className: 'bg-green-100 text-green-700 border-green-200' });
     }
     if (/(差|bad|poor|悶|慢|快|不清楚|改善|投訴|太少|難|不夠)/.test(lowerText)) {
-      tags.push({ label: '需要關注', className: 'bg-red-100 text-red-700 border-red-200' });
+      tags.push({ label: 'Needs Attention', className: 'bg-red-100 text-red-700 border-red-200' });
     }
     if (/(建議|希望|可以加|需要|would be better|suggest|idea)/.test(lowerText)) {
-      tags.push({ label: '建議', className: 'bg-blue-100 text-blue-700 border-blue-200' });
+      tags.push({ label: 'Suggestion', className: 'bg-blue-100 text-blue-700 border-blue-200' });
     }
     return tags;
   };
@@ -283,19 +283,19 @@ export function FeedbackTab({
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
                   <h3 className="font-black text-slate-800 text-sm uppercase tracking-wider mb-6 flex items-center gap-2"><BarChart3 className="w-4 h-4 text-blue-500" /> Part A: Course Metrics</h3>
-                  <ScoreBar label="Course Content 內容" score={parseFloat(selectedFeedbackCourse.metrics.content)} />
-                  <ScoreBar label="Course Level 程度" score={parseFloat(selectedFeedbackCourse.metrics.level)} />
-                  <ScoreBar label="Materials Usefulness 教材" score={parseFloat(selectedFeedbackCourse.metrics.materials)} />
-                  <ScoreBar label="Facilities & Environment 設施" score={parseFloat(selectedFeedbackCourse.metrics.facilities)} />
-                  <ScoreBar label="Practice / Exercise 練習" score={parseFloat(selectedFeedbackCourse.metrics.practice)} />
-                  <ScoreBar label="Job Applicability 實用" score={parseFloat(selectedFeedbackCourse.metrics.jobApplicability)} />
+                  <ScoreBar label="Course Content" score={parseFloat(selectedFeedbackCourse.metrics.content)} />
+                  <ScoreBar label="Course Level" score={parseFloat(selectedFeedbackCourse.metrics.level)} />
+                  <ScoreBar label="Materials Usefulness" score={parseFloat(selectedFeedbackCourse.metrics.materials)} />
+                  <ScoreBar label="Facilities & Environment" score={parseFloat(selectedFeedbackCourse.metrics.facilities)} />
+                  <ScoreBar label="Practice / Exercise" score={parseFloat(selectedFeedbackCourse.metrics.practice)} />
+                  <ScoreBar label="Job Applicability" score={parseFloat(selectedFeedbackCourse.metrics.jobApplicability)} />
                </div>
                <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
                   <h3 className="font-black text-slate-800 text-sm uppercase tracking-wider mb-6 flex items-center gap-2"><BarChart3 className="w-4 h-4 text-emerald-500" /> Part B: Instructor Metrics</h3>
-                  <ScoreBar label="Subject Knowledge 科目認識" score={parseFloat(selectedFeedbackCourse.metrics.tutorKnowledge)} />
-                  <ScoreBar label="Organization & Logic 教學編排" score={parseFloat(selectedFeedbackCourse.metrics.tutorOrganization)} />
-                  <ScoreBar label="Presentation Skills 表達技巧" score={parseFloat(selectedFeedbackCourse.metrics.tutorPresentation)} />
-                  <ScoreBar label="Individual Attention 對學生的照顧" score={parseFloat(selectedFeedbackCourse.metrics.tutorAttention)} />
+                  <ScoreBar label="Subject Knowledge" score={parseFloat(selectedFeedbackCourse.metrics.tutorKnowledge)} />
+                  <ScoreBar label="Organization & Logic" score={parseFloat(selectedFeedbackCourse.metrics.tutorOrganization)} />
+                  <ScoreBar label="Presentation Skills" score={parseFloat(selectedFeedbackCourse.metrics.tutorPresentation)} />
+                  <ScoreBar label="Individual Attention" score={parseFloat(selectedFeedbackCourse.metrics.tutorAttention)} />
                </div>
             </div>
 

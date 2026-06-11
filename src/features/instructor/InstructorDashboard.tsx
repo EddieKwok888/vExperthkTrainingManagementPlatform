@@ -365,14 +365,17 @@ export function InstructorDashboard() {
   const generateMTMReport = async () => {
     if (!user?.uid) return;
     try {
-      const tutorLessons = lessons.filter(l => {
-          const session = sessions.find(s => s.id === l.sessionId || s.id === l.session_id);
-          const course = courses.find(c => c.id === session?.courseId);
-          const isMicrosoft = course?.category === 'Microsoft' || course?.category?.toLowerCase() === 'microsoft';
-          const tid = l.tutorId || l.tutor_id || session?.tutorId || session?.tutor_id;
-          const inYear = (l.lessonDate || l.lesson_date || '').startsWith(mtmYear);
-          return tid === user.uid && inYear && isMicrosoft;
-      }).sort((a,b) => (a.lessonDate || a.lesson_date || '').localeCompare(b.lessonDate || b.lesson_date || ''));
+      // 1. Fetch fresh data directly from DB to guarantee it's up to date
+      const [sessionsSnap, coursesSnap, lessonsSnap, hoursSnap] = await Promise.all([
+        getDocs(collection(db, 'sessions')),
+        getDocs(collection(db, 'courses')),
+        getDocs(collection(db, 'lessons')),
+        getDocs(query(collection(db, 'teaching_hours'), where('tutorId', '==', user.uid)))
+      ]);
+
+      const freshSessions = sessionsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+      const freshCourses = coursesSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+      const freshLessons = lessonsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
 
       const calculateHours = (start: string, end: string) => {
           if (!start || !end) return 0;
@@ -382,28 +385,60 @@ export function InstructorDashboard() {
           return diff > 0 ? diff : 0;
       };
 
-      let yearlyRecords = tutorLessons.map(l => {
-          const session = sessions.find(s => s.id === l.sessionId || s.id === l.session_id);
-          const course = courses.find(c => c.id === session?.courseId);
-          const startTime = l.startTime || session?.startTime;
-          const endTime = l.endTime || session?.endTime;
-          const hrs = calculateHours(startTime, endTime);
-          return {
-              date: l.lessonDate || l.lesson_date,
-              notes: (course?.title || session?.sessionName || 'Course') + ' (' + (startTime || 'TBC') + ' - ' + (endTime || 'TBC') + ')',
-              hours: hrs
-          };
+      let yearlyRecords: any[] = [];
+      const tutorSessions = freshSessions.filter(s => 
+        (s.tutorId === user.uid || s.tutor_id === user.uid) && 
+        (s.sessionStatus !== 'deleted' && s.sessionStatus !== 'cancelled')
+      );
+      
+      tutorSessions.forEach(session => {
+        const course = freshCourses.find(c => c.id === session.courseId);
+        let isMicrosoft = false;
+        if (course && (course.category === 'Microsoft' || course.category?.toLowerCase() === 'microsoft')) isMicrosoft = true;
+        if (course && (course.title?.toLowerCase().includes('microsoft') || course.courseCode?.toLowerCase().match(/ms-|az-|dp-|ai-|sc-|pl-|mb-/))) isMicrosoft = true;
+        
+        if (!isMicrosoft) return;
+        
+        const sessionLessons = freshLessons.filter(l => l.sessionId === session.id || l.session_id === session.id)
+          .filter((l: any) => {
+             if (!session.startDate || !session.endDate || !l.lessonDate) return true;
+             return l.lessonDate >= session.startDate && l.lessonDate <= session.endDate;
+          })
+          .sort((a: any, b: any) => (a.lessonDate || "").localeCompare(b.lessonDate || ""));
+          
+        const uniqueLessons: any[] = [];
+        const seenDates = new Set();
+        for (const l of sessionLessons) {
+           if (!seenDates.has(l.lessonDate)) {
+             seenDates.add(l.lessonDate);
+             uniqueLessons.push(l);
+           }
+        }
+        
+        uniqueLessons.forEach(l => {
+           if (!l.lessonDate || !l.lessonDate.startsWith(mtmYear)) return;
+           const startTime = l.startTime || session.startTime || '09:00';
+           const endTime = l.endTime || session.endTime || '17:00';
+           const hrs = calculateHours(startTime, endTime);
+           
+           yearlyRecords.push({
+               date: l.lessonDate,
+               notes: (course?.title || session.sessionName || 'Course') + ' (' + startTime + ' - ' + endTime + ')',
+               hours: hrs
+           });
+        });
       });
 
-      const hoursSnap = await getDocs(query(collection(db, 'teaching_hours'), where('tutorId', '==', user.uid)));
       const allHours = hoursSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
       const manualMsHours = allHours.filter(h => {
           if (!h.isManual) return false;
           if (!h.date || !h.date.startsWith(mtmYear)) return false;
+          if (h.status === 'rejected' || h.status === 'deleted' || h.status === 'cancelled') return false;
+          if (!h.hours || h.hours <= 0) return false;
           
           let isMicrosoft = false;
           if (h.course) {
-              const courseObj = courses.find(c => c.title === h.course || c.certName === h.course);
+              const courseObj = freshCourses.find(c => c.title === h.course || c.certName === h.course);
               if (courseObj && (courseObj.category === 'Microsoft' || courseObj.category?.toLowerCase() === 'microsoft')) isMicrosoft = true;
               if (h.course.toLowerCase().includes('microsoft') || h.course.toLowerCase().match(/ms-|az-|dp-|ai-|sc-|pl-|mb-/)) isMicrosoft = true;
           }
@@ -415,7 +450,10 @@ export function InstructorDashboard() {
           hours: h.hours
       }));
 
-      yearlyRecords = [...yearlyRecords, ...manualMsHours].sort((a,b) => (a.date || '').localeCompare(b.date || ''));
+      yearlyRecords = [...yearlyRecords, ...manualMsHours]
+          .filter(r => r.hours && r.hours > 0)
+          .sort((a,b) => (a.date || '').localeCompare(b.date || ''));
+          
       const totalHours = yearlyRecords.reduce((acc, curr) => acc + (curr.hours || 0), 0);
 
       const pdfDoc = new jsPDF();
@@ -590,40 +628,21 @@ export function InstructorDashboard() {
              <p className="opacity-80 mt-1">Welcome back, {user?.displayName || user?.email?.split('@')[0]}!</p>
           </div>
           <div className="flex items-center gap-4">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={fetchTutorData} 
-              className="gap-2 text-blue-600 bg-white shadow-sm border-white h-10 px-4 hover:bg-blue-50 transition-all rounded-xl font-bold"
-            >
-              <RefreshCw className="w-4 h-4" />
-              <span className="hidden sm:inline">Sync DB</span>
-            </Button>
             <GraduationCap className="w-12 h-12 opacity-50 hidden sm:block" />
           </div>
         </div>
 
         {/* Bento Statistics Showcase */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        {/* Bento Statistics Showcase */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <Card className="bg-gradient-to-br from-indigo-50 to-white">
             <CardHeader>
-               <CardTitle className="text-indigo-800 text-sm font-black uppercase tracking-wider">Scheduled Courses</CardTitle>
+               <CardTitle className="text-indigo-800 text-sm font-black uppercase tracking-wider">Confirmed Course</CardTitle>
             </CardHeader>
             <CardContent>
                <div className="text-4xl font-bold text-indigo-600 flex items-center justify-between">
-                 {stats.upcomingSessions}
+                 {visibleSessions.length}
                  <Calendar className="w-8 h-8 text-indigo-200" />
-               </div>
-            </CardContent>
-          </Card>
-          <Card className="bg-gradient-to-br from-emerald-50 to-white">
-            <CardHeader>
-               <CardTitle className="text-emerald-800 text-sm font-black uppercase tracking-wider">Total Enrolled</CardTitle>
-            </CardHeader>
-            <CardContent>
-               <div className="text-4xl font-bold text-emerald-600 flex items-center justify-between">
-                 {stats.activeStudents}
-                 <CheckSquare className="w-8 h-8 text-emerald-200" />
                </div>
             </CardContent>
           </Card>
@@ -641,10 +660,28 @@ export function InstructorDashboard() {
         </div>
 
         <Tabs value={activeTab} onValueChange={(val: any) => setActiveTab(val)}>
-          <TabsList className="mb-6 bg-slate-200/50">
-            <TabsTrigger value="overview">Dashboard Overview</TabsTrigger>
-            <TabsTrigger value="attendance">Attendance Management</TabsTrigger>
-            <TabsTrigger value="hours">Course History</TabsTrigger>
+          <TabsList className="bg-slate-100 p-1.5 rounded-xl flex flex-wrap gap-1.5 w-fit shadow-inner mb-6">
+            <TabsTrigger 
+              value="overview" 
+              className="data-active:!bg-indigo-600 data-active:!text-white data-active:shadow-md hover:bg-white hover:text-indigo-600 px-4 py-2 text-[11px] font-black uppercase tracking-widest text-slate-500 rounded-lg transition-all flex items-center gap-2"
+            >
+              <LayoutDashboard className="w-4 h-4" />
+              Dashboard Overview
+            </TabsTrigger>
+            <TabsTrigger 
+              value="attendance" 
+              className="data-active:!bg-emerald-600 data-active:!text-white data-active:shadow-md hover:bg-white hover:text-emerald-600 px-4 py-2 text-[11px] font-black uppercase tracking-widest text-slate-500 rounded-lg transition-all flex items-center gap-2"
+            >
+              <ClipboardList className="w-4 h-4" />
+              Attendance Management
+            </TabsTrigger>
+            <TabsTrigger 
+              value="hours" 
+              className="data-active:!bg-amber-500 data-active:!text-white data-active:shadow-md hover:bg-white hover:text-amber-600 px-4 py-2 text-[11px] font-black uppercase tracking-widest text-slate-500 rounded-lg transition-all flex items-center gap-2"
+            >
+              <FileText className="w-4 h-4" />
+              Course History
+            </TabsTrigger>
           </TabsList>
         </Tabs>
 
@@ -866,7 +903,23 @@ export function InstructorDashboard() {
                     (() => {
                       const session = sessions.find(s => s.id === selectedSessionId);
                       const course = courses.find(c => c.id === session?.courseId);
-                      const sessionLessons = lessons.filter(l => l.sessionId === selectedSessionId || l.session_id === selectedSessionId);
+                      const sessionLessons = lessons.filter(l => l.sessionId === selectedSessionId || l.session_id === selectedSessionId)
+                        .filter((l: any) => {
+                          // Filter out any accidentally created lessons that fall outside the course date range
+                          if (!session?.startDate || !session?.endDate || !l.lessonDate) return true;
+                          return l.lessonDate >= session.startDate && l.lessonDate <= session.endDate;
+                        })
+                        .sort((a: any, b: any) => (a.lessonDate || "").localeCompare(b.lessonDate || ""));
+
+                      // Deduplicate existing lessons by date to prevent duplicate Day 1s
+                      const uniqueLessons: any[] = [];
+                      const seenDates = new Set();
+                      for (const l of sessionLessons) {
+                        if (!seenDates.has(l.lessonDate)) {
+                          seenDates.add(l.lessonDate);
+                          uniqueLessons.push(l);
+                        }
+                      }
                       
                       return (
                         <Card className="border-indigo-100 shadow-xl shadow-indigo-900/5 rounded-2xl ring-1 ring-indigo-50/50 relative">
@@ -906,7 +959,7 @@ export function InstructorDashboard() {
                             </div>
 
                             {/* Dropdown for specific lesson Selection */}
-                            {sessionLessons.length > 0 ? (
+                            {uniqueLessons.length > 0 ? (
                               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mt-4 bg-white/70 backdrop-blur-sm p-3 rounded-xl border border-indigo-100/50">
                                 <span className="text-[10px] font-black uppercase text-indigo-700 tracking-widest flex items-center gap-1">
                                   <Clock className="w-3.5 h-3.5" /> Select Class/Lecture Date:
@@ -914,14 +967,14 @@ export function InstructorDashboard() {
                                 <select
                                   value={selectedLesson?.id || ''}
                                   onChange={(e) => {
-                                    const chosen = sessionLessons.find(l => l.id === e.target.value);
+                                    const chosen = uniqueLessons.find(l => l.id === e.target.value);
                                     if (chosen) handleSelectLesson(chosen);
                                   }}
                                   className="h-8 text-xs font-bold rounded-lg border border-slate-200 bg-white px-2.5 focus:ring-2 focus:ring-indigo-500/20 text-slate-700 outline-none cursor-pointer text-ellipsis max-w-full"
                                 >
-                                  {sessionLessons.map((l, lIdx) => (
+                                  {uniqueLessons.map((l, lIdx) => (
                                     <option key={l.id} value={l.id}>
-                                      Lecture {sessionLessons.length - lIdx}: {l.lessonDate} ({l.startTime || 'No Time'}) - {l.lessonTitle}
+                                      Lecture {lIdx + 1}: {l.lessonDate} ({l.startTime || '09:00'}) - Day {lIdx + 1}
                                     </option>
                                   ))}
                                 </select>
@@ -1131,7 +1184,12 @@ export function InstructorDashboard() {
 
           {/* 3. COURSE COMPLETED HISTORY TAB */}
           {activeTab === 'hours' && (() => {
-            const completedSessions = sessions.filter(s => (s?.sessionStatus || '').toLowerCase() === 'completed');
+            const completedSessions = sessions
+              .filter(s => (s?.sessionStatus || '').toLowerCase() === 'completed')
+              .filter(s => {
+                const totalRegs = allSessionRegistrations.filter(r => r.sessionId === s.id && r.status === 'verified').length;
+                return totalRegs > 0;
+              });
             
             return (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

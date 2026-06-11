@@ -119,6 +119,13 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
                 setLoading(false);
                 return;
             }
+
+            // Patch: force aws@vexperthk.com to tutor if it was previously created as admin
+            if (u.email?.toLowerCase() === 'aws@vexperthk.com' && userData.role !== 'tutor') {
+              await updateDoc(doc(db, 'users', u.uid), { role: 'tutor' });
+              userData.role = 'tutor';
+            }
+
             setRole(userData.role);
           } else {
             // Check if admin bootstrap config exists and bypass
@@ -132,7 +139,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
                 status: 'active',
                 createdAt: serverTimestamp()
               });
-            } else if (u.email?.toLowerCase() === 'trainer@vexperthk.com') {
+            } else if (u.email?.toLowerCase() === 'trainer@vexperthk.com' || u.email?.toLowerCase() === 'aws@vexperthk.com') {
               setRole('tutor');
               await setDoc(doc(db, 'users', u.uid), {
                 email: u.email,
@@ -272,6 +279,10 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
                 <div className="mt-6 border-t border-slate-200 pt-4">
                   <p className="text-xs text-slate-500 font-medium mb-3 text-center uppercase tracking-wider">Demo Accounts (Quick Login)</p>
                   <div className="space-y-2">
+                    <Button type="button" variant="outline" className="w-full justify-between font-normal h-11" onClick={() => handleQuickLogin('aws@vexperthk.com', 'admin123', 'Instructor')} disabled={authLoading}>
+                      <span className="flex items-center gap-2"><Briefcase className="w-4 h-4 text-slate-500" /> Instructor (Full-Time)</span>
+                      <span className="text-xs text-slate-400">aws@vexperthk.com</span>
+                    </Button>
                     <Button type="button" variant="outline" className="w-full justify-between font-normal h-11" onClick={() => handleQuickLogin('System.Admin@vexperthk.com', 'admin123', 'Admin')} disabled={authLoading}>
                       <span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-slate-500" /> Admin</span>
                       <span className="text-xs text-slate-400">System.Admin@vexperthk.com</span>

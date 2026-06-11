@@ -35,7 +35,7 @@ export const TutorsTab: React.FC<TutorsTabProps> = ({
         <CardHeader className="flex flex-col md:flex-row md:items-center justify-between pb-4 gap-4 border-b border-slate-50">
           <div>
             <CardTitle className="text-xl font-black text-slate-800 tracking-tight">
-              Part-time Instructor <span className="text-red-500 font-bold text-sm ml-2">功能仍在處理中，未啟用</span>
+              Part-time Instructor <span className="text-red-500 font-bold text-sm ml-2">Feature is under development, not enabled</span>
             </CardTitle>
             <CardDescription className="text-xs font-medium text-slate-500">Track records and verify completed courses</CardDescription>
           </div>
@@ -51,8 +51,8 @@ export const TutorsTab: React.FC<TutorsTabProps> = ({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <h3 className="text-2xl font-black text-slate-800 tracking-tight mb-2 font-sans">版面開發中</h3>
-          <p className="text-slate-500 font-medium font-sans">功能仍在處理中，暫不開放使用</p>
+          <h3 className="text-2xl font-black text-slate-800 tracking-tight mb-2 font-sans">Under Development</h3>
+          <p className="text-slate-500 font-medium font-sans">Feature is currently under development and not available for use</p>
         </CardContent>
       </Card>
     </div>

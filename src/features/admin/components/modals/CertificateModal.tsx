@@ -18,8 +18,12 @@ import {
   Award,
   Users,
   ShieldCheck,
+  UserPlus,
 } from "lucide-react";
 import React from "react";
+import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { db } from "../../../../lib/firebase";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -67,6 +71,9 @@ export interface CertificateModalProps {
   courses: any;
   handleToggleAttendanceConfirm: any;
   handleUpdateSingleAttendance?: any;
+  handleGenerateLessonsAuto?: any;
+  handleQuickGenerateLessons?: any;
+  handleExportAttendanceSheet?: any;
   isCertLoading: any;
   isCertModalOpen: any;
   lessons: any;
@@ -82,6 +89,9 @@ export function CertificateModal({
   courses,
   handleToggleAttendanceConfirm,
   handleUpdateSingleAttendance,
+  handleGenerateLessonsAuto,
+  handleQuickGenerateLessons,
+  handleExportAttendanceSheet,
   isCertLoading,
   isCertModalOpen,
   lessons,
@@ -94,7 +104,7 @@ export function CertificateModal({
 }: CertificateModalProps) {
   return (
     <Dialog open={isCertModalOpen} onOpenChange={setIsCertModalOpen}>
-      <DialogContent className="sm:max-w-[900px] max-h-[85vh] overflow-y-auto p-0 border-none shadow-2xl rounded-2xl overflow-hidden bg-white/95 backdrop-blur-xl">
+      <DialogContent className="sm:max-w-[1200px] max-h-[85vh] overflow-y-auto p-0 border-none shadow-2xl rounded-2xl overflow-hidden bg-white/95 backdrop-blur-xl">
         <div className="bg-slate-900 p-8 text-white relative overflow-hidden">
           <div className="relative z-10">
             <DialogHeader>
@@ -112,7 +122,7 @@ export function CertificateModal({
                 • Course:{" "}
                 <span className="text-white font-bold">
                   {
-                    courses.find((c) => c.id === selectedSessionCert?.courseId)
+                    courses.find((c: any) => c.id === selectedSessionCert?.courseId)
                       ?.title
                   }
                 </span>
@@ -155,7 +165,7 @@ export function CertificateModal({
                   <p className="text-3xl font-black text-slate-800 tracking-tighter">
                     {
                       lessons.filter(
-                        (l) =>
+                        (l: any) =>
                           l.sessionId === selectedSessionCert?.id &&
                           l.lessonStatus === "completed",
                       ).length
@@ -205,14 +215,39 @@ export function CertificateModal({
                     Enrolled Student Roster
                     <div className="h-[1px] flex-1 bg-slate-100 ml-2"></div>
                   </h4>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="text-[10px] uppercase font-bold text-slate-500"
-                    onClick={() => setPastDaysToShow((p) => p + 1)}
-                  >
-                    <History className="w-3 h-3 mr-1" /> 顯示上一日
-                  </Button>
+                  <div className="flex gap-2">
+                    {handleExportAttendanceSheet && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-[10px] uppercase font-bold text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                        onClick={() => {
+                          const course = courses.find((c: any) => c.id === selectedSessionCert?.courseId);
+                          handleExportAttendanceSheet(selectedSessionCert, course, sessionStudentsData);
+                        }}
+                      >
+                        <Download className="w-3 h-3 mr-1" /> Download Attendance List (PDF)
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-[10px] uppercase font-bold text-green-600 border-green-200 hover:bg-green-50"
+                      onClick={() => {
+                        window.location.href = `/register/${selectedSessionCert.courseId}?session=${selectedSessionCert.id}&admin_walkin=true`;
+                      }}
+                    >
+                      <UserPlus className="w-3 h-3 mr-1" /> Add Walk-in
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-[10px] uppercase font-bold text-slate-500"
+                      onClick={() => setPastDaysToShow((p: number) => p + 1)}
+                    >
+                      <History className="w-3 h-3 mr-1" /> Show Previous Day
+                    </Button>
+                  </div>
                 </div>
                 <div className="border border-slate-100 rounded-xl overflow-x-auto bg-white shadow-sm">
                   {(() => {
@@ -220,20 +255,56 @@ export function CertificateModal({
                       (l: any) =>
                         l.sessionId === selectedSessionCert?.id ||
                         l.session_id === selectedSessionCert?.id,
-                    ).sort((a: any, b: any) => (a.lessonDate || "").localeCompare(b.lessonDate || ""));
+                    ).filter((l: any) => {
+                      // Filter out any accidentally created lessons that fall outside the course date range
+                      if (!selectedSessionCert?.startDate || !selectedSessionCert?.endDate || !l.lessonDate) return true;
+                      return l.lessonDate >= selectedSessionCert.startDate && l.lessonDate <= selectedSessionCert.endDate;
+                    }).sort((a: any, b: any) => (a.lessonDate || "").localeCompare(b.lessonDate || ""));
 
-                    if (sessionLessons.length === 0) {
-                      return <div className="p-8 text-center text-slate-400 font-bold">No classes scheduled yet.</div>;
+                    // Deduplicate existing lessons by date to prevent duplicate Day 1s
+                    const uniqueLessonsMap = new Map();
+                    sessionLessons.forEach((l: any) => {
+                      if (l.lessonDate && !uniqueLessonsMap.has(l.lessonDate)) {
+                        uniqueLessonsMap.set(l.lessonDate, l);
+                      }
+                    });
+                    
+                    let displayLessons = Array.from(uniqueLessonsMap.values());
+
+                    // Always ensure there is a column for every date between startDate and endDate
+                    if (selectedSessionCert?.startDate && selectedSessionCert?.endDate) {
+                       let current = new Date(selectedSessionCert.startDate);
+                       const end = new Date(selectedSessionCert.endDate);
+                       let i = 1;
+                       while (current <= end && i <= 30) {
+                         const year = current.getFullYear();
+                         const month = String(current.getMonth() + 1).padStart(2, '0');
+                         const day = String(current.getDate()).padStart(2, '0');
+                         const dateStr = `${year}-${month}-${day}`;
+                         
+                         // If there is no real lesson for this date, add a virtual one
+                         const exists = displayLessons.some(l => l.lessonDate === dateStr);
+                         if (!exists) {
+                           displayLessons.push({
+                             id: `virtual_${dateStr}`,
+                             sessionId: selectedSessionCert.id,
+                             lessonDate: dateStr,
+                             lessonTitle: `Day ${i}`,
+                             isVirtual: true
+                           });
+                         }
+                         
+                         current.setDate(current.getDate() + 1);
+                         i++;
+                       }
                     }
 
-                    const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Hong_Kong" });
-                    let displayLessons = [...sessionLessons];
-                    
-                    const todayIndex = displayLessons.findIndex(l => l.lessonDate === todayStr);
-                    if (todayIndex !== -1 || pastDaysToShow > 0) {
-                       const endIndex = todayIndex !== -1 ? todayIndex : displayLessons.length - 1;
-                       const startIndex = Math.max(0, endIndex - pastDaysToShow);
-                       displayLessons = displayLessons.slice(startIndex, endIndex + 1);
+                    // Re-sort in case we added virtual lessons in between or at the end
+                    displayLessons.sort((a, b) => (a.lessonDate || "").localeCompare(b.lessonDate || ""));
+
+                    // Remove filtering so we show all lessons (both past and future)
+                    if (displayLessons.length === 0) {
+                      return <div className="p-8 text-center text-slate-400 font-bold">No classes scheduled yet.</div>;
                     }
 
                     return (
@@ -249,7 +320,7 @@ export function CertificateModal({
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {sessionStudentsData.map((student: any) => {
+                          {[...sessionStudentsData].sort((a, b) => (a.studentName || "").localeCompare(b.studentName || "")).map((student: any) => {
                             const raw = student.rawAttendance || {};
                             return (
                               <TableRow

@@ -175,6 +175,9 @@ const FeedbackTab = React.lazy(() =>
 const CoursesTab = React.lazy(() =>
   import("./components/CoursesTab").then((m) => ({ default: m.CoursesTab })),
 );
+const AnalyticsTab = React.lazy(() =>
+  import("./components/AnalyticsTab").then((m) => ({ default: m.AnalyticsTab })),
+);
 const TutorsTab = React.lazy(() =>
   import("./components/TutorsTab").then((m) => ({ default: m.TutorsTab })),
 );
@@ -378,6 +381,18 @@ export function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [paymentSettings, setPaymentSettings] = useState<any>({});
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "settings", "payment_methods"), (snapshot) => {
+      if (snapshot.exists()) {
+        setPaymentSettings(snapshot.data());
+      } else {
+        setPaymentSettings({});
+      }
+    });
+    return () => unsub();
+  }, []);
 
   const [isManualHoursModalOpen, setIsManualHoursModalOpen] = useState(false);
   const [manualHoursForm, setManualHoursForm] = useState({
@@ -545,7 +560,7 @@ export function AdminDashboard() {
         {
           roleId: "admin",
           name: "Super Admin",
-          desc: "超級管理員 - 可以看到所有東西。擁有最高權限，控制系統設定、備份及所有權限分配。",
+          desc: "Super Admin - Has access to everything. Full permissions to control system settings, backups, and role assignments.",
           maxAuthAmount: "Unlimited",
           restrictions: "None",
           permissions: {
@@ -568,7 +583,7 @@ export function AdminDashboard() {
         {
           roleId: "coordinator",
           name: "Course Coordinator",
-          desc: "課程統籌 - 負責課程管理、排堂排師、處理證書及學生名單，無法存取財務報表 or 系統設定。",
+          desc: "Course Coordinator - Manages courses, scheduling, certificates, and student lists. Cannot access financial reports or system settings.",
           maxAuthAmount: "N/A",
           restrictions:
             "Restricted from managing finance, deleting users, or viewing system audit logs.",
@@ -592,7 +607,7 @@ export function AdminDashboard() {
         {
           roleId: "finance",
           name: "Finance",
-          desc: "會計 - 處理財務報表、付款設定及電子收據。無法管理課程、學生 or 排期。",
+          desc: "Finance - Handles financial reports, payment settings, and electronic receipts. Cannot manage courses, students, or scheduling.",
           maxAuthAmount: "Unlimited (Finance only)",
           restrictions:
             "Restricted from managing courses, schedules, evaluating feedback, or issuing certificates.",
@@ -616,7 +631,7 @@ export function AdminDashboard() {
         {
           roleId: "staff",
           name: "Staff (Other)",
-          desc: "一般職員 - 處理基本查詢及客服。",
+          desc: "General Staff - Handles basic inquiries and customer service.",
           maxAuthAmount: "HKD 2,000 / tx",
           restrictions:
             "Restricted from system settings, high-level finance, and course creations.",
@@ -668,7 +683,7 @@ export function AdminDashboard() {
             {
               roleId: "admin",
               name: "Super Admin",
-              desc: "超級管理員 - 可以看到所有東西。擁有最高權限，控制系統設定、備份及所有權限分配。",
+              desc: "Super Admin - Has access to everything. Full permissions to control system settings, backups, and role assignments.",
               maxAuthAmount: "Unlimited",
               restrictions: "None",
               permissions: {
@@ -691,7 +706,7 @@ export function AdminDashboard() {
             {
               roleId: "coordinator",
               name: "Course Coordinator",
-              desc: "課程統籌 - 負責課程管理、排堂排師、處理證書及學生名單，無法存取財務報表 or 系統設定。",
+              desc: "Course Coordinator - Manages courses, scheduling, certificates, and student lists. Cannot access financial reports or system settings.",
               maxAuthAmount: "N/A",
               restrictions:
                 "Restricted from managing finance, deleting users, or viewing system audit logs.",
@@ -715,7 +730,7 @@ export function AdminDashboard() {
             {
               roleId: "finance",
               name: "Finance",
-              desc: "會計 - 處理財務報表、付款設定及電子收據。無法管理課程、學生 or 排期。",
+              desc: "Finance - Handles financial reports, payment settings, and electronic receipts. Cannot manage courses, students, or scheduling.",
               maxAuthAmount: "Unlimited (Finance only)",
               restrictions:
                 "Restricted from managing courses, schedules, evaluating feedback, or issuing certificates.",
@@ -739,7 +754,7 @@ export function AdminDashboard() {
             {
               roleId: "staff",
               name: "Staff (Other)",
-              desc: "一般職員 - 處理基本查詢及客服。",
+              desc: "General Staff - Handles basic inquiries and customer service.",
               maxAuthAmount: "HKD 2,000 / tx",
               restrictions:
                 "Restricted from system settings, high-level finance, and course creations.",
@@ -1207,6 +1222,53 @@ export function AdminDashboard() {
         standardPrice: 0,
         registrationOpen: true,
       });
+      fetchData();
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  };
+  const handleQuickGenerateLessons = async (session: any) => {
+    if (!session.startDate || !session.endDate) {
+      return toast.error("Session must have a start and end date to auto-generate.");
+    }
+    try {
+      const batch = writeBatch(db);
+      let current = new Date(session.startDate);
+      const end = new Date(session.endDate);
+      let i = 1;
+      
+      // Safety limit to prevent infinite loops or massive generation (e.g. max 30 days)
+      let daysCount = 0;
+      
+      while (current <= end && daysCount < 30) {
+        const lessonRef = doc(collection(db, "lessons"));
+        // Ensure local timezone format YYYY-MM-DD
+        const year = current.getFullYear();
+        const month = String(current.getMonth() + 1).padStart(2, '0');
+        const day = String(current.getDate()).padStart(2, '0');
+        const lessonDate = `${year}-${month}-${day}`;
+        
+        batch.set(lessonRef, {
+          sessionId: session.id,
+          lessonTitle: `Day ${i}`,
+          lessonNumber: i,
+          lessonDate: lessonDate,
+          startTime: "09:00",
+          endTime: "18:00",
+          tutorId: session.tutorId || "",
+          classroom: session.room || "",
+          meetingLink: session.meetingLink || "",
+          lessonStatus: "scheduled",
+          createdAt: serverTimestamp(),
+        });
+        
+        current.setDate(current.getDate() + 1);
+        i++;
+        daysCount++;
+      }
+      
+      await batch.commit();
+      toast.success(`Generated ${i - 1} lessons based on dates!`);
       fetchData();
     } catch (e: any) {
       toast.error(e.message);
@@ -2181,7 +2243,10 @@ export function AdminDashboard() {
 
     // Table Rows
     let currentY = tableTop + 14;
-    enrolledStudents.forEach((student) => {
+    const sortedEnrolledStudents = [...enrolledStudents].sort((a, b) =>
+      (a.studentName || "").localeCompare(b.studentName || "")
+    );
+    sortedEnrolledStudents.forEach((student) => {
       const rowHeight = 16;
       if (currentY + rowHeight > pageHeight - margin) {
         doc.addPage();
@@ -3208,6 +3273,7 @@ export function AdminDashboard() {
     { id: "permissions", label: "Access Control", icon: ShieldCheck },
     { id: "settings", label: t("nav.settings"), icon: Upload },
     { id: "finance", label: t("nav.finance"), icon: BarChart2 },
+    { id: "analytics", label: "Management Insights", icon: TrendingUp },
   ];
 
   const getPermission = (moduleKey: string) => {
@@ -3443,6 +3509,31 @@ export function AdminDashboard() {
                 courses={courses}
                 sessions={sessions}
                 regs={regs}
+                onNavigateToSession={(sessionId) => {
+                  const session = sessions.find((s) => s.id === sessionId);
+                  if (session) {
+                    setActiveTab("sessions");
+                    if (session.sessionStatus === "confirmed" || session.sessionStatus === "completed" || session.sessionStatus === "full") {
+                      setCourseRunsActiveTab("attendance"); // Confirmed Course
+                    } else {
+                      setCourseRunsActiveTab("runs"); // Active Courses & Intakes
+                    }
+                    if (session.courseCode) {
+                      setCourseRunSearchTerm(session.courseCode);
+                    } else {
+                      setCourseRunSearchTerm(session.courseTitle || "");
+                    }
+                  }
+                }}
+              />
+            )}
+
+            {activeTab === "analytics" && (
+              <AnalyticsTab
+                regs={regs}
+                courses={courses}
+                sessions={sessions}
+                allUsers={allUsers}
               />
             )}
 
@@ -3453,6 +3544,7 @@ export function AdminDashboard() {
                   regSearchTerm={regSearchTerm}
                   setRegSearchTerm={setRegSearchTerm}
                   regs={regs}
+                  courses={courses}
                   handleExportCSV={handleExportCSV}
                   formatHkDate={formatHkDate}
                   setPreviewImage={setPreviewImage}
@@ -3465,6 +3557,10 @@ export function AdminDashboard() {
                   handleUpdateRegistration={handleUpdateRegistration}
                   confirmDelete={confirmDelete}
                   readOnly={getPermission("finance") === "view"}
+                  userRole={role}
+                  paymentSettings={paymentSettings}
+                  db={db}
+                  storage={storage}
                 />
               </div>
             )}
@@ -4118,6 +4214,9 @@ export function AdminDashboard() {
         courses={courses}
         handleToggleAttendanceConfirm={handleToggleAttendanceConfirm}
         handleUpdateSingleAttendance={handleUpdateSingleAttendance}
+        handleGenerateLessonsAuto={handleGenerateLessonsAuto}
+        handleQuickGenerateLessons={handleQuickGenerateLessons}
+        handleExportAttendanceSheet={handleExportAttendanceSheet}
         isCertLoading={isCertLoading}
         isCertModalOpen={isCertModalOpen}
         lessons={lessons}

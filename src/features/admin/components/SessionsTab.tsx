@@ -342,6 +342,14 @@ export function SessionsTab({
                               return false;
                             }
 
+                            // 1.5 Hide confirmed and full sessions from Active Courses
+                            if (
+                              s.sessionStatus === "confirmed" ||
+                              s.sessionStatus === "full"
+                            ) {
+                              return false;
+                            }
+
                             // 2. Date selection checks session's startDate
                             if (
                               runsStartDate &&
@@ -489,23 +497,25 @@ export function SessionsTab({
                                 </TableCell>
                                 <TableCell>
                                   <span
-                                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
+                                    className={`text-[10px] px-2 py-0.5 rounded font-black uppercase tracking-widest ${
                                       s.sessionStatus === "open"
                                         ? "bg-green-100 text-green-700"
-                                        : s.sessionStatus === "full" ||
-                                            s.sessionStatus === "confirmed"
-                                          ? "bg-amber-100 text-amber-700 font-extrabold"
+                                        : s.sessionStatus === "completed"
+                                          ? "bg-slate-100 text-slate-500"
                                           : s.sessionStatus === "cancelled"
                                             ? "bg-red-100 text-red-700"
-                                            : s.sessionStatus === "completed"
-                                              ? "bg-slate-800 text-white"
-                                              : "bg-slate-100 text-slate-600"
+                                            : (s.sessionStatus === "full" || s.sessionStatus === "confirmed")
+                                              ? "bg-blue-100 text-blue-700"
+                                              : "bg-blue-50 text-blue-600"
                                     }`}
                                   >
-                                    {s.sessionStatus === "full" ||
-                                    s.sessionStatus === "confirmed"
-                                      ? "Confirmed"
-                                      : s.sessionStatus}
+                                    {s.sessionStatus === "completed"
+                                      ? "Completed"
+                                      : s.sessionStatus === "cancelled"
+                                        ? "Cancelled"
+                                        : (s.sessionStatus === "full" || s.sessionStatus === "confirmed")
+                                          ? "Confirmed"
+                                          : s.sessionStatus || "Active"}
                                   </span>
                                 </TableCell>
                                 <TableCell className="text-right">
@@ -888,29 +898,24 @@ export function SessionsTab({
                   >
                     Clear
                   </Button>
-                )}
+)}
               </div>
             </div>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
-              <TableHeader className="bg-slate-50/50">
-                <TableRow className="hover:bg-transparent border-slate-100">
-                  <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                    Course / Intake
-                  </TableHead>
-                  <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                    Dates
-                  </TableHead>
-                  <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                    Enrollees
-                  </TableHead>
-                  <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                    Status
-                  </TableHead>
-                  <TableHead className="px-6 py-4 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                    Actions
-                  </TableHead>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Code</TableHead>
+                  <TableHead>Title</TableHead>
+                  <TableHead>day</TableHead>
+                  <TableHead>EB Price</TableHead>
+                  <TableHead>Base Price</TableHead>
+                  <TableHead>Instructor</TableHead>
+                  <TableHead>Delivery & Room</TableHead>
+                  <TableHead>Enrolled</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -945,30 +950,44 @@ export function SessionsTab({
                       const course = courses.find(
                         (c: any) => c.id === s.courseId,
                       );
+                      const instructor = tutors.find(
+                        (t: any) => t.id === s.tutorId,
+                      );
                       const term = sessionCertSearchTerm.toLowerCase();
                       const matchCourseCode = course?.courseCode
-                        ?.toLowerCase()
-                        .includes(term);
-                      const matchCourseTitle = course?.title
                         ?.toLowerCase()
                         .includes(term);
                       const matchSessionName = s.sessionName
                         ?.toLowerCase()
                         .includes(term);
+                      const matchCourseTitle = course?.title
+                        ?.toLowerCase()
+                        .includes(term);
+                      const matchInstructor = instructor?.name
+                        ?.toLowerCase()
+                        .includes(term);
+                      const matchStatus = s.sessionStatus
+                        ?.toLowerCase()
+                        .includes(term);
                       return (
-                        matchCourseCode || matchCourseTitle || matchSessionName
+                        matchCourseCode || matchSessionName || matchCourseTitle || matchInstructor || matchStatus
                       );
                     }
 
                     return true;
                   })
                   .sort((a, b) => {
+                    const isAConf = a.sessionStatus === "confirmed" || a.sessionStatus === "full";
+                    const isBConf = b.sessionStatus === "confirmed" || b.sessionStatus === "full";
+                    if (isAConf && !isBConf) return -1;
+                    if (!isAConf && isBConf) return 1;
                     const dateA = a.startDate || "9999-12-31";
                     const dateB = b.startDate || "9999-12-31";
                     return dateA.localeCompare(dateB);
                   })
                   .map((s) => {
                     const course = courses.find((c) => c.id === s.courseId);
+                    const instructor = tutors.find((t) => t.id === s.tutorId);
                     const sessionRegs = regs.filter(
                       (r) => r.sessionId === s.id && r.status === "verified",
                     );
@@ -976,66 +995,131 @@ export function SessionsTab({
                     return (
                       <TableRow
                         key={s.id}
-                        className="group border-slate-50 hover:bg-slate-50/50 transition-colors"
+                        className="hover:bg-slate-50/50"
                       >
-                        <TableCell className="px-6 py-4">
-                          <div className="font-bold text-slate-800 leading-tight whitespace-normal break-words max-w-[250px]">
-                            {course?.title}
+                        <TableCell>
+                          <div className="font-bold text-slate-900 whitespace-normal break-words max-w-[124px] leading-none mb-1 text-sm">
+                            {course?.courseCode || s.sessionName}
                           </div>
-                          <div className="text-[10px] font-mono text-slate-400 mt-0.5 whitespace-normal break-words max-w-[250px]">
-                            {s.sessionName}
+                          <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-600 bg-blue-50/85 border border-blue-100/80 px-2 py-0.5 rounded-full mt-1.5">
+                            <CalendarIcon className="w-3 h-3 text-blue-500 flex-shrink-0" />
+                            <span>
+                              {s.startDate || "No date"} to{" "}
+                              {s.endDate || "No date"}
+                            </span>
                           </div>
                         </TableCell>
-                        <TableCell className="px-6 py-4 text-xs font-medium text-slate-600">
-                          {s.startDate} - {s.endDate}
+                        <TableCell className="text-xs whitespace-normal break-words max-w-[180px] leading-tight font-medium text-slate-700">
+                          {course?.title || "Unknown"}
                         </TableCell>
-                        <TableCell className="px-6 py-4">
-                          <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded border border-indigo-100">
-                            {sessionRegs.length} STUDENTS
-                          </span>
+                        <TableCell className="text-xs font-semibold text-indigo-600">
+                          {course?.day ? `${course.day} Days` : "-"}
                         </TableCell>
-                        <TableCell className="px-6 py-4">
+                        <TableCell className="text-xs font-bold text-emerald-600">
+                          {s.earlyBirdPrice !== undefined
+                            ? `HK$${s.earlyBirdPrice}`
+                            : course?.earlyBirdPrice !== undefined
+                              ? `HK$${course.earlyBirdPrice}`
+                              : "-"}
+                        </TableCell>
+                        <TableCell className="text-xs font-bold text-slate-600">
+                          {s.standardPrice !== undefined
+                            ? `HK$${s.standardPrice}`
+                            : course?.standardPrice !== undefined
+                              ? `HK$${course.standardPrice}`
+                              : "-"}
+                        </TableCell>
+                        <TableCell className="text-xs font-medium">
+                          {instructor?.name || "Unassigned"}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1 items-start">
+                            <span className="bg-slate-100 px-2 py-0.5 rounded uppercase font-black text-[10px] tracking-tight text-slate-600">
+                              {s.deliveryMode === "onsite"
+                                ? "ClassRoom"
+                                : s.deliveryMode === "online"
+                                  ? "Online"
+                                  : s.deliveryMode === "hybrid"
+                                    ? "Hybrid"
+                                    : s.deliveryMode || "N/A"}
+                            </span>
+                            {s.room && (
+                              <span className="text-[10px] font-bold text-blue-600 flex items-center gap-1">
+                                <MapPin className="w-3 h-3" /> Room:{" "}
+                                {s.room.replace(
+                                  /\s*\(Persons:.*?\)/gi,
+                                  "",
+                                )}
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold">
+                              {sessionRegs.length}
+                            </span>
+                            <span className="text-slate-400 text-xs">
+                              / {s.quota || "-"}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
                           <span
-                            className={`text-[9px] px-2 py-0.5 rounded font-black uppercase tracking-widest ${
+                            className={`text-[10px] px-2 py-0.5 rounded font-black uppercase tracking-widest ${
                               s.sessionStatus === "completed"
-                                ? "bg-green-100 text-green-700"
-                                : s.sessionStatus === "cancelled"
-                                  ? "bg-red-100 text-red-700"
-                                  : s.sessionStatus === "full" ||
-                                      s.sessionStatus === "confirmed"
-                                    ? "bg-amber-100 text-amber-700 font-extrabold"
-                                    : "bg-blue-100 text-blue-700"
+                                ? "bg-slate-100 text-slate-500"
+                                : (s.sessionStatus === "full" || s.sessionStatus === "confirmed")
+                                  ? "bg-blue-100 text-blue-700"
+                                  : "bg-blue-50 text-blue-600"
                             }`}
                           >
-                            {s.sessionStatus === "full" ||
-                            s.sessionStatus === "confirmed"
-                              ? "Confirmed"
-                              : s.sessionStatus}
+                            {s.sessionStatus === "completed"
+                              ? "Completed"
+                              : (s.sessionStatus === "full" || s.sessionStatus === "confirmed")
+                                ? "Confirmed"
+                                : s.sessionStatus || "Active"}
                           </span>
                         </TableCell>
-                        <TableCell className="px-6 py-4 text-right">
-                          <div className="flex justify-end gap-2">
+                        <TableCell className="text-right">
+                          <div className="flex justify-end items-center gap-1">
+                            {getPermission("sessions") !== "view" && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0 text-slate-400 hover:text-blue-600"
+                                  title="Edit"
+                                  onClick={() => {
+                                    setSelectedSession(s);
+                                    setSessionModalOpen(true);
+                                  }}
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0 text-red-300 hover:text-red-600"
+                                  title="Delete"
+                                  onClick={() =>
+                                    confirmDelete(
+                                      s.id,
+                                      "session",
+                                      s.sessionName || "Unknown Course",
+                                    )
+                                  }
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              </>
+                            )}
                             <Button
                               size="sm"
-                              variant="outline"
-                              className="h-8 text-[10px] font-bold uppercase tracking-wider gap-2 border-slate-200 hover:bg-white"
-                              onClick={() =>
-                                handleExportAttendanceSheet(
-                                  s,
-                                  course,
-                                  sessionRegs,
-                                )
-                              }
-                            >
-                              <ClipboardList className="w-3 h-3 text-slate-400" />{" "}
-                              Attendance
-                            </Button>
-                            <Button
-                              size="sm"
-                              className="h-8 text-[10px] font-bold uppercase tracking-wider bg-slate-900 hover:bg-black"
+                              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold tracking-wider"
                               onClick={() => handleManageCertificates(s)}
                             >
-                              <Award className="w-3.5 h-3.5 mr-1.5" /> Manage
+                              Manage
                             </Button>
                           </div>
                         </TableCell>

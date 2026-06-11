@@ -1,11 +1,14 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Download, TrendingUp, Clock, BarChart3, ExternalLink, FileText, Edit2, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Download, TrendingUp, Clock, BarChart3, ExternalLink, FileText, Edit2, Trash2, ChevronLeft, ChevronRight, Upload, Image as ImageIcon } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../../components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
+import { doc, setDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { toast } from 'sonner';
 
 interface FinanceTabProps {
   regSearchTerm: string;
@@ -23,6 +26,11 @@ interface FinanceTabProps {
   handleUpdateRegistration: (e: React.FormEvent) => void;
   confirmDelete: (id: string, type: string, name: string) => void;
   readOnly?: boolean;
+  courses: any[];
+  userRole?: string;
+  paymentSettings?: any;
+  db?: any;
+  storage?: any;
 }
 
 export const FinanceTab = React.memo(function FinanceTab({
@@ -41,9 +49,16 @@ export const FinanceTab = React.memo(function FinanceTab({
   handleUpdateRegistration,
   confirmDelete,
   readOnly = false,
+  courses,
+  userRole,
+  paymentSettings = {},
+  db,
+  storage,
 }: FinanceTabProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
+  const [uploadingQR, setUploadingQR] = useState<{fps: boolean, payme: boolean}>({ fps: false, payme: false });
+  const [localPreviews, setLocalPreviews] = useState<{fps?: string, payme?: string}>({});
 
   // Reset back to page 1 during searching
   React.useEffect(() => {
@@ -68,6 +83,106 @@ export const FinanceTab = React.memo(function FinanceTab({
   }, [filteredRegs, currentPage, itemsPerPage]);
 
   const totalPages = Math.ceil(filteredRegs.length / itemsPerPage) || 1;
+
+  const verifiedRegs = regs.filter((r) => r.status === "verified");
+  const totalRev = verifiedRegs.reduce((acc, r) => acc + (r.amount || 0), 0);
+
+  const revMap: Record<string, number> = {};
+  verifiedRegs.forEach((r) => {
+    const cRef =
+      courses.find((c) => c.id === r.courseId)?.title ||
+      r.courseId?.slice(0, 8);
+    revMap[cRef] = (revMap[cRef] || 0) + (r.amount || 0);
+  });
+  const courseRevData = Object.keys(revMap).map((k) => ({
+    name: k,
+    revenue: revMap[k],
+  }));
+  const compressImage = async (file: File): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let { width, height } = img;
+          const MAX_SIZE = 600; 
+          if (width > height && width > MAX_SIZE) {
+            height *= MAX_SIZE / width;
+            width = MAX_SIZE;
+          } else if (height > MAX_SIZE) {
+            width *= MAX_SIZE / height;
+            height = MAX_SIZE;
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return reject(new Error('Canvas failed'));
+          
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error('Blob failed'));
+          }, 'image/jpeg', 0.6);
+        };
+      };
+    });
+  };
+
+  const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  const handleUploadQRCode = async (type: "fps" | "payme", e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const file = e.target.files[0];
+    const maxSize = 5 * 1024 * 1024; // 5MB limit
+    if (file.size > maxSize) {
+      toast.error("File size must be less than 5MB");
+      return;
+    }
+    
+    // 1. Optimistic UI Preview
+    const objectUrl = URL.createObjectURL(file);
+    setLocalPreviews(prev => ({ ...prev, [type]: objectUrl }));
+    setUploadingQR(prev => ({ ...prev, [type]: true }));
+    
+    try {
+      if (!db) throw new Error("Firebase db not initialized");
+      
+      // 2. Compress image to strictly reduce payload size (usually < 30KB)
+      const compressedBlob = await compressImage(file);
+      
+      // 3. Convert to base64 to avoid Firebase Storage CORS issues
+      const base64String = await blobToBase64(compressedBlob);
+      
+      const docRef = doc(db, "settings", "payment_methods");
+      await setDoc(docRef, {
+        [`${type}QrCodeUrl`]: base64String,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      
+      toast.success(`${type.toUpperCase()} QR Code uploaded successfully!`);
+    } catch (error: any) {
+      console.error(`Error uploading ${type} QR Code:`, error);
+      toast.error(error.message || "Failed to upload QR Code");
+      // Revert preview on failure
+      setLocalPreviews(prev => ({ ...prev, [type]: undefined }));
+    } finally {
+      setUploadingQR(prev => ({ ...prev, [type]: false }));
+      e.target.value = ''; // reset input
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -135,6 +250,63 @@ export const FinanceTab = React.memo(function FinanceTab({
               <BarChart3 className="w-3 h-3 text-slate-400" />
               <span className="text-[10px] font-medium tracking-wide font-sans">All historical records</span>
             </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card className="border shadow-sm bg-emerald-50 border-emerald-100">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-bold text-emerald-700 uppercase tracking-widest font-sans">
+              Gross Revenue Breakdown
+            </CardTitle>
+            <span className="h-6 w-6 bg-emerald-200 text-emerald-800 rounded-full flex items-center justify-center font-bold text-xs">
+              $
+            </span>
+          </CardHeader>
+          <CardContent>
+            <div className="text-4xl font-black text-emerald-800 tracking-tighter">
+              ${totalRev.toLocaleString()}
+            </div>
+            <p className="text-[10px] text-emerald-600 font-bold uppercase mt-1 tracking-widest font-sans">
+              Verified enrollments by course
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm border-slate-200 bg-white">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-bold text-slate-800 uppercase tracking-widest font-sans">
+              Enrollment Revenue Chart
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="h-64 flex items-end justify-center bg-slate-50 border-t border-slate-100 pb-4 px-4 gap-4 rounded-b-xl">
+            {courseRevData.length > 0 ? (
+              courseRevData.slice(0, 5).map((c, i) => (
+                <div
+                  key={i}
+                  className="flex flex-col items-center flex-1 h-full justify-end gap-2 group"
+                >
+                  <div
+                    className="w-full bg-emerald-500 rounded-t-sm transition-all duration-500 hover:bg-emerald-400 relative"
+                    style={{
+                      height: `${Math.max(10, (c.revenue / totalRev) * 100)}%`,
+                    }}
+                  >
+                    <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold text-slate-700">
+                      ${(c.revenue || 0).toLocaleString()}
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-bold text-slate-600 text-center leading-tight h-10 line-clamp-2 w-full font-sans">
+                    {c.name}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="font-sans text-xs text-slate-400 h-full flex items-center">
+                (No revenue tracking)
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -280,6 +452,84 @@ export const FinanceTab = React.memo(function FinanceTab({
           )}
         </CardContent>
       </Card>
+
+      {(userRole === "finance" || userRole === "admin") && (
+        <Card className="border-indigo-100 shadow-sm mt-6">
+          <CardHeader className="border-b border-slate-50 bg-slate-50/50 pb-4">
+            <CardTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
+              <Upload className="w-5 h-5 text-indigo-500" /> Payment QR Codes Management
+            </CardTitle>
+            <p className="text-xs text-slate-500">Upload the latest FPS and PayMe QR Codes. These will be displayed to students during registration.</p>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-6">
+            {/* FPS */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-500" /> FPS QR Code
+              </h3>
+              <div className="flex flex-col sm:flex-row gap-6">
+                <div className="w-32 h-32 shrink-0 border-2 border-dashed border-slate-200 rounded-xl flex items-center justify-center bg-slate-50 overflow-hidden relative group">
+                  {(localPreviews?.fps || paymentSettings?.fpsQrCodeUrl) ? (
+                    <img src={localPreviews?.fps || paymentSettings?.fpsQrCodeUrl} alt="FPS" className={`w-full h-full object-contain transition-opacity ${uploadingQR.fps ? 'opacity-50' : 'opacity-100'}`} />
+                  ) : (
+                    <div className="text-xs text-slate-400 font-medium">No QR Code</div>
+                  )}
+                  {uploadingQR.fps && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/10 backdrop-blur-[1px]">
+                      <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 space-y-3">
+                  <Label htmlFor="fps-upload" className="text-xs font-semibold text-slate-600 block">Upload New FPS QR Code</Label>
+                  <Input 
+                    id="fps-upload"
+                    type="file" 
+                    accept="image/*" 
+                    onChange={(e) => handleUploadQRCode("fps", e)} 
+                    disabled={uploadingQR.fps}
+                    className="text-xs cursor-pointer file:cursor-pointer file:bg-indigo-50 file:text-indigo-700 file:border-0 file:rounded-md file:px-3 file:py-1 file:mr-3 file:font-semibold hover:file:bg-indigo-100 transition-all h-auto py-2"
+                  />
+                  {uploadingQR.fps && <p className="text-xs text-indigo-600 font-semibold animate-pulse">Uploading...</p>}
+                </div>
+              </div>
+            </div>
+
+            {/* PayMe */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-rose-500" /> PayMe QR Code
+              </h3>
+              <div className="flex flex-col sm:flex-row gap-6">
+                <div className="w-32 h-32 shrink-0 border-2 border-dashed border-slate-200 rounded-xl flex items-center justify-center bg-slate-50 overflow-hidden relative group">
+                  {(localPreviews?.payme || paymentSettings?.paymeQrCodeUrl) ? (
+                    <img src={localPreviews?.payme || paymentSettings?.paymeQrCodeUrl} alt="PayMe" className={`w-full h-full object-contain transition-opacity ${uploadingQR.payme ? 'opacity-50' : 'opacity-100'}`} />
+                  ) : (
+                    <div className="text-xs text-slate-400 font-medium">No QR Code</div>
+                  )}
+                  {uploadingQR.payme && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/10 backdrop-blur-[1px]">
+                      <div className="w-5 h-5 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 space-y-3">
+                  <Label htmlFor="payme-upload" className="text-xs font-semibold text-slate-600 block">Upload New PayMe QR Code</Label>
+                  <Input 
+                    id="payme-upload"
+                    type="file" 
+                    accept="image/*" 
+                    onChange={(e) => handleUploadQRCode("payme", e)} 
+                    disabled={uploadingQR.payme}
+                    className="text-xs cursor-pointer file:cursor-pointer file:bg-rose-50 file:text-rose-700 file:border-0 file:rounded-md file:px-3 file:py-1 file:mr-3 file:font-semibold hover:file:bg-rose-100 transition-all h-auto py-2"
+                  />
+                  {uploadingQR.payme && <p className="text-xs text-rose-600 font-semibold animate-pulse">Uploading...</p>}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Dialog open={isEditRegOpen} onOpenChange={setIsEditRegOpen}>
         <DialogContent className="sm:max-w-[500px]">

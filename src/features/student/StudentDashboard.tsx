@@ -5,7 +5,7 @@ import { AuthContext } from '../../App';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
-import { Loader2, Download, GraduationCap, FileText, Calendar, BookOpen, CheckCircle, Circle, PlayCircle } from 'lucide-react';
+import { Loader2, Download, GraduationCap, FileText, Calendar, BookOpen, CheckCircle, Circle, PlayCircle, LayoutDashboard, Award } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { formatHkDate, getHkDateString } from '../../lib/utils';
@@ -191,10 +191,28 @@ export function StudentDashboard() {
       </div>
       
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="progress">Course Progress</TabsTrigger>
-          <TabsTrigger value="certificates">Certificates</TabsTrigger>
+        <TabsList className="bg-slate-100 p-1.5 rounded-xl flex flex-wrap gap-1.5 w-fit shadow-inner mb-6">
+          <TabsTrigger 
+            value="overview"
+            className="data-active:!bg-indigo-600 data-active:!text-white data-active:shadow-md hover:bg-white hover:text-indigo-600 px-4 py-2 text-[11px] font-black uppercase tracking-widest text-slate-500 rounded-lg transition-all flex items-center gap-2"
+          >
+            <LayoutDashboard className="w-4 h-4" />
+            Overview
+          </TabsTrigger>
+          <TabsTrigger 
+            value="progress"
+            className="data-active:!bg-emerald-600 data-active:!text-white data-active:shadow-md hover:bg-white hover:text-emerald-600 px-4 py-2 text-[11px] font-black uppercase tracking-widest text-slate-500 rounded-lg transition-all flex items-center gap-2"
+          >
+            <BookOpen className="w-4 h-4" />
+            Course Progress
+          </TabsTrigger>
+          <TabsTrigger 
+            value="certificates"
+            className="data-active:!bg-amber-500 data-active:!text-white data-active:shadow-md hover:bg-white hover:text-amber-600 px-4 py-2 text-[11px] font-black uppercase tracking-widest text-slate-500 rounded-lg transition-all flex items-center gap-2"
+          >
+            <Award className="w-4 h-4" />
+            Certificates
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6 pt-4">
@@ -293,7 +311,24 @@ export function StudentDashboard() {
               }).map(r => {
                 const course = courses.find(c => c.id === r.courseId);
                 const session = enrolledSessions.find(s => s.id === r.sessionId);
-                const sessionLessons = lessons.filter(l => l.sessionId === r.sessionId);
+                let sessionLessons = lessons.filter(l => l.sessionId === r.sessionId);
+                
+                if (session) {
+                    // Filter out any accidentally created lessons that fall outside the course date range
+                    sessionLessons = sessionLessons.filter(l => {
+                      if (!session.startDate || !session.endDate || !l.lessonDate) return true;
+                      return l.lessonDate >= session.startDate && l.lessonDate <= session.endDate;
+                    });
+                    
+                    // Deduplicate existing lessons by date to prevent duplicate Day 1s
+                    const uniqueLessonsMap = new Map();
+                    sessionLessons.forEach(l => {
+                      if (l.lessonDate && !uniqueLessonsMap.has(l.lessonDate)) {
+                        uniqueLessonsMap.set(l.lessonDate, l);
+                      }
+                    });
+                    sessionLessons = Array.from(uniqueLessonsMap.values()).sort((a: any, b: any) => (a.lessonDate || "").localeCompare(b.lessonDate || ""));
+                }
                 
                 // Calculate progress
                 // Calculate progress based on course duration (days)
@@ -331,30 +366,10 @@ export function StudentDashboard() {
                             {course?.title || 'Unknown Course'}
                         </h3>
                         
-                        {sessionLessons.length > 0 ? (
-                            <div className="space-y-2">
-                                {sessionLessons.map((l: any) => {
-                                    const roomName = String(l.classroom || l.room || session?.room || session?.classroom || 'TBA').replace(/\s*\(.*?\)/g, '').trim();
-                                    return (
-                                        <div key={l.id} className="flex flex-col sm:flex-row sm:items-center justify-start gap-1 sm:gap-8 text-sm py-2 border-b border-slate-50 last:border-0">
-                                            <div className="font-medium text-slate-700">
-                                                <span className="text-blue-600 font-bold mr-2">{l.lessonDate}</span> 
-                                                {l.startTime} - {l.endTime}
-                                            </div>
-                                            <div className="text-slate-500 text-xs text-left sm:text-right">
-                                                Classroom: <span className="font-semibold text-slate-700 ml-1">{roomName}</span>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        ) : session ? (
+                        {session ? (
                             <div className="flex flex-col sm:flex-row sm:items-center justify-start gap-1 sm:gap-8 text-sm py-2">
                                 <div className="font-medium text-slate-700">
                                     <span className="text-blue-600 font-bold mr-2">{session.startDate} to {session.endDate}</span>
-                                </div>
-                                <div className="text-slate-500 text-xs text-left sm:text-right">
-                                    Classroom: <span className="font-semibold text-slate-700 ml-1">{String(session.classroom || session.room || 'TBA').replace(/\s*\(.*?\)/g, '').trim()}</span>
                                 </div>
                             </div>
                         ) : (

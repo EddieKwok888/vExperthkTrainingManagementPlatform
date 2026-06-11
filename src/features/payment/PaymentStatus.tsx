@@ -17,6 +17,7 @@ export function PaymentStatus() {
   const [paymentProofBase64, setPaymentProofBase64] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'fps' | 'payme' | 'paypal'>('fps');
   const [schoolSettings, setSchoolSettings] = useState<any>(null);
+  const [paymentSettings, setPaymentSettings] = useState<any>(null);
 
   // Course Details State
   const [course1, setCourse1] = useState<any>(null);
@@ -64,6 +65,9 @@ export function PaymentStatus() {
 
         const settingsSnap = await getDoc(doc(db, 'settings', 'school_info'));
         if (settingsSnap.exists()) setSchoolSettings(settingsSnap.data());
+
+        const paymentSnap = await getDoc(doc(db, 'settings', 'payment_methods'));
+        if (paymentSnap.exists()) setPaymentSettings(paymentSnap.data());
       } catch (e) {
          handleFirestoreError(e, OperationType.GET, `registrations/${id}`);
       } finally {
@@ -316,14 +320,24 @@ export function PaymentStatus() {
 
                {(paymentMethod === 'fps' || paymentMethod === 'payme') && (
                  <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                   <div className="text-center space-y-2 relative mt-4">
-                     <p className="text-xs font-medium text-slate-600">Scan {paymentMethod.toUpperCase()} QR Code</p>
-                     <div className="bg-slate-100 w-48 h-48 mx-auto flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-blue-300 relative overflow-hidden group">
-                        <QrCode className="w-16 h-16 text-slate-400 group-hover:scale-110 transition-transform" />
-                        <span className="text-slate-400 font-medium text-sm mt-2">{paymentMethod.toUpperCase()} Mock</span>
-                        <div className="absolute inset-0 bg-blue-50/20 mix-blend-overlay"></div>
-                     </div>
-                   </div>
+                    <div className="text-center space-y-2 relative mt-4">
+                      <p className="text-xs font-medium text-slate-600">Scan {paymentMethod.toUpperCase()} QR Code</p>
+                      <div className="bg-slate-100 w-48 h-48 mx-auto flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-blue-300 relative overflow-hidden group">
+                         {(paymentMethod === 'fps' && paymentSettings?.fpsQrCodeUrl) || (paymentMethod === 'payme' && paymentSettings?.paymeQrCodeUrl) ? (
+                           <img 
+                             src={paymentMethod === 'fps' ? paymentSettings.fpsQrCodeUrl : paymentSettings.paymeQrCodeUrl} 
+                             alt={`${paymentMethod.toUpperCase()} QR Code`}
+                             className="w-full h-full object-contain"
+                           />
+                         ) : (
+                           <>
+                             <QrCode className="w-16 h-16 text-slate-400 group-hover:scale-110 transition-transform" />
+                             <span className="text-slate-400 font-medium text-sm mt-2">{paymentMethod.toUpperCase()} Mock</span>
+                             <div className="absolute inset-0 bg-blue-50/20 mix-blend-overlay"></div>
+                           </>
+                         )}
+                      </div>
+                    </div>
                    
                    <div className="space-y-3 text-left mt-6">
                      <label className="text-sm font-medium text-slate-800">Upload Payment Screenshot</label>

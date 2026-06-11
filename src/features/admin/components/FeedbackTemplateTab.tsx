@@ -10,25 +10,25 @@ import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogTrigger, DialogTitle } from '../../../components/ui/dialog';
 
 export const DEFAULT_TEMPLATE = {
-  title: 'Course Evaluation Questionnaire 課程問卷',
+  title: 'Course Evaluation Questionnaire',
   description: 'This evaluation form is designed to gather valuable feedback on the course content, delivery, and overall experience. Your input is crucial for us to improve and tailor our training to meet your needs. Please rate each aspect honestly and provide any additional comments that could help enhance the learning experience.',
   fields: [
-    { id: 'studentName', type: 'text', label: 'Student Name 學生姓名', required: true },
-    { id: 'studentEmail', type: 'text', label: 'Email Address 電郵', required: true },
-    { id: 'companyName', type: 'text', label: 'Company Name 公司名稱', required: true },
-    { id: 'contentScore', type: 'rating', label: 'Content of the course 內容', required: true, part: 'course' },
-    { id: 'levelScore', type: 'rating', label: 'Level of the course 程度', required: true, part: 'course' },
-    { id: 'materialsScore', type: 'rating', label: 'Course material usefulness 教材', required: true, part: 'course' },
-    { id: 'facilitiesScore', type: 'rating', label: 'Teaching aids, facilities & environment 設施', required: true, part: 'course' },
-    { id: 'practiceScore', type: 'rating', label: 'Adequacy of practice/exercise 練習', required: true, part: 'course' },
-    { id: 'jobApplicabilityScore', type: 'rating', label: 'Job applicability / usefulness 實用', required: true, part: 'course' },
-    { id: 'overallCourseScore', type: 'rating', label: 'OVERALL 整體評分', required: true, part: 'course' },
-    { id: 'tutorKnowledgeScore', type: 'rating', label: 'Knowledge of the subject 科目的認識', required: true, part: 'tutor' },
-    { id: 'tutorOrganizationScore', type: 'rating', label: 'Organization & Logic 教學編排', required: true, part: 'tutor' },
-    { id: 'tutorPresentationScore', type: 'rating', label: 'Presentation & communication skills 表達技巧', required: true, part: 'tutor' },
-    { id: 'tutorAttentionScore', type: 'rating', label: 'Individual attention given 對學生的照顧', required: true, part: 'tutor' },
-    { id: 'overallTutorScore', type: 'rating', label: 'OVERALL 整體評分', required: true, part: 'tutor' },
-    { id: 'comment', type: 'textarea', label: 'ANY OTHER COMMENTS 其他意見：', required: false }
+    { id: 'studentName', type: 'text', label: 'Student Name', required: true },
+    { id: 'studentEmail', type: 'text', label: 'Email Address', required: true },
+    { id: 'companyName', type: 'text', label: 'Company Name', required: true },
+    { id: 'contentScore', type: 'rating', label: 'Course Content', required: true, part: 'course' },
+    { id: 'levelScore', type: 'rating', label: 'Course Level', required: true, part: 'course' },
+    { id: 'materialsScore', type: 'rating', label: 'Course material usefulness', required: true, part: 'course' },
+    { id: 'facilitiesScore', type: 'rating', label: 'Teaching aids, facilities & environment', required: true, part: 'course' },
+    { id: 'practiceScore', type: 'rating', label: 'Adequacy of practice/exercise', required: true, part: 'course' },
+    { id: 'jobApplicabilityScore', type: 'rating', label: 'Job applicability / usefulness', required: true, part: 'course' },
+    { id: 'overallCourseScore', type: 'rating', label: 'OVERALL', required: true, part: 'course' },
+    { id: 'tutorKnowledgeScore', type: 'rating', label: 'Knowledge of the subject', required: true, part: 'tutor' },
+    { id: 'tutorOrganizationScore', type: 'rating', label: 'Organization & Logic', required: true, part: 'tutor' },
+    { id: 'tutorPresentationScore', type: 'rating', label: 'Presentation & communication skills', required: true, part: 'tutor' },
+    { id: 'tutorAttentionScore', type: 'rating', label: 'Individual attention given', required: true, part: 'tutor' },
+    { id: 'overallTutorScore', type: 'rating', label: 'OVERALL', required: true, part: 'tutor' },
+    { id: 'comment', type: 'textarea', label: 'ANY OTHER COMMENTS:', required: false }
   ]
 };
 

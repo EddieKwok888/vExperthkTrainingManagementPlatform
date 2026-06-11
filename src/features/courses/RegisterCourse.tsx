@@ -47,16 +47,18 @@ export function RegisterCourse() {
     remarks: ''
   });
 
-  // Auto-fill user profile info if signed in
+  const isWalkIn = searchParams.get('admin_walkin') === 'true';
+
+  // Auto-fill user profile info if signed in and not walk-in
   useEffect(() => {
-    if (user) {
+    if (user && !isWalkIn) {
       setFormData(prev => ({
         ...prev,
         studentName: user.displayName || prev.studentName || '',
         studentEmail: user.email || prev.studentEmail || ''
       }));
     }
-  }, [user]);
+  }, [user, isWalkIn]);
 
   useEffect(() => {
     if (!id) return;
@@ -101,10 +103,10 @@ export function RegisterCourse() {
                 setCourse2({ id: course2Snap.id, ...course2Snap.data() });
               }
 
-              const s1Fetched = s1Snap.docs.map(d => ({ id: d.id, ...d.data() })).filter((s: any) => s.sessionStatus === 'open');
+              const s1Fetched = s1Snap.docs.map(d => ({ id: d.id, ...d.data() })).filter((s: any) => s.sessionStatus === 'open' || s.id === preselectedSession || (isWalkIn && s.sessionStatus === 'confirmed'));
               setSessions(s1Fetched);
 
-              const s2Fetched = s2Snap.docs.map(d => ({ id: d.id, ...d.data() })).filter((s: any) => s.sessionStatus === 'open');
+              const s2Fetched = s2Snap.docs.map(d => ({ id: d.id, ...d.data() })).filter((s: any) => s.sessionStatus === 'open' || s.id === preselectedSession || (isWalkIn && s.sessionStatus === 'confirmed'));
               setSessions2(s2Fetched);
 
               if (s1Fetched.length > 0) {
@@ -147,7 +149,7 @@ export function RegisterCourse() {
 
           const q = query(collection(db, 'course_sessions'), where('courseId', '==', id));
           const sSnap = await getDocs(q);
-          const fetchedSessions = sSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter((s: any) => s.sessionStatus === 'open');
+          const fetchedSessions = sSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter((s: any) => s.sessionStatus === 'open' || s.id === preselectedSession || (isWalkIn && s.sessionStatus === 'confirmed'));
           
           fetchedSessions.sort((a: any, b: any) => {
             const dateA = a.startDate || '';
@@ -289,7 +291,7 @@ export function RegisterCourse() {
         const parentPayload = {
           courseId: id,
           sessionId: formData.sessionId,
-          studentId: user?.uid || null,
+          studentId: isWalkIn ? null : (user?.uid || null),
           studentName: formData.studentName,
           studentEmail: formData.studentEmail,
           studentPhone: formData.studentPhone,
@@ -315,7 +317,7 @@ export function RegisterCourse() {
         const childPayload = {
           courseId: course2.id,
           sessionId: formSession2Id,
-          studentId: user?.uid || null,
+          studentId: isWalkIn ? null : (user?.uid || null),
           studentName: formData.studentName,
           studentEmail: formData.studentEmail,
           studentPhone: formData.studentPhone,
@@ -364,7 +366,7 @@ export function RegisterCourse() {
         const payload = {
           courseId: id,
           sessionId: formData.sessionId,
-          studentId: user?.uid || null,
+          studentId: isWalkIn ? null : (user?.uid || null),
           studentName: formData.studentName,
           studentEmail: formData.studentEmail,
           studentPhone: formData.studentPhone,
