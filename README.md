@@ -191,3 +191,21 @@ Upgraded the Role-Based Access Control (RBAC) setup to support strict **Cell-by-
 
 ### 5. 👨‍🏫 Instructor Dashboard Refinements (導師介面過濾優化)
 - **Status-based Intake Filters**: Instructors' "My Assigned Intakes" view now exclusively focuses on relevant class sessions. Pending or entirely completed historic sessions are cleanly hidden from the immediate view to minimize screen clutter.
+
+## 📅 Today's Updates (2026-06-11)
+
+### 1. 🔠 Alphabetical Student Roster Sorting (學生名單 A-Z 排序)
+- **Attendance Sheets**: The generated PDF Attendance Sheets now sort all student names alphabetically (A-Z) by their first name, ensuring a structured and organized format for instructors during roll call.
+- **System Rosters**: The in-app student rosters and certificate generation lists are also strictly sorted case-insensitively to match the printable documents.
+
+### 2. 🚶‍♂️ Walk-in Registration Bypass (即場報名特快通道)
+- **Direct Verification**: Added an administrative "Walk-in" registration mode. When staff registers a walk-in student via the internal dashboard links, the system intelligently bypasses the Stripe checkout requirements and automatically marks the payment status as `verified` (Paid), streamlining on-site processing.
+
+### 3. 🎯 Dashboard Navigation & Status Consistency (儀表板導航與狀態統一)
+- **Smart Next 7 Days Links**: Clicking a course inside the "Next 7 Days" widget on the Admin Dashboard now flawlessly routes administrators to the exact related class tab. "Open" courses route to the *Active Courses & Intakes* tab, while "Confirmed" courses route seamlessly to the *Confirmed Courses (Attendance)* tab.
+- **Global Status Color Standardization**: Harmonized the internal mapping of course statuses. System-wide, the underlying `"full"` status is now strictly displayed as **"Confirmed"** to the user, visually unified with a signature **Blue** badge (`bg-blue-100 text-blue-700`). "Open" status uses an **Emerald Green** badge.
+
+### 4. 🎁 Unified Bundle Registration Flow (全新套裝報名體驗)
+- **Frictionless Checkout**: Upgraded the "Special Deals" course bundle display on the homepage. Instead of providing two separate confusing links, students now click a single prominent **"🎁 Register for Bundle"** button.
+- **Dual-Session Selection**: The unified bundle registration page seamlessly allows students to pick intake sessions for both Course A and Course B concurrently in a single intuitive form.
+- **Automated Calculations**: The system automatically tallies the combined tuition fee, subtracts the bundle discount, and submits both registrations via one linked invoice transaction.
