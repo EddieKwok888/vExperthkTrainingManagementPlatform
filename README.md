@@ -138,6 +138,10 @@ The system supports multi-language capabilities easily switchable via the UI.
 - **Native PDF Engine Integration**: Completely migrated the "Instructor Profile (CV)" PDF export feature away from problematic browser-capture tools (html2canvas) back to the ultra-fast, native `jsPDF` text rendering engine.
 - **Language Translation Fallback**: To elegantly bypass CJK font encoding limitations inherent to `jsPDF` and CSS `oklch` parser crashes, the system now dynamically maps local languages ("廣東話", "普通話") to English equivalents ("Cantonese", "Mandarin") instantly on export, guaranteeing a flawless, searchable, and crash-free PDF output.
 
+### 5. 🚀 Live Production Deployment (系統正式上線)
+- **Firebase Hosting Integration**: Configured `firebase.json` and `.firebaserc` to establish a seamless deployment pipeline. The entire React SPA is now successfully built and hosted live on Firebase Hosting, directly integrated with the existing Firebase backend services.
+- **Branding Update**: Updated the global application title to correctly display **"VExpert HK - Training Management"** on all browser tabs instead of the default placeholder.
+
 ## 📅 Updates (2026-06-11)
 
 ### 1. 🔠 Alphabetical Student Roster Sorting (學生名單 A-Z 排序)
