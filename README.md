@@ -123,7 +123,22 @@ The system supports multi-language capabilities easily switchable via the UI.
 
 > 📜 **View past updates:** Older update logs have been archived. Please check the [CHANGELOG.md](CHANGELOG.md) file for historical updates.
 
-## 📅 Today's Updates (2026-06-11)
+## 📅 Today's Updates (2026-06-12)
+
+### 1. 🛡️ Duplicate Registration Prevention (防重複報名機制)
+- **Validation**: Implemented an automated validation check during course registration to ensure that a student cannot register for the same course session twice using the same email address. This prevents accidental duplicate bookings and keeps class rosters accurate.
+
+### 2. 📅 Unrestricted Weekend Scheduling (解除星期六排堂限制)
+- **Holiday System Logic**: Updated the system's underlying holiday and weekend detection logic (`isWeekendOrHoliday`). Saturday is now recognized as a valid, schedulable working day, allowing coordinators to seamlessly schedule Saturday classes and instructor shifts without encountering blockage.
+
+### 3. 🎯 Promo Code Accuracy Fix (優惠代碼修正)
+- **Targeted Bundles**: Resolved an issue where purchasing a single course would inadvertently auto-apply bundle-specific promo codes (like `AB Series`). Bundle promotions are now strictly contained within the unified bundle registration flow.
+
+### 4. 📄 Robust PDF Generation (高穩定性 CV 導出)
+- **Native PDF Engine Integration**: Completely migrated the "Instructor Profile (CV)" PDF export feature away from problematic browser-capture tools (html2canvas) back to the ultra-fast, native `jsPDF` text rendering engine.
+- **Language Translation Fallback**: To elegantly bypass CJK font encoding limitations inherent to `jsPDF` and CSS `oklch` parser crashes, the system now dynamically maps local languages ("廣東話", "普通話") to English equivalents ("Cantonese", "Mandarin") instantly on export, guaranteeing a flawless, searchable, and crash-free PDF output.
+
+## 📅 Updates (2026-06-11)
 
 ### 1. 🔠 Alphabetical Student Roster Sorting (學生名單 A-Z 排序)
 - **Attendance Sheets**: The generated PDF Attendance Sheets now sort all student names alphabetically (A-Z) by their first name, ensuring a structured and organized format for instructors during roll call.

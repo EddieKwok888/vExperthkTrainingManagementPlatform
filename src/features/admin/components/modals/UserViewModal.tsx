@@ -21,9 +21,14 @@ import {
   Calendar as CalendarIcon,
   Download,
   FileText,
+  Loader2,
 } from "lucide-react";
 import { formatHkDate } from "../../../../lib/utils";
-import React from "react";
+import React, { useState, useEffect } from "react";
+import { getDoc, doc } from "firebase/firestore";
+import { db } from "../../../../lib/firebase";
+import { toast } from "sonner";
+import { jsPDF } from "jspdf";
 import {
   Dialog,
   DialogContent,
@@ -110,6 +115,107 @@ export function UserViewModal({
   setIsUserViewModalOpen,
   setMtmYear,
 }: UserViewModalProps) {
+  const [systemCategories, setSystemCategories] = useState<string[]>([]);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+  useEffect(() => {
+    if (isUserViewModalOpen && selectedUser && (selectedUser.role === "tutor" || selectedUser.role === "tutor_pt")) {
+      const fetchCategories = async () => {
+        try {
+          const docRef = doc(db, 'settings', 'course_categories');
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists() && docSnap.data().categories) {
+            setSystemCategories(docSnap.data().categories);
+          }
+        } catch (error) {
+          console.error("Failed to fetch course categories", error);
+        }
+      };
+      fetchCategories();
+    }
+  }, [isUserViewModalOpen, selectedUser]);
+
+  const generateTutorProfilePDF = async () => {
+    if (!selectedUser || isGeneratingPdf) return;
+    setIsGeneratingPdf(true);
+    
+    try {
+      const docPdf = new jsPDF();
+      
+      docPdf.setFontSize(22);
+      docPdf.setTextColor(40, 40, 40);
+      docPdf.text("Instructor Profile", 14, 22);
+      
+      docPdf.setFontSize(14);
+      docPdf.setTextColor(60, 60, 60);
+      docPdf.text(selectedUser.name || "N/A", 14, 32);
+      
+      docPdf.setFontSize(10);
+      docPdf.setTextColor(100, 100, 100);
+      docPdf.text(`Email: ${selectedUser.email || "N/A"}`, 14, 40);
+      docPdf.text(`Phone: ${selectedUser.phone || "N/A"}`, 14, 46);
+      docPdf.text(`Company: ${selectedUser.company || "N/A"}`, 14, 52);
+      
+      let yPos = 65;
+      const tutor = selectedUser.tutorProfile || {};
+      
+      if (tutor.bio) {
+        docPdf.setFontSize(12);
+        docPdf.setTextColor(40, 40, 40);
+        docPdf.setFont("helvetica", "bold");
+        docPdf.text("Professional Summary", 14, yPos);
+        yPos += 8;
+        
+        docPdf.setFont("helvetica", "normal");
+        docPdf.setFontSize(10);
+        docPdf.setTextColor(60, 60, 60);
+        const splitBio = docPdf.splitTextToSize(tutor.bio, 180);
+        docPdf.text(splitBio, 14, yPos);
+        yPos += (splitBio.length * 5) + 10;
+      }
+      
+      docPdf.setFontSize(12);
+      docPdf.setTextColor(40, 40, 40);
+      docPdf.setFont("helvetica", "bold");
+      docPdf.text("Details", 14, yPos);
+      yPos += 8;
+
+      docPdf.setFont("helvetica", "normal");
+      docPdf.setFontSize(10);
+      docPdf.setTextColor(60, 60, 60);
+      
+      const printLine = (label: string, value: string) => {
+        docPdf.setFont("helvetica", "bold");
+        docPdf.text(`${label}:`, 14, yPos);
+        docPdf.setFont("helvetica", "normal");
+        const splitValue = docPdf.splitTextToSize(value, 130);
+        docPdf.text(splitValue, 55, yPos);
+        yPos += (splitValue.length * 5) + 2;
+      };
+
+      const translateLang = (lang: string) => {
+        if (lang === '廣東話' || lang === 'Cantonese') return 'Cantonese';
+        if (lang === '普通話' || lang === 'Mandarin') return 'Mandarin';
+        if (lang === '英文' || lang === 'English') return 'English';
+        return lang;
+      };
+
+      const languages = tutor.teachingLanguages?.map(translateLang).join(', ') || "Not specified";
+
+      printLine("Employment Type", tutor.employmentType ? tutor.employmentType.replace('_', ' ').toUpperCase() : "Not specified");
+      printLine("Teaching Languages", languages);
+      printLine("Available Days", tutor.availableDays?.join(', ') || "Not specified");
+      printLine("Qualified Categories", selectedUser.qualifiedCategories?.join(', ') || "Not specified");
+      
+      docPdf.save(`${selectedUser.name}_Instructor_Profile.pdf`.replace(/\s+/g, '_'));
+    } catch (e: any) {
+      console.error("PDF generation failed", e);
+      toast.error(`Failed to generate PDF: ${e.message || "Unknown error"}`);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
   return (
     <Dialog open={isUserViewModalOpen} onOpenChange={setIsUserViewModalOpen}>
       <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -208,12 +314,62 @@ export function UserViewModal({
               <div className="md:col-span-2">
                 {["tutor", "tutor_pt"].includes(selectedUser.role || "") ? (
                   <div className="space-y-6">
-                    <h3 className="text-lg font-bold flex items-center gap-2">
-                      <GraduationCap className="w-5 h-5 text-indigo-600" />{" "}
-                      Instructor Profile
+                    <h3 className="text-lg font-bold flex items-center justify-between w-full">
+                      <span className="flex items-center gap-2">
+                        <GraduationCap className="w-5 h-5 text-indigo-600" />{" "}
+                        Instructor Profile
+                      </span>
+                      <Button disabled={isGeneratingPdf} onClick={generateTutorProfilePDF} size="sm" variant="outline" className="gap-2 text-indigo-600 border-indigo-200 hover:bg-indigo-50">
+                        {isGeneratingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} 
+                        {isGeneratingPdf ? "Generating..." : "Export CV (PDF)"}
+                      </Button>
                     </h3>
 
                     <div className="grid grid-cols-1 gap-6">
+                        <Card className="bg-indigo-50/50 border-indigo-100">
+                          <CardHeader className="py-3 px-4">
+                            <CardTitle className="text-sm font-bold text-indigo-800">
+                              Teaching Preferences & Bio
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="p-4 space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <span className="text-xs font-semibold text-slate-500 uppercase">Employment Type</span>
+                                <p className="text-sm font-medium text-slate-800 capitalize mt-1">
+                                  {selectedUser.tutorProfile?.employmentType?.replace('_', ' ') || "Not specified"}
+                                </p>
+                              </div>
+                              <div>
+                                <span className="text-xs font-semibold text-slate-500 uppercase">Teaching Languages</span>
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {selectedUser.tutorProfile?.teachingLanguages?.length ? 
+                                    selectedUser.tutorProfile.teachingLanguages.map(l => (
+                                      <span key={l} className="px-2 py-0.5 bg-white border border-slate-200 text-slate-700 text-xs rounded-md">{l}</span>
+                                    )) : <span className="text-sm text-slate-400">Not specified</span>
+                                  }
+                                </div>
+                              </div>
+                              <div className="col-span-2">
+                                <span className="text-xs font-semibold text-slate-500 uppercase">Available Days</span>
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {selectedUser.tutorProfile?.availableDays?.length ? 
+                                    selectedUser.tutorProfile.availableDays.map(d => (
+                                      <span key={d} className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-md font-medium">{d.substring(0, 3)}</span>
+                                    )) : <span className="text-sm text-slate-400">Not specified</span>
+                                  }
+                                </div>
+                              </div>
+                              <div className="col-span-2">
+                                <span className="text-xs font-semibold text-slate-500 uppercase">Bio</span>
+                                <p className="text-sm text-slate-700 mt-1 whitespace-pre-wrap">
+                                  {selectedUser.tutorProfile?.bio || <span className="text-slate-400 italic">No bio provided.</span>}
+                                </p>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+
                       <Card>
                         <CardHeader className="py-3 px-4">
                           <CardTitle className="text-sm font-bold flex items-center gap-2">
@@ -222,73 +378,32 @@ export function UserViewModal({
                           </CardTitle>
                         </CardHeader>
                         <CardContent className="p-4">
-                          {selectedUser.qualifiedCategories &&
-                          selectedUser.qualifiedCategories.length > 0 ? (
-                            <div className="space-y-4">
-                              <div className="flex flex-wrap gap-2">
-                                {selectedUser.qualifiedCategories.map(
-                                  (category) => (
-                                    <span
-                                      key={category}
-                                      className="px-2.5 py-1.5 bg-indigo-50 text-indigo-700 text-xs font-semibold rounded-full border border-indigo-100 flex flex-col leading-tight"
-                                    >
-                                      <span>{category}</span>
-                                    </span>
-                                  ),
-                                )}
-                              </div>
-                            </div>
-                          ) : (
-                            <p className="text-xs text-slate-400 italic">
-                              No specific categories assigned.
-                            </p>
-                          )}
-                        </CardContent>
-                      </Card>
-
-                      {/* Expertise Section */}
-                      <Card>
-                        <CardHeader className="py-3 px-4 flex flex-row items-center justify-between">
-                          <CardTitle className="text-sm font-bold flex items-center gap-2">
-                            <Briefcase className="w-4 h-4" /> Expertise Areas
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-4">
                           <div className="flex flex-wrap gap-2">
-                            {expertise
-                              .filter((e) => e.tutorId === selectedUser.id)
-                              .map((exp) => (
-                                <div
-                                  key={exp.id}
-                                  className="bg-slate-50 border rounded-lg p-3 flex flex-col gap-1 w-full sm:w-[calc(50%-0.5rem)]"
+                            {systemCategories.length > 0 ? (
+                              systemCategories.map((category) => {
+                                const isSelected = selectedUser.qualifiedCategories?.includes(category);
+                                return (
+                                  <span
+                                    key={category}
+                                    className={`px-2.5 py-1.5 text-xs font-semibold rounded-full border flex flex-col leading-tight ${isSelected ? "bg-indigo-50 text-indigo-700 border-indigo-100" : "bg-slate-50 text-slate-400 border-slate-100"}`}
+                                  >
+                                    <span>{category}</span>
+                                  </span>
+                                );
+                              })
+                            ) : (
+                              selectedUser.qualifiedCategories?.map((category) => (
+                                <span
+                                  key={category}
+                                  className="px-2.5 py-1.5 bg-indigo-50 text-indigo-700 text-xs font-semibold rounded-full border border-indigo-100 flex flex-col leading-tight"
                                 >
-                                  <div className="flex justify-between items-start">
-                                    <p className="font-bold text-slate-800 text-sm">
-                                      {exp.expertiseArea}
-                                    </p>
-                                    <span
-                                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                        exp.skillLevel === "expert"
-                                          ? "bg-indigo-100 text-indigo-700"
-                                          : exp.skillLevel === "advanced"
-                                            ? "bg-blue-100 text-blue-700"
-                                            : "bg-slate-100 text-slate-600"
-                                      }`}
-                                    >
-                                      {exp.skillLevel}
-                                    </span>
-                                  </div>
-                                  <p className="text-xs text-slate-500">
-                                    {exp.yearsOfExperience} yrs exp •{" "}
-                                    {exp.preferredCourseLevel} level
-                                  </p>
-                                </div>
-                              ))}
-                            {expertise.filter(
-                              (e) => e.tutorId === selectedUser.id,
-                            ).length === 0 && (
+                                  <span>{category}</span>
+                                </span>
+                              ))
+                            )}
+                            {(!selectedUser.qualifiedCategories || selectedUser.qualifiedCategories.length === 0) && systemCategories.length === 0 && (
                               <p className="text-xs text-slate-400 italic">
-                                No expertise areas recorded.
+                                No specific categories assigned.
                               </p>
                             )}
                           </div>
@@ -304,8 +419,9 @@ export function UserViewModal({
                         </CardHeader>
                         <CardContent className="p-4 scroll-m-1">
                           <div className="space-y-3">
-                            {certs
+                            {[...certs]
                               .filter((c) => c.tutorId === selectedUser.id)
+                              .sort((a, b) => (a.order || 0) - (b.order || 0))
                               .map((cert) => (
                                 <div
                                   key={cert.id}
@@ -319,24 +435,9 @@ export function UserViewModal({
                                       <p className="text-sm font-bold text-slate-800">
                                         {cert.certificationName}
                                       </p>
-                                      <p className="text-[10px] text-slate-500 uppercase">
-                                        {cert.issuingOrganization} •{" "}
-                                        {cert.issueDate}
-                                      </p>
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2">
-                                    <span
-                                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                        cert.status === "active"
-                                          ? "bg-green-100 text-green-700"
-                                          : cert.status === "expired"
-                                            ? "bg-red-100 text-red-700"
-                                            : "bg-amber-100 text-amber-700"
-                                      }`}
-                                    >
-                                      {cert.status}
-                                    </span>
                                     {cert.certificateFileUrl && (
                                       <Button
                                         variant="ghost"
@@ -358,111 +459,6 @@ export function UserViewModal({
                                 No certifications recorded.
                               </p>
                             )}
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      {/* Workload Section */}
-                      <Card>
-                        <CardHeader className="py-3 px-4">
-                          <CardTitle className="text-sm font-bold flex items-center gap-2">
-                            <BarChart2 className="w-4 h-4" /> Workload Summary
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-4">
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                            <div className="p-3 bg-slate-50 rounded-lg">
-                              <p className="text-[10px] font-bold text-slate-500 uppercase">
-                                Courses Handled
-                              </p>
-                              <p className="text-lg font-bold text-slate-900">
-                                {
-                                  sessions.filter(
-                                    (s) => s.tutorId === selectedUser.id,
-                                  ).length
-                                }
-                              </p>
-                            </div>
-                            <div className="p-3 bg-slate-50 rounded-lg">
-                              <p className="text-[10px] font-bold text-slate-500 uppercase">
-                                Avg Rating
-                              </p>
-                              <p className="text-lg font-bold text-slate-900">
-                                {(() => {
-                                  const tutorFeedbacks = feedbacks.filter(
-                                    (f) => {
-                                      if (
-                                        f.trainerName &&
-                                        f.trainerName === selectedUser.name
-                                      )
-                                        return true;
-                                      if (f.sessionId)
-                                        return (
-                                          sessions.find(
-                                            (s) => s.id === f.sessionId,
-                                          )?.tutorId === selectedUser.id
-                                        );
-                                      return (
-                                        courses.find((c) => c.id === f.courseId)
-                                          ?.tutorId === selectedUser.id
-                                      );
-                                    },
-                                  );
-                                  const total = tutorFeedbacks.reduce(
-                                    (acc, curr) =>
-                                      acc +
-                                      parseFloat(
-                                        curr.overallTrainerScore ||
-                                          curr.overallCourseScore ||
-                                          curr.rating ||
-                                          0,
-                                      ),
-                                    0,
-                                  );
-                                  return tutorFeedbacks.length > 0
-                                    ? (total / tutorFeedbacks.length).toFixed(1)
-                                    : "N/A";
-                                })()}
-                              </p>
-                            </div>
-                            <div className="p-3 bg-slate-50 rounded-lg">
-                              <p className="text-[10px] font-bold text-slate-500 uppercase">
-                                Hours (MTD)
-                              </p>
-                              <p className="text-lg font-bold text-slate-900">
-                                {hours
-                                  .filter(
-                                    (h) =>
-                                      h.tutorId === selectedUser.id &&
-                                      h.status === "approved",
-                                  )
-                                  .reduce(
-                                    (acc, curr) => acc + (curr.hours || 0),
-                                    0,
-                                  )}
-                              </p>
-                            </div>
-                            <div className="p-3 bg-indigo-50 rounded-lg">
-                              <p className="text-[10px] font-bold text-indigo-500 uppercase">
-                                Est. Payout
-                              </p>
-                              <p className="text-lg font-bold text-indigo-700">
-                                $
-                                {(
-                                  hours
-                                    .filter(
-                                      (h) =>
-                                        h.tutorId === selectedUser.id &&
-                                        h.status === "approved",
-                                    )
-                                    .reduce(
-                                      (acc, curr) => acc + (curr.hours || 0),
-                                      0,
-                                    ) *
-                                  (selectedUser.tutorProfile?.hourlyRate || 150)
-                                ).toLocaleString()}
-                              </p>
-                            </div>
                           </div>
                         </CardContent>
                       </Card>
@@ -503,93 +499,6 @@ export function UserViewModal({
                           >
                             <Download className="w-3.5 h-3.5" /> Export MTM PDF
                           </Button>
-                        </CardContent>
-                      </Card>
-
-                      {/* Instructor Evaluations Section */}
-                      <Card>
-                        <CardHeader className="py-3 px-4">
-                          <CardTitle className="text-sm font-bold flex items-center gap-2">
-                            <MessageSquare className="w-4 h-4 text-blue-600" />{" "}
-                            Instructor Evaluations
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-4">
-                          <div className="space-y-2">
-                            {feedbacks
-                              .filter((f) => {
-                                if (
-                                  f.trainerName &&
-                                  f.trainerName === selectedUser.name
-                                )
-                                  return true;
-                                if (f.sessionId)
-                                  return (
-                                    sessions.find((s) => s.id === f.sessionId)
-                                      ?.tutorId === selectedUser.id
-                                  );
-                                return (
-                                  courses.find((c) => c.id === f.courseId)
-                                    ?.tutorId === selectedUser.id
-                                );
-                              })
-                              .map((f: any) => (
-                                <div
-                                  key={f.id}
-                                  className="p-3 border rounded-lg hover:bg-blue-50/30 transition-colors"
-                                >
-                                  <div className="flex justify-between items-start mb-1">
-                                    <span
-                                      className="text-sm font-semibold text-slate-700 max-w-[200px] truncate"
-                                      title={f.courseName}
-                                    >
-                                      {f.courseName}
-                                    </span>
-                                    <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded text-[10px] font-bold inline-flex items-center gap-1">
-                                      <Star className="w-2.5 h-2.5 fill-current" />{" "}
-                                      {f.overallTrainerScore ||
-                                        f.overallCourseScore ||
-                                        f.rating ||
-                                        "-"}
-                                    </span>
-                                  </div>
-                                  {f.trainerFeedback && (
-                                    <p className="text-xs text-slate-500 italic mt-1 line-clamp-2">
-                                      "{f.trainerFeedback}"
-                                    </p>
-                                  )}
-                                  {f.comment && !f.trainerFeedback && (
-                                    <p className="text-xs text-slate-500 italic mt-1 line-clamp-2">
-                                      "{f.comment}"
-                                    </p>
-                                  )}
-                                  <div className="text-[9px] text-slate-400 mt-2 font-mono">
-                                    By: {f.studentName || "Anonymous"} •{" "}
-                                    {f.date || "Unknown Date"}
-                                  </div>
-                                </div>
-                              ))}
-                            {feedbacks.filter((f) => {
-                              if (
-                                f.trainerName &&
-                                f.trainerName === selectedUser.name
-                              )
-                                return true;
-                              if (f.sessionId)
-                                return (
-                                  sessions.find((s) => s.id === f.sessionId)
-                                    ?.tutorId === selectedUser.id
-                                );
-                              return (
-                                courses.find((c) => c.id === f.courseId)
-                                  ?.tutorId === selectedUser.id
-                              );
-                            }).length === 0 && (
-                              <p className="text-xs text-slate-400 italic">
-                                No evaluations received yet.
-                              </p>
-                            )}
-                          </div>
                         </CardContent>
                       </Card>
                     </div>

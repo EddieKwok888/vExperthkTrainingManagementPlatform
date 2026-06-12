@@ -525,6 +525,22 @@ export function SessionsTab({
                                     </span>
                                   ) : (
                                     <div className="flex justify-end gap-1">
+                                      {regs.filter((r) => r.sessionId === s.id && r.status === "verified").length > 0 && (
+                                         <Button
+                                           variant="ghost"
+                                           size="sm"
+                                           className="h-8 w-8 p-0 text-emerald-400 hover:text-emerald-600 hover:bg-emerald-50"
+                                           title="Download Attendance List"
+                                           onClick={() => {
+                                             const verifiedStudents = regs.filter((r) => r.sessionId === s.id && r.status === "verified");
+                                             if (handleExportAttendanceSheet) {
+                                               handleExportAttendanceSheet(s, course, verifiedStudents);
+                                             }
+                                           }}
+                                         >
+                                           <ClipboardList className="w-3.5 h-3.5" />
+                                         </Button>
+                                      )}
                                       <Button
                                         variant="ghost"
                                         size="sm"

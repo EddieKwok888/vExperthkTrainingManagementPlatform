@@ -4,7 +4,7 @@
  */
 
 import { BrowserRouter as Router, Routes, Route, Outlet, Link, useNavigate, Navigate } from 'react-router-dom';
-import React, { useEffect, useState, createContext, useContext } from 'react';
+import React, { useEffect, useState, createContext, useContext, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { auth, db } from './lib/firebase';
 import { onAuthStateChanged, User, signInWithPopup, GoogleAuthProvider, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
@@ -30,6 +30,8 @@ import { RegisterCourse } from './features/courses/RegisterCourse';
 import { PaymentStatus } from './features/payment/PaymentStatus';
 import { AdminDashboard } from './features/admin/AdminDashboard';
 import { InstructorDashboard } from './features/instructor/InstructorDashboard';
+const QRPopup = React.lazy(() => import('./features/instructor/QRPopup').then(m => ({ default: m.QRPopup })));
+const AttendPage = React.lazy(() => import('./features/student/AttendPage').then(m => ({ default: m.AttendPage })));
 import { StudentDashboard } from './features/student/StudentDashboard';
 import { FeedbackForm } from './features/feedback/FeedbackForm';
 import { ChatBot } from './components/common/ChatBot';
@@ -432,19 +434,23 @@ export default function App() {
   return (
     <AuthProvider>
       <Router>
-        <Routes>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Home />} />
-            <Route path="course/:id" element={<CourseDetail />} />
-            <Route path="register/:id" element={<RegisterCourse />} />
-            <Route path="payment-status/:id" element={<PaymentStatus />} />
-            <Route path="admin" element={<ProtectedRoute allowedRoles={['admin', 'coordinator', 'finance', 'staff']}><AdminDashboard /></ProtectedRoute>} />
-            <Route path="admin/student/:id" element={<ProtectedRoute allowedRoles={['admin', 'coordinator', 'staff']}><StudentProfile /></ProtectedRoute>} />
-            <Route path="instructor" element={<ProtectedRoute allowedRoles={['admin', 'coordinator', 'tutor', 'tutor_pt']}><InstructorDashboard /></ProtectedRoute>} />
-            <Route path="student/registrations" element={<ProtectedRoute allowedRoles={['admin', 'student']}><StudentDashboard /></ProtectedRoute>} />
-            <Route path="feedback/:id" element={<ProtectedRoute allowedRoles={['admin', 'tutor', 'student']}><FeedbackForm /></ProtectedRoute>} />
-          </Route>
-        </Routes>
+        <Suspense fallback={<div className="flex h-screen w-screen items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
+          <Routes>
+            <Route path="/" element={<Layout />}>
+              <Route index element={<Home />} />
+              <Route path="course/:id" element={<CourseDetail />} />
+              <Route path="register/:id" element={<RegisterCourse />} />
+              <Route path="payment-status/:id" element={<PaymentStatus />} />
+              <Route path="admin" element={<ProtectedRoute allowedRoles={['admin', 'coordinator', 'finance', 'staff']}><AdminDashboard /></ProtectedRoute>} />
+              <Route path="admin/student/:id" element={<ProtectedRoute allowedRoles={['admin', 'coordinator', 'staff']}><StudentProfile /></ProtectedRoute>} />
+              <Route path="instructor" element={<ProtectedRoute allowedRoles={['admin', 'coordinator', 'tutor', 'tutor_pt']}><InstructorDashboard /></ProtectedRoute>} />
+              <Route path="qr-display/:lessonId" element={<ProtectedRoute allowedRoles={['admin', 'coordinator', 'tutor', 'tutor_pt', 'staff']}><QRPopup /></ProtectedRoute>} />
+              <Route path="student/registrations" element={<ProtectedRoute allowedRoles={['admin', 'student']}><StudentDashboard /></ProtectedRoute>} />
+              <Route path="attend/:token" element={<AttendPage />} />
+              <Route path="feedback/:id" element={<ProtectedRoute allowedRoles={['admin', 'tutor', 'student']}><FeedbackForm /></ProtectedRoute>} />
+            </Route>
+          </Routes>
+        </Suspense>
       </Router>
       <Toaster />
     </AuthProvider>

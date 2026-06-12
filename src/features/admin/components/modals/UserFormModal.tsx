@@ -17,7 +17,9 @@ import {
   FileText,
   ExternalLink as Link,
 } from "lucide-react";
-import React, { Key } from "react";
+import React, { Key, useState, useEffect } from "react";
+import { getDoc, doc } from "firebase/firestore";
+import { db } from "../../../../lib/firebase";
 import {
   Dialog,
   DialogContent,
@@ -98,6 +100,25 @@ export function UserFormModal({
   user,
   userForm,
 }: UserFormModalProps) {
+  const [systemCategories, setSystemCategories] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (isUserModalOpen && (userForm.role === "tutor" || userForm.role === "tutor_pt")) {
+      const fetchCategories = async () => {
+        try {
+          const docRef = doc(db, 'settings', 'course_categories');
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists() && docSnap.data().categories) {
+            setSystemCategories(docSnap.data().categories);
+          }
+        } catch (error) {
+          console.error("Failed to fetch course categories", error);
+        }
+      };
+      fetchCategories();
+    }
+  }, [isUserModalOpen, userForm.role]);
+
   return (
     <Dialog open={isUserModalOpen} onOpenChange={setIsUserModalOpen}>
       <DialogContent className="sm:max-w-md">
@@ -329,13 +350,8 @@ export function UserFormModal({
                         qualified to teach.
                       </p>
                       <div className="max-h-64 overflow-y-auto border border-slate-200 rounded-md p-3 bg-white flex flex-wrap gap-2">
-                        {Array.from(
-                          new Set(
-                            courses.map((c) => c.category).filter(Boolean),
-                          ),
-                        )
-                          .sort()
-                          .map((category) => {
+                        {systemCategories.length > 0 ? (
+                          systemCategories.map((category) => {
                             const isSelected =
                               userForm.qualifiedCategories?.includes(
                                 category,
@@ -375,10 +391,10 @@ export function UserFormModal({
                                 {String(category)}
                               </label>
                             );
-                          })}
-                        {courses.length === 0 && (
-                          <span className="text-xs text-slate-500">
-                            No categories available.
+                          })
+                        ) : (
+                          <span className="text-xs text-slate-500 italic">
+                            Loading categories...
                           </span>
                         )}
                       </div>

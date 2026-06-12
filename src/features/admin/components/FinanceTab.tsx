@@ -60,14 +60,42 @@ export const FinanceTab = React.memo(function FinanceTab({
   const [uploadingQR, setUploadingQR] = useState<{fps: boolean, payme: boolean}>({ fps: false, payme: false });
   const [localPreviews, setLocalPreviews] = useState<{fps?: string, payme?: string}>({});
 
-  // Reset back to page 1 during searching
+  const currentMonthStr = useMemo(() => new Date(Date.now() + 8*3600000).toISOString().slice(0, 7), []);
+  const [monthFilter, setMonthFilter] = useState<string>(currentMonthStr);
+
+  const availableMonths = useMemo(() => {
+     const months = new Set<string>();
+     months.add(currentMonthStr);
+     regs.forEach(r => {
+        if (!r.createdAt) return;
+        const date = r.createdAt?.toDate ? r.createdAt.toDate() : new Date(r.createdAt);
+        const hkDate = new Date(date.getTime() + (8 * 3600000));
+        months.add(hkDate.toISOString().slice(0, 7));
+     });
+     return Array.from(months).sort((a, b) => b.localeCompare(a));
+  }, [regs, currentMonthStr]);
+
+  // Reset back to page 1 during searching or month change
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [regSearchTerm]);
+  }, [regSearchTerm, monthFilter]);
+
+  const baseRegs = useMemo(() => {
+     let filtered = regs.filter(r => !r.isBundleChild);
+     if (monthFilter !== 'all') {
+         filtered = filtered.filter(r => {
+             if (!r.createdAt) return false;
+             const date = r.createdAt?.toDate ? r.createdAt.toDate() : new Date(r.createdAt);
+             const hkDate = new Date(date.getTime() + (8 * 3600000));
+             return hkDate.toISOString().slice(0, 7) === monthFilter;
+         });
+     }
+     return filtered;
+  }, [regs, monthFilter]);
 
   const filteredRegs = useMemo(() => {
     const searchLower = regSearchTerm.toLowerCase();
-    return regs.filter(r => {
+    return baseRegs.filter(r => {
       return (
         (r.invoiceNumber || '').toLowerCase().includes(searchLower) ||
         (r.studentName || '').toLowerCase().includes(searchLower) ||
@@ -75,7 +103,7 @@ export const FinanceTab = React.memo(function FinanceTab({
         (r.studentPhone || '').toLowerCase().includes(searchLower)
       );
     });
-  }, [regs, regSearchTerm]);
+  }, [baseRegs, regSearchTerm]);
 
   const paginatedRegs = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -84,20 +112,25 @@ export const FinanceTab = React.memo(function FinanceTab({
 
   const totalPages = Math.ceil(filteredRegs.length / itemsPerPage) || 1;
 
-  const verifiedRegs = regs.filter((r) => r.status === "verified");
+  const verifiedRegs = baseRegs.filter((r) => r.status === "verified");
   const totalRev = verifiedRegs.reduce((acc, r) => acc + (r.amount || 0), 0);
 
   const revMap: Record<string, number> = {};
   verifiedRegs.forEach((r) => {
-    const cRef =
-      courses.find((c) => c.id === r.courseId)?.title ||
-      r.courseId?.slice(0, 8);
-    revMap[cRef] = (revMap[cRef] || 0) + (r.amount || 0);
+    if (r.isBundleParent && r.peerCourseId) {
+       const splitAmount = (r.amount || 0) / 2;
+       const c1Ref = courses.find((c) => c.id === r.courseId)?.title || r.courseId?.slice(0, 8);
+       const c2Ref = courses.find((c) => c.id === r.peerCourseId)?.title || r.peerCourseId?.slice(0, 8);
+       revMap[c1Ref] = (revMap[c1Ref] || 0) + splitAmount;
+       revMap[c2Ref] = (revMap[c2Ref] || 0) + splitAmount;
+    } else {
+       const cRef = courses.find((c) => c.id === r.courseId)?.title || r.courseId?.slice(0, 8);
+       revMap[cRef] = (revMap[cRef] || 0) + (r.amount || 0);
+    }
   });
-  const courseRevData = Object.keys(revMap).map((k) => ({
-    name: k,
-    revenue: revMap[k],
-  }));
+  const courseRevData = Object.keys(revMap)
+    .map((k) => ({ name: k, revenue: revMap[k] }))
+    .sort((a, b) => b.revenue - a.revenue);
   const compressImage = async (file: File): Promise<Blob> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -191,20 +224,6 @@ export const FinanceTab = React.memo(function FinanceTab({
           <h2 className="text-xl font-bold text-slate-800 tracking-tight font-sans">Financial Reports & Payments</h2>
           <p className="text-sm text-slate-500">Track revenue and verify student payments</p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-            <Input
-              placeholder="Search Invoice #, Email, Phone..."
-              className="pl-10 w-full sm:w-[350px] h-10 border-slate-200 focus:ring-blue-500 text-xs"
-              value={regSearchTerm}
-              onChange={(e) => setRegSearchTerm(e.target.value)}
-            />
-          </div>
-          <Button variant="outline" onClick={() => handleExportCSV(filteredRegs.map((r:any) => ({ Invoice: r.invoiceNumber, Student: r.studentName, Amount: r.amount, Method: r.paymentMethod, Status: r.status, Date: formatHkDate(r.createdAt, true) })), 'financial_report')} className="gap-2 h-10 border-slate-200 font-bold text-[10px] uppercase tracking-widest font-sans">
-            <Download className="w-4 h-4" /> Export Report
-          </Button>
-        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -214,7 +233,7 @@ export const FinanceTab = React.memo(function FinanceTab({
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-extrabold text-slate-900 tracking-tighter">
-              ${regs.filter((r:any) => r.status === 'verified').reduce((sum: number, r:any) => sum + (r.amount || 0), 0).toLocaleString()}
+              ${baseRegs.filter((r:any) => r.status === 'verified').reduce((sum: number, r:any) => sum + (r.amount || 0), 0).toLocaleString()}
             </div>
             <div className="flex items-center gap-1 mt-1 text-slate-400">
               <TrendingUp className="w-3 h-3 text-green-500" />
@@ -229,7 +248,7 @@ export const FinanceTab = React.memo(function FinanceTab({
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-extrabold text-slate-900 tracking-tighter">
-              ${regs.filter((r:any) => r.status === 'pending' || r.status === 'pending_verification').reduce((sum: number, r:any) => sum + (r.amount || 0), 0).toLocaleString()}
+              ${baseRegs.filter((r:any) => r.status === 'pending' || r.status === 'pending_verification').reduce((sum: number, r:any) => sum + (r.amount || 0), 0).toLocaleString()}
             </div>
             <div className="flex items-center gap-1 mt-1 text-slate-400">
               <Clock className="w-3 h-3 text-amber-500" />
@@ -244,7 +263,7 @@ export const FinanceTab = React.memo(function FinanceTab({
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-extrabold text-slate-900 tracking-tighter">
-              {regs.length}
+              {baseRegs.length}
             </div>
             <div className="flex items-center gap-1 mt-1 text-slate-400">
               <BarChart3 className="w-3 h-3 text-slate-400" />
@@ -312,8 +331,32 @@ export const FinanceTab = React.memo(function FinanceTab({
       </div>
 
       <Card className="border-slate-200 shadow-sm overflow-hidden">
-        <CardHeader className="bg-slate-50/30 border-b border-slate-100 pb-4">
+        <CardHeader className="bg-slate-50/30 border-b border-slate-100 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <CardTitle className="text-sm font-bold text-slate-800 font-sans">Payment Transactions</CardTitle>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <select
+              value={monthFilter}
+              onChange={(e) => setMonthFilter(e.target.value)}
+              className="h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 font-sans"
+            >
+              <option value="all">All Time</option>
+              {availableMonths.map(m => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+              <Input
+                placeholder="Search Invoice #, Email, Phone..."
+                className="pl-10 w-full sm:w-[250px] h-10 border-slate-200 focus:ring-blue-500 text-xs"
+                value={regSearchTerm}
+                onChange={(e) => setRegSearchTerm(e.target.value)}
+              />
+            </div>
+            <Button variant="outline" onClick={() => handleExportCSV(filteredRegs.map((r:any) => ({ Invoice: r.invoiceNumber, Student: r.studentName, Amount: r.amount, Method: r.paymentMethod, Status: r.status, Date: formatHkDate(r.createdAt, true) })), 'financial_report')} className="gap-2 h-10 border-slate-200 font-bold text-[10px] uppercase tracking-widest font-sans">
+              <Download className="w-4 h-4" /> Export Report
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -321,6 +364,7 @@ export const FinanceTab = React.memo(function FinanceTab({
               <TableHeader className="bg-slate-50/50">
                 <TableRow>
                   <TableHead className="py-4 px-6 text-[10px] font-bold uppercase tracking-wider text-slate-500 font-sans">Invoice No.</TableHead>
+                  <TableHead className="py-4 px-6 text-[10px] font-bold uppercase tracking-wider text-slate-500 font-sans">Course</TableHead>
                   <TableHead className="py-4 px-6 text-[10px] font-bold uppercase tracking-wider text-slate-500 font-sans">Student Info</TableHead>
                   <TableHead className="py-4 px-6 text-[10px] font-bold uppercase tracking-wider text-slate-500 font-sans">Method</TableHead>
                   <TableHead className="py-4 px-6 text-[10px] font-bold uppercase tracking-wider text-slate-500 font-sans">Amount</TableHead>
@@ -336,7 +380,22 @@ export const FinanceTab = React.memo(function FinanceTab({
                      <TableCell className="px-6 font-mono text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
                         {r.invoiceNumber || r.id?.slice(0,8)}
                      </TableCell>
-                     <TableCell className="px-6">
+                     <TableCell className="px-6 min-w-[150px]">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[10px] font-bold text-slate-700 font-sans line-clamp-2">
+                             {r.isBundleParent && r.peerCourseId ? '1. ' : ''}{courses.find(c => c.id === r.courseId)?.title || 'Course'}
+                          </span>
+                          {r.isBundleParent && r.peerCourseId && (
+                             <span className="text-[10px] font-bold text-slate-700 font-sans line-clamp-2">
+                               2. {courses.find(c => c.id === r.peerCourseId)?.title || 'Course'}
+                             </span>
+                          )}
+                          {r.isBundleParent && (
+                            <span className="text-[9px] text-emerald-600 font-bold mt-0.5">(2-Course Bundle)</span>
+                          )}
+                        </div>
+                     </TableCell>
+                     <TableCell className="px-6 min-w-[140px]">
                        <div className="font-bold text-slate-800 font-sans">{r.studentName}</div>
                        <div className="text-[10px] text-slate-500 font-medium font-sans">{r.studentEmail}</div>
                        <div className="text-[10px] text-slate-400 italic mt-0.5 font-sans">{r.studentPhone}</div>
@@ -410,7 +469,7 @@ export const FinanceTab = React.memo(function FinanceTab({
                   ))}
                 {filteredRegs.length === 0 && (
                   <TableRow>
-                     <TableCell colSpan={8} className="text-center py-16">
+                     <TableCell colSpan={9} className="text-center py-16">
                       <div className="flex flex-col items-center gap-2 text-slate-300">
                          <BarChart3 className="w-12 h-12" />
                          <span className="text-sm font-medium font-sans">No financial transactions found</span>

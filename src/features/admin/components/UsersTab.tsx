@@ -30,6 +30,7 @@ import {
   ShieldCheck,
   ShieldAlert,
   Trash2,
+  Eye,
 } from "lucide-react";
 import { ReadOnlyAlert } from "./ReadOnlyAlert";
 
@@ -45,6 +46,7 @@ export interface UsersTabProps {
   filteredUsers: any[];
   setUserForm: (val: any) => void;
   setIsUserModalOpen: (val: boolean) => void;
+  setIsUserViewModalOpen: (val: boolean) => void;
   handleExportCSV: (data: any[], type: string) => void;
   handleSort: (key: string) => void;
   sortConfig: { key: string; direction: "asc" | "desc" };
@@ -70,6 +72,7 @@ export function UsersTab({
   filteredUsers,
   setUserForm,
   setIsUserModalOpen,
+  setIsUserViewModalOpen,
   handleExportCSV,
   handleSort,
   sortConfig,
@@ -317,6 +320,20 @@ export function UsersTab({
                             title="Reset Password"
                           >
                             <KeyRound className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                        {(u.role === "tutor" || u.role === "tutor_pt") && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
+                            title="View Profile & Export CV"
+                            onClick={() => {
+                              setSelectedUser(u);
+                              setIsUserViewModalOpen(true);
+                            }}
+                          >
+                            <Eye className="w-3.5 h-3.5" />
                           </Button>
                         )}
                         <Button

@@ -8,6 +8,7 @@ import {
 } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
+import { formatHkDate, getHkDateString, getHkTime } from "../../../lib/utils";
 import {
   Building2,
   CalendarIcon,
@@ -136,7 +137,7 @@ export function SchedulingTab({
                 variant="ghost"
                 size="sm"
                 onClick={() => {
-                  const today = new Date();
+                  const today = getHkTime();
                   setScheduleDate(today.toISOString().split("T")[0]);
                 }}
                 className="h-8 px-3 text-xs font-bold text-slate-600"
@@ -147,7 +148,7 @@ export function SchedulingTab({
                 variant="ghost"
                 size="sm"
                 onClick={() => {
-                  const tomorrow = new Date();
+                  const tomorrow = getHkTime();
                   tomorrow.setDate(tomorrow.getDate() + 1);
                   setScheduleDate(tomorrow.toISOString().split("T")[0]);
                 }}
@@ -970,7 +971,7 @@ export function SchedulingTab({
           </CardHeader>
           <CardContent className="pt-0">
             {(() => {
-              const today = new Date().toISOString().split("T")[0];
+              const today = getHkDateString();
               const overlappingSessions = sessions.filter((s) => {
                 if (
                   s.sessionStatus !== "confirmed" &&

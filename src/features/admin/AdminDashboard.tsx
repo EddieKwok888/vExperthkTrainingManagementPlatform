@@ -116,7 +116,7 @@ import {
 } from "recharts";
 import { logAudit, updateRecord, createRecord } from "../../lib/services";
 import { isWeekendOrHoliday } from "../../lib/holidays";
-import { formatHkDate } from "../../lib/utils";
+import { formatHkDate, getHkDateString, getHkTime, parseHkDate } from "../../lib/utils";
 import { Calendar, dateFnsLocalizer, Views } from "react-big-calendar";
 import { format, parse, startOfWeek, getDay } from "date-fns";
 import { enUS } from "date-fns/locale/en-US";
@@ -397,7 +397,7 @@ export function AdminDashboard() {
   const [isManualHoursModalOpen, setIsManualHoursModalOpen] = useState(false);
   const [manualHoursForm, setManualHoursForm] = useState({
     tutorId: "",
-    date: new Date().toISOString().split("T")[0],
+    date: getHkDateString(),
     course: "",
   });
   const [isSubmittingManualHours, setIsSubmittingManualHours] = useState(false);
@@ -466,15 +466,15 @@ export function AdminDashboard() {
     | "tech-daily"
   >("trainer-daily");
   const [scheduleDate, setScheduleDate] = useState(
-    new Date().toISOString().split("T")[0],
+    getHkDateString(),
   );
   const [scheduleInstructorFilter, setScheduleInstructorFilter] = useState("");
   const [scheduleRoomFilter, setScheduleRoomFilter] = useState("");
   const [scheduleMonth, setScheduleMonth] = useState(
-    new Date().toISOString().slice(0, 7),
+    getHkDateString().slice(0, 7),
   );
-  const [mtmYear, setMtmYear] = useState(new Date().getFullYear().toString());
-  const [ptMonth, setPtMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [mtmYear, setMtmYear] = useState(getHkTime().getFullYear().toString());
+  const [ptMonth, setPtMonth] = useState(getHkDateString().slice(0, 7));
   const [isCertModalOpen, setIsCertModalOpen] = useState(false);
   const [selectedSessionCert, setSelectedSessionCert] = useState<any>(null);
   const [sessionStudentsData, setSessionStudentsData] = useState<any[]>([]);
@@ -964,7 +964,7 @@ export function AdminDashboard() {
         id: d.id,
         ...d.data(),
       }));
-      const now = new Date();
+      const now = getHkTime();
       now.setHours(0, 0, 0, 0); // normalize today to midnight
 
       const updatedSessionsList = await Promise.all(
@@ -981,9 +981,8 @@ export function AdminDashboard() {
             newStatus !== "completed" &&
             newStatus !== "cancelled"
           ) {
-            const endDateVal = new Date(session.endDate);
+            const endDateVal = parseHkDate(session.endDate);
             endDateVal.setDate(endDateVal.getDate() + 1);
-            endDateVal.setHours(0, 0, 0, 0);
 
             if (now >= endDateVal) {
               newStatus = "completed";
@@ -998,8 +997,7 @@ export function AdminDashboard() {
             newStatus !== "completed" &&
             newStatus !== "cancelled"
           ) {
-            const startDateVal = new Date(session.startDate);
-            startDateVal.setHours(0, 0, 0, 0);
+            const startDateVal = parseHkDate(session.startDate);
 
             const oneDayBefore = new Date(startDateVal);
             oneDayBefore.setDate(oneDayBefore.getDate() - 1);
@@ -1748,7 +1746,7 @@ export function AdminDashboard() {
       toast.success("Teaching record added manually");
       setManualHoursForm({
         tutorId: "",
-        date: new Date().toISOString().split("T")[0],
+        date: getHkDateString(),
         course: "",
       });
       setIsManualHoursModalOpen(false);
@@ -2379,33 +2377,37 @@ export function AdminDashboard() {
     );
   };
 
-  const generateMTMReport = (
+  const generateMTMReport = async (
     tutorId: string,
     tutorName: string,
     year: string,
   ) => {
-    const doc = new jsPDF();
+    const toastId = toast.loading("Fetching latest MTM data from DB...");
+    try {
+      toast.dismiss(toastId);
 
-    // Find all lessons for this tutor in the given year where course category is Microsoft
-    const tutorLessons = lessons
-      .filter((l) => {
-        const session = sessions.find(
-          (s) => s.id === l.sessionId || s.id === l.session_id,
-        );
-        const course = courses.find((c) => c.id === session?.courseId);
+      const doc = new jsPDF();
+
+      // Find all sessions for this tutor in the given year where course is Microsoft
+      const tutorSessions = sessions
+      .filter((s) => {
+        const course = courses.find((c) => c.id === s.courseId);
         const isMicrosoft =
-          course?.category === "Microsoft" ||
-          course?.category?.toLowerCase() === "microsoft";
-        const tid =
-          l.tutorId || l.tutor_id || session?.tutorId || session?.tutor_id;
-        const inYear = (l.lessonDate || l.lesson_date || "").startsWith(year);
-        return tid === tutorId && inYear && isMicrosoft;
+          (course?.category || "").toLowerCase().includes("microsoft") ||
+          (course?.title || s.sessionName || "").toLowerCase().includes("microsoft") ||
+          (course?.certName || "").toLowerCase().includes("microsoft") ||
+          !!(course?.title || s.sessionName || "").toLowerCase().match(/ms-|az-|dp-|ai-|sc-|pl-|mb-|ab-/) ||
+          !!(course?.courseCode || s.courseCode || "").toLowerCase().match(/ms-|az-|dp-|ai-|sc-|pl-|mb-|ab-/);
+        
+        const tid = s.tutorId || s.tutor_id;
+        const inYear = (s.startDate || "").trim().startsWith(year);
+        const isConfirmed = s.sessionStatus === "confirmed" || s.sessionStatus === "full" || s.sessionStatus === "completed";
+        
+        return tid === tutorId && inYear && isMicrosoft && isConfirmed;
       })
-      .sort((a, b) =>
-        (a.lessonDate || a.lesson_date || "").localeCompare(
-          b.lessonDate || b.lesson_date || "",
-        ),
-      );
+      .sort((a, b) => (a.startDate || "").localeCompare(b.startDate || ""));
+
+
 
     const calculateHours = (start: string, end: string) => {
       if (!start || !end) return 0;
@@ -2415,24 +2417,24 @@ export function AdminDashboard() {
       return diff > 0 ? diff : 0;
     };
 
-    let yearlyRecords = tutorLessons.map((l) => {
-      const session = sessions.find(
-        (s) => s.id === l.sessionId || s.id === l.session_id,
-      );
-      const course = courses.find((c) => c.id === session?.courseId);
-      const startTime = l.startTime || session?.startTime;
-      const endTime = l.endTime || session?.endTime;
-      const hrs = calculateHours(startTime, endTime);
+    let yearlyRecords = tutorSessions.map((s) => {
+      const course = courses.find((c) => c.id === s.courseId);
+      const startTime = s.startTime || "09:00";
+      const endTime = s.endTime || "17:00";
+      const dailyHrs = calculateHours(startTime, endTime);
+      const days = Number(course?.day) || 1;
+      const totalHrs = dailyHrs * days;
+
       return {
-        date: l.lessonDate || l.lesson_date,
+        date: s.startDate || "N/A",
         notes:
-          (course?.title || session?.sessionName || "Course") +
+          (course?.title || s.sessionName || "Course") +
           " (" +
-          (startTime || "TBC") +
+          startTime +
           " - " +
-          (endTime || "TBC") +
-          ")",
-        hours: hrs,
+          endTime +
+          `, ${days} Days)`,
+        hours: totalHrs,
       };
     });
 
@@ -2446,32 +2448,42 @@ export function AdminDashboard() {
           const courseObj = courses.find(
             (c) => c.title === h.course || c.certName === h.course,
           );
+          
           if (
-            courseObj &&
-            (courseObj.category === "Microsoft" ||
-              courseObj.category?.toLowerCase() === "microsoft")
-          )
+            (courseObj?.category || "").toLowerCase().includes("microsoft") ||
+            (courseObj?.title || "").toLowerCase().includes("microsoft") ||
+            (courseObj?.certName || "").toLowerCase().includes("microsoft") ||
+            !!(courseObj?.title || "").toLowerCase().match(/ms-|az-|dp-|ai-|sc-|pl-|mb-|ab-/) ||
+            !!(courseObj?.courseCode || "").toLowerCase().match(/ms-|az-|dp-|ai-|sc-|pl-|mb-|ab-/)
+          ) {
             isMicrosoft = true;
+          }
+          
           if (
             h.course.toLowerCase().includes("microsoft") ||
-            h.course.toLowerCase().match(/ms-|az-|dp-|ai-|sc-|pl-|mb-/)
-          )
+            !!h.course.toLowerCase().match(/ms-|az-|dp-|ai-|sc-|pl-|mb-|ab-/)
+          ) {
             isMicrosoft = true;
+          }
         }
 
         return isMicrosoft;
       })
       .map((h) => ({
-        date: h.date,
-        notes: h.notes || h.course,
-        hours: h.hours,
+        date: h.date || "N/A",
+        notes: h.course + " (Manual)",
+        hours: Number(h.hours) || 0,
       }));
 
-    yearlyRecords = [...yearlyRecords, ...manualMsHours].sort((a, b) =>
-      (a.date || "").localeCompare(b.date || ""),
-    );
+    if (tutorSessions.length === 0 && manualMsHours.length === 0) {
+      toast.error(`No MS courses for year ${year}. Found 0 matching courses for your ID.`);
+    }
 
-    const totalHours = yearlyRecords.reduce(
+    const combinedRecords = [...yearlyRecords, ...manualMsHours]
+      .filter((r) => r.hours > 0)
+      .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+
+    const totalHours = combinedRecords.reduce(
       (acc, curr) => acc + (curr.hours || 0),
       0,
     );
@@ -2501,7 +2513,7 @@ export function AdminDashboard() {
     doc.setFont("helvetica", "normal");
     let y = 70;
 
-    yearlyRecords.forEach((h) => {
+    combinedRecords.forEach((h) => {
       if (y > 270) {
         doc.addPage();
         y = 20;
@@ -2517,7 +2529,11 @@ export function AdminDashboard() {
       y += splitNotes.length * 5 + 3;
     });
 
-    doc.save(`MTM_Report_${tutorName.replace(/\s+/g, "_")}_${year}.pdf`);
+      doc.save(`MTM_Report_${tutorName.replace(/\s+/g, "_")}_${year}.pdf`);
+    } catch (error: any) {
+      toast.dismiss(toastId);
+      toast.error("Failed to generate MTM Report: " + error.message);
+    }
   };
 
   const generateBulkCertificatesPDF = (
@@ -2860,8 +2876,29 @@ export function AdminDashboard() {
     doc.text("Amount", 160, 117);
 
     const relatedCourse = courses.find((c) => c.id === reg.courseId);
-    doc.text(relatedCourse?.title || "Course Payment", 25, 130);
-    doc.text(`$${reg.amount || 0}`, 160, 130);
+    
+    if (reg.isBundleParent && reg.peerCourseId) {
+      const secondCourse = courses.find((c) => c.id === reg.peerCourseId);
+      const title1 = doc.splitTextToSize(`1. ${relatedCourse?.title || "Course 1"}`, 125);
+      doc.text(title1, 25, 130);
+      let yOffset = title1.length * 5;
+      
+      const title2 = doc.splitTextToSize(`2. ${secondCourse?.title || "Course 2"}`, 125);
+      doc.text(title2, 25, 130 + yOffset);
+      
+      doc.text(`$${reg.amount || 0}`, 160, 130 + yOffset);
+      
+      yOffset += title2.length * 5;
+      doc.setFontSize(8);
+      doc.setTextColor(150);
+      doc.text(`(2-Course Bundle Special Deal)`, 25, 130 + yOffset);
+      doc.setFontSize(10);
+      doc.setTextColor(0);
+    } else {
+      const title1 = doc.splitTextToSize(relatedCourse?.title || "Course Payment", 125);
+      doc.text(title1, 25, 130);
+      doc.text(`$${reg.amount || 0}`, 160, 130);
+    }
 
     // Total
     doc.line(140, 170, 190, 170);
@@ -4001,6 +4038,7 @@ export function AdminDashboard() {
                 filteredUsers={filteredUsers}
                 setUserForm={setUserForm}
                 setIsUserModalOpen={setIsUserModalOpen}
+                setIsUserViewModalOpen={setIsUserViewModalOpen}
                 handleExportCSV={handleExportCSV}
                 handleSort={handleSort}
                 sortConfig={sortConfig}

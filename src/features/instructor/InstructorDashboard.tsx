@@ -15,19 +15,21 @@ import {
   ClipboardList, Send, RefreshCw, CreditCard, FileText, Download, 
   Search, Star, Check, Sparkles, BookOpen, MessageSquare, 
   Award, TrendingUp, Filter, AlertCircle, LayoutDashboard, CheckSquare, ShieldAlert,
-  MapPin, ExternalLink
+  MapPin, ExternalLink, User as UserIcon
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { ProfileSettingsTab } from '../../components/profile/ProfileSettingsTab';
 import { logAudit } from '../../lib/services';
-import { formatHkDate, getHkDateString } from '../../lib/utils';
+import { formatHkDate, getHkDateString, getHkTime, parseHkDate } from '../../lib/utils';
 import { isWeekendOrHoliday } from '../../lib/holidays';
+import { StaticQRModal } from './StaticQRModal';
 
 export function InstructorDashboard() {
   const { user } = useContext(AuthContext);
   const { t } = useTranslation();
   
   // Tab control
-  const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'hours' | 'reports'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'hours' | 'reports' | 'profile'>('overview');
   
   // DB states
   const [sessions, setSessions] = useState<any[]>([]);
@@ -43,10 +45,12 @@ export function InstructorDashboard() {
   const [lessons, setLessons] = useState<any[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string>('');
   const [selectedLesson, setSelectedLesson] = useState<any>(null);
+  const [selectedPeriod, setSelectedPeriod] = useState<'AM' | 'PM'>('AM');
   const [attendanceData, setAttendanceData] = useState<Record<string, string>>({});
   const [submittingAttendance, setSubmittingAttendance] = useState(false);
   const [lessonSearch, setLessonSearch] = useState('');
   const [studentSearch, setStudentSearch] = useState('');
+  const [staticQrToken, setStaticQrToken] = useState<string | null>(null);
 
   // Whenever selectedSessionId changes, find its lessons and load its data
   useEffect(() => {
@@ -58,7 +62,19 @@ export function InstructorDashboard() {
       // If we don't have a selectedLesson from this session currently, select the first one
       const isCurrentLessonInSession = selectedLesson && (selectedLesson.sessionId === selectedSessionId || selectedLesson.session_id === selectedSessionId);
       if (!isCurrentLessonInSession) {
-        handleSelectLesson(sessionLessons[0]);
+        const today = getHkDateString();
+        const nowHour = getHkTime().getHours();
+        const defaultPeriod = nowHour < 13 ? 'AM' : 'PM';
+        
+        // Find if any lesson is today
+        const todayLesson = sessionLessons.find(l => l.lessonDate === today);
+        if (todayLesson) {
+          handleSelectLesson(todayLesson);
+          setSelectedPeriod(defaultPeriod);
+        } else {
+          handleSelectLesson(sessionLessons[0]);
+          setSelectedPeriod('AM');
+        }
       }
     } else {
       // No lessons for this session yet, load verified registrations directly
@@ -67,7 +83,11 @@ export function InstructorDashboard() {
         try {
           const regsSnap = await getDocs(query(collection(db, 'registrations'), where('sessionId', '==', selectedSessionId), where('status', '==', 'verified')));
           setRegistrations(regsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-          setAttendanceData({});
+          setSelectedPeriod('AM');
+          if (!selectedLesson) {
+            setAttendanceData({});
+            return;
+          }
         } catch (err: any) {
           console.error(err);
         }
@@ -86,7 +106,7 @@ export function InstructorDashboard() {
   const [submittingHours, setSubmittingHours] = useState(false);
   const [hoursFilter, setHoursFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   
-  const [mtmYear, setMtmYear] = useState(new Date().getFullYear().toString());
+  const [mtmYear, setMtmYear] = useState(getHkTime().getFullYear().toString());
   const [stats, setStats] = useState({ upcomingSessions: 0, activeStudents: 0, averageRating: 0 });
 
   useEffect(() => {
@@ -362,99 +382,116 @@ export function InstructorDashboard() {
     toast.success(status === 'clear' ? '已重置所有點名紀錄 (Cleared all)' : `Marked all as ${label}`);
   };
 
-  const generateMTMReport = async () => {
+  const generateMTMReport = () => {
     if (!user?.uid) return;
     try {
-      // 1. Fetch fresh data directly from DB to guarantee it's up to date
-      const [sessionsSnap, coursesSnap, lessonsSnap, hoursSnap] = await Promise.all([
-        getDocs(collection(db, 'sessions')),
-        getDocs(collection(db, 'courses')),
-        getDocs(collection(db, 'lessons')),
-        getDocs(query(collection(db, 'teaching_hours'), where('tutorId', '==', user.uid)))
-      ]);
-
-      const freshSessions = sessionsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-      const freshCourses = coursesSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-      const freshLessons = lessonsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+      const tutorId = user.uid;
+      const year = mtmYear;
+      
+      const tutorSessions = sessions
+        .filter((s) => {
+          const course = courses.find((c) => c.id === s.courseId);
+          let isMicrosoft = false;
+          if (
+            (course?.category || "").toLowerCase().includes("microsoft") ||
+            (course?.title || "").toLowerCase().includes("microsoft") ||
+            (course?.certName || "").toLowerCase().includes("microsoft") ||
+            !!(course?.title || "").toLowerCase().match(/ms-|az-|dp-|ai-|sc-|pl-|mb-|ab-/) ||
+            !!(course?.courseCode || "").toLowerCase().match(/ms-|az-|dp-|ai-|sc-|pl-|mb-|ab-/)
+          ) {
+            isMicrosoft = true;
+          }
+          if (!isMicrosoft)
+            isMicrosoft =
+              (s.sessionName || "").toLowerCase().includes("microsoft") ||
+              !!(course?.courseCode || s.courseCode || "").toLowerCase().match(/ms-|az-|dp-|ai-|sc-|pl-|mb-|ab-/);
+          
+          const tid = s.tutorId || s.tutor_id;
+          const inYear = (s.startDate || "").trim().startsWith(year);
+          const isConfirmed = s.sessionStatus === "confirmed" || s.sessionStatus === "full" || s.sessionStatus === "completed";
+          
+          return tid === tutorId && inYear && isMicrosoft && isConfirmed;
+        })
+        .sort((a, b) => (a.startDate || "").localeCompare(b.startDate || ""));
 
       const calculateHours = (start: string, end: string) => {
-          if (!start || !end) return 0;
-          const [sh, sm] = start.split(':').map(Number);
-          const [eh, em] = end.split(':').map(Number);
-          const diff = ((eh * 60 + em) - (sh * 60 + sm)) / 60;
-          return diff > 0 ? diff : 0;
+        if (!start || !end) return 0;
+        const [sh, sm] = start.split(":").map(Number);
+        const [eh, em] = end.split(":").map(Number);
+        const diff = (eh * 60 + em - (sh * 60 + sm)) / 60;
+        return diff > 0 ? diff : 0;
       };
 
-      let yearlyRecords: any[] = [];
-      const tutorSessions = freshSessions.filter(s => 
-        (s.tutorId === user.uid || s.tutor_id === user.uid) && 
-        (s.sessionStatus !== 'deleted' && s.sessionStatus !== 'cancelled')
-      );
-      
-      tutorSessions.forEach(session => {
-        const course = freshCourses.find(c => c.id === session.courseId);
-        let isMicrosoft = false;
-        if (course && (course.category === 'Microsoft' || course.category?.toLowerCase() === 'microsoft')) isMicrosoft = true;
-        if (course && (course.title?.toLowerCase().includes('microsoft') || course.courseCode?.toLowerCase().match(/ms-|az-|dp-|ai-|sc-|pl-|mb-/))) isMicrosoft = true;
-        
-        if (!isMicrosoft) return;
-        
-        const sessionLessons = freshLessons.filter(l => l.sessionId === session.id || l.session_id === session.id)
-          .filter((l: any) => {
-             if (!session.startDate || !session.endDate || !l.lessonDate) return true;
-             return l.lessonDate >= session.startDate && l.lessonDate <= session.endDate;
-          })
-          .sort((a: any, b: any) => (a.lessonDate || "").localeCompare(b.lessonDate || ""));
-          
-        const uniqueLessons: any[] = [];
-        const seenDates = new Set();
-        for (const l of sessionLessons) {
-           if (!seenDates.has(l.lessonDate)) {
-             seenDates.add(l.lessonDate);
-             uniqueLessons.push(l);
-           }
-        }
-        
-        uniqueLessons.forEach(l => {
-           if (!l.lessonDate || !l.lessonDate.startsWith(mtmYear)) return;
-           const startTime = l.startTime || session.startTime || '09:00';
-           const endTime = l.endTime || session.endTime || '17:00';
-           const hrs = calculateHours(startTime, endTime);
-           
-           yearlyRecords.push({
-               date: l.lessonDate,
-               notes: (course?.title || session.sessionName || 'Course') + ' (' + startTime + ' - ' + endTime + ')',
-               hours: hrs
-           });
-        });
+      let yearlyRecords = tutorSessions.map((s) => {
+        const course = courses.find((c) => c.id === s.courseId);
+        const startTime = s.startTime || "09:00";
+        const endTime = s.endTime || "17:00";
+        const dailyHrs = calculateHours(startTime, endTime);
+        const days = Number(course?.day) || 1;
+        const totalHrs = dailyHrs * days;
+
+        return {
+          date: s.startDate || "N/A",
+          notes:
+            (course?.title || s.sessionName || "Course") +
+            " (" +
+            startTime +
+            " - " +
+            endTime +
+            `, ${days} Days)`,
+          hours: totalHrs,
+        };
       });
 
-      const allHours = hoursSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-      const manualMsHours = allHours.filter(h => {
-          if (!h.isManual) return false;
-          if (!h.date || !h.date.startsWith(mtmYear)) return false;
-          if (h.status === 'rejected' || h.status === 'deleted' || h.status === 'cancelled') return false;
-          if (!h.hours || h.hours <= 0) return false;
-          
+      const manualMsHours = hours
+        .filter((h) => {
+          if (h.tutorId !== tutorId || !h.isManual) return false;
+          if (!h.date || !h.date.startsWith(year)) return false;
+
           let isMicrosoft = false;
           if (h.course) {
-              const courseObj = freshCourses.find(c => c.title === h.course || c.certName === h.course);
-              if (courseObj && (courseObj.category === 'Microsoft' || courseObj.category?.toLowerCase() === 'microsoft')) isMicrosoft = true;
-              if (h.course.toLowerCase().includes('microsoft') || h.course.toLowerCase().match(/ms-|az-|dp-|ai-|sc-|pl-|mb-/)) isMicrosoft = true;
+            const courseObj = courses.find(
+              (c) => c.title === h.course || c.certName === h.course,
+            );
+            
+            if (
+              (courseObj?.category || "").toLowerCase().includes("microsoft") ||
+              (courseObj?.title || "").toLowerCase().includes("microsoft") ||
+              (courseObj?.certName || "").toLowerCase().includes("microsoft") ||
+              !!(courseObj?.title || "").toLowerCase().match(/ms-|az-|dp-|ai-|sc-|pl-|mb-|ab-/) ||
+              !!(courseObj?.courseCode || "").toLowerCase().match(/ms-|az-|dp-|ai-|sc-|pl-|mb-|ab-/)
+            ) {
+              isMicrosoft = true;
+            }
+            
+            if (
+              h.course.toLowerCase().includes("microsoft") ||
+              !!h.course.toLowerCase().match(/ms-|az-|dp-|ai-|sc-|pl-|mb-|ab-/)
+            ) {
+              isMicrosoft = true;
+            }
           }
-          
-          return isMicrosoft;
-      }).map(h => ({
-          date: h.date,
-          notes: h.notes || (h.course),
-          hours: h.hours
-      }));
 
-      yearlyRecords = [...yearlyRecords, ...manualMsHours]
-          .filter(r => r.hours && r.hours > 0)
-          .sort((a,b) => (a.date || '').localeCompare(b.date || ''));
-          
-      const totalHours = yearlyRecords.reduce((acc, curr) => acc + (curr.hours || 0), 0);
+          return isMicrosoft;
+        })
+        .map((h) => ({
+          date: h.date || "N/A",
+          notes: h.course + " (Manual)",
+          hours: Number(h.hours) || 0,
+        }));
+
+      if (tutorSessions.length === 0 && manualMsHours.length === 0) {
+        toast.error(`No MS courses for year ${year}. Found 0 matching courses for your ID.`);
+      }
+
+      const combinedRecords = [...yearlyRecords, ...manualMsHours]
+        .filter((r) => r.hours > 0)
+        .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+
+      const totalHours = combinedRecords.reduce(
+        (acc, curr) => acc + (curr.hours || 0),
+        0,
+      );
 
       const pdfDoc = new jsPDF();
       
@@ -481,7 +518,7 @@ export function InstructorDashboard() {
       pdfDoc.setFont("helvetica", "normal");
       let y = 70;
       
-      yearlyRecords.forEach(h => {
+      combinedRecords.forEach(h => {
          if (y > 270) {
             pdfDoc.addPage();
             y = 20;
@@ -578,7 +615,7 @@ export function InstructorDashboard() {
     .sort((a, b) => {
       const aDate = a.startDate || '9999-12-31';
       const bDate = b.startDate || '9999-12-31';
-      return new Date(aDate).getTime() - new Date(bDate).getTime();
+      return parseHkDate(aDate).getTime() - parseHkDate(bDate).getTime();
     });
 
   // Filtering upcoming lectures for the instructor dashboard list (today or future + session open/full/confirmed)
@@ -679,8 +716,15 @@ export function InstructorDashboard() {
               value="hours" 
               className="data-active:!bg-amber-500 data-active:!text-white data-active:shadow-md hover:bg-white hover:text-amber-600 px-4 py-2 text-[11px] font-black uppercase tracking-widest text-slate-500 rounded-lg transition-all flex items-center gap-2"
             >
-              <FileText className="w-4 h-4" />
-              Course History
+              <Clock className="w-4 h-4" />
+              Hours Audit & Payments
+            </TabsTrigger>
+            <TabsTrigger 
+              value="profile"
+              className="data-active:!bg-blue-600 data-active:!text-white data-active:shadow-md hover:bg-white hover:text-blue-600 px-4 py-2 text-[11px] font-black uppercase tracking-widest text-slate-500 rounded-lg transition-all flex items-center gap-2"
+            >
+              <UserIcon className="w-4 h-4" />
+              Profile Settings
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -921,6 +965,12 @@ export function InstructorDashboard() {
                         }
                       }
                       
+                      // Map to AM and PM choices
+                      const amPmOptions = uniqueLessons.flatMap((l, lIdx) => [
+                        { ...l, period: 'AM', label: `Lecture ${lIdx + 1}: ${l.lessonDate} (AM) - Day ${lIdx + 1}` },
+                        { ...l, period: 'PM', label: `Lecture ${lIdx + 1}: ${l.lessonDate} (PM) - Day ${lIdx + 1}` }
+                      ]);
+                      
                       return (
                         <Card className="border-indigo-100 shadow-xl shadow-indigo-900/5 rounded-2xl ring-1 ring-indigo-50/50 relative">
                           
@@ -947,34 +997,58 @@ export function InstructorDashboard() {
                               </div>
 
                               {selectedLesson && (
-                                <Button
-                                  onClick={handleSaveAttendance}
-                                  disabled={submittingAttendance}
-                                  className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider h-11 px-5 shadow-lg shadow-emerald-100 transition-all rounded-xl gap-2"
-                                >
-                                  {submittingAttendance ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4.5 h-4.5" />}
-                                  <span>Save Changes</span>
-                                </Button>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Button
+                                    onClick={() => window.open(`/qr-display/${selectedLesson.id}_${selectedPeriod}`, 'QRPopup', 'width=800,height=800')}
+                                    variant="outline"
+                                    className="w-full sm:w-auto font-bold text-xs uppercase tracking-wider h-11 px-5 border-indigo-200 text-indigo-700 hover:bg-indigo-50 transition-all rounded-xl gap-2"
+                                  >
+                                    <Sparkles className="w-4 h-4" /> Start Dynamic QR
+                                  </Button>
+                                  <Button
+                                    onClick={() => {
+                                      const dateStr = (selectedLesson.lessonDate || '').replace(/-/g, '');
+                                      const staticToken = `STAT-${selectedLesson.id}_${selectedPeriod}-${dateStr}`;
+                                      setStaticQrToken(staticToken);
+                                    }}
+                                    variant="outline"
+                                    className="w-full sm:w-auto font-bold text-xs uppercase tracking-wider h-11 px-5 border-slate-200 text-slate-700 hover:bg-slate-50 transition-all rounded-xl gap-2"
+                                  >
+                                    <ExternalLink className="w-4 h-4" /> Static Link
+                                  </Button>
+                                  <Button
+                                    onClick={handleSaveAttendance}
+                                    disabled={submittingAttendance}
+                                    className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider h-11 px-5 shadow-lg shadow-emerald-100 transition-all rounded-xl gap-2"
+                                  >
+                                    {submittingAttendance ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4.5 h-4.5" />}
+                                    <span>Save Changes</span>
+                                  </Button>
+                                </div>
                               )}
                             </div>
 
-                            {/* Dropdown for specific lesson Selection */}
-                            {uniqueLessons.length > 0 ? (
+                            {amPmOptions.length > 0 ? (
                               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mt-4 bg-white/70 backdrop-blur-sm p-3 rounded-xl border border-indigo-100/50">
                                 <span className="text-[10px] font-black uppercase text-indigo-700 tracking-widest flex items-center gap-1">
                                   <Clock className="w-3.5 h-3.5" /> Select Class/Lecture Date:
                                 </span>
                                 <select
-                                  value={selectedLesson?.id || ''}
+                                  value={`${selectedLesson?.id}_${selectedPeriod}`}
                                   onChange={(e) => {
-                                    const chosen = uniqueLessons.find(l => l.id === e.target.value);
-                                    if (chosen) handleSelectLesson(chosen);
+                                    const val = e.target.value;
+                                    const [lId, p] = val.split('_');
+                                    const chosen = uniqueLessons.find(l => l.id === lId);
+                                    if (chosen) {
+                                      handleSelectLesson(chosen);
+                                      setSelectedPeriod(p as 'AM' | 'PM');
+                                    }
                                   }}
                                   className="h-8 text-xs font-bold rounded-lg border border-slate-200 bg-white px-2.5 focus:ring-2 focus:ring-indigo-500/20 text-slate-700 outline-none cursor-pointer text-ellipsis max-w-full"
                                 >
-                                  {uniqueLessons.map((l, lIdx) => (
-                                    <option key={l.id} value={l.id}>
-                                      Lecture {lIdx + 1}: {l.lessonDate} ({l.startTime || '09:00'}) - Day {lIdx + 1}
+                                  {amPmOptions.map((opt) => (
+                                    <option key={`${opt.id}_${opt.period}`} value={`${opt.id}_${opt.period}`}>
+                                      {opt.label}
                                     </option>
                                   ))}
                                 </select>
@@ -1281,7 +1355,7 @@ export function InstructorDashboard() {
                         onChange={e => setMtmYear(e.target.value)}
                       >
                         {(() => {
-                           const currentYr = new Date().getFullYear();
+                          const currentYr = getHkTime().getFullYear();
                            return [currentYr, currentYr-1].map(yr => (
                              <option key={yr} value={yr.toString()}>{yr} Year</option>
                            ));
@@ -1316,9 +1390,16 @@ export function InstructorDashboard() {
             );
           })()}
 
+          {activeTab === 'profile' && (
+            <div className="space-y-6">
+              <ProfileSettingsTab user={user} userData={userProfile} role={userProfile?.role} />
+            </div>
+          )}
+
         </div>
 
       </div>
+      <StaticQRModal token={staticQrToken} onClose={() => setStaticQrToken(null)} />
     </div>
   );
 }

@@ -10,6 +10,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { formatHkDate, getHkDateString } from '../../lib/utils';
 import { jsPDF } from 'jspdf';
+import { ProfileSettingsTab } from '../../components/profile/ProfileSettingsTab';
+import { User as UserIcon } from 'lucide-react';
 
 const generateCertificatePDF = (cert: any) => {
   const doc = new jsPDF({ orientation: 'landscape' });
@@ -212,6 +214,13 @@ export function StudentDashboard() {
           >
             <Award className="w-4 h-4" />
             Certificates
+          </TabsTrigger>
+          <TabsTrigger 
+            value="profile"
+            className="data-active:!bg-blue-600 data-active:!text-white data-active:shadow-md hover:bg-white hover:text-blue-600 px-4 py-2 text-[11px] font-black uppercase tracking-widest text-slate-500 rounded-lg transition-all flex items-center gap-2"
+          >
+            <UserIcon className="w-4 h-4" />
+            Profile Settings
           </TabsTrigger>
         </TabsList>
 
@@ -513,6 +522,9 @@ export function StudentDashboard() {
                )}
             </CardContent>
           </Card>
+        </TabsContent>
+        <TabsContent value="profile" className="space-y-6 pt-4">
+           <ProfileSettingsTab user={user} userData={user} role={role} />
         </TabsContent>
       </Tabs>
     </div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { db } from '../../lib/firebase';
+import { getHkTime, parseHkDate } from '../../lib/utils';
 import { doc, getDoc, collection, query, where, getDocs, addDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { AuthContext } from '../../App';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
@@ -104,9 +105,11 @@ export function RegisterCourse() {
               }
 
               const s1Fetched = s1Snap.docs.map(d => ({ id: d.id, ...d.data() })).filter((s: any) => s.sessionStatus === 'open' || s.id === preselectedSession || (isWalkIn && s.sessionStatus === 'confirmed'));
+              s1Fetched.sort((a: any, b: any) => (a.startDate || '').localeCompare(b.startDate || ''));
               setSessions(s1Fetched);
 
               const s2Fetched = s2Snap.docs.map(d => ({ id: d.id, ...d.data() })).filter((s: any) => s.sessionStatus === 'open' || s.id === preselectedSession || (isWalkIn && s.sessionStatus === 'confirmed'));
+              s2Fetched.sort((a: any, b: any) => (a.startDate || '').localeCompare(b.startDate || ''));
               setSessions2(s2Fetched);
 
               if (s1Fetched.length > 0) {
@@ -166,37 +169,15 @@ export function RegisterCourse() {
           }
 
           // Update list to be valid dates only
-          const now = new Date();
+          const now = getHkTime();
           const validPromos = promosList.filter(p => {
-             if (p.startDate && new Date(p.startDate) > now) return false;
-             if (p.endDate && new Date(p.endDate) < now) return false;
+             if (p.startDate && parseHkDate(p.startDate) > now) return false;
+             if (p.endDate && parseHkDate(p.endDate) < now) return false;
              return true;
           });
           setPromotions(validPromos);
 
-          // Auto-apply bundle promos if any match
-          if (courseSnap.exists()) {
-             const bundlePromo = validPromos.find(p => {
-                 if (p.type !== 'bundle') return false;
-                 
-                 const required = p.conditions?.requiredCourseIds || [];
-                 if (required.length !== 2) return false;
-                 
-                 const [c1, c2] = required;
-                 
-                 // Registering for C1, has C2 in history
-                 if (courseSnap.id === c1 && pCourses.includes(c2)) return true;
-                 // Registering for C2, has C1 in history
-                 if (courseSnap.id === c2 && pCourses.includes(c1)) return true;
-                 
-                 return false;
-             });
-             
-             if (bundlePromo) {
-               setAppliedPromo(bundlePromo);
-               toast.success(`Bundle discount '${bundlePromo.name}' applied automatically!`);
-             }
-          }
+          // Auto-apply logic for single courses removed to prevent bundle promos applying outside of bundle mode
         }
       } catch (e) {
         console.error(e);
@@ -264,6 +245,25 @@ export function RegisterCourse() {
 
     setSubmitting(true);
     try {
+      // Check for duplicate registration
+      const q1 = query(collection(db, 'registrations'), where('studentEmail', '==', formData.studentEmail.trim().toLowerCase()), where('sessionId', '==', formData.sessionId));
+      const dup1 = await getDocs(q1);
+      if (!dup1.empty) {
+        toast.error('You have already registered for this session. Duplicate registrations are not allowed.');
+        setSubmitting(false);
+        return;
+      }
+
+      if (isBundleMode && formSession2Id) {
+        const q2 = query(collection(db, 'registrations'), where('studentEmail', '==', formData.studentEmail.trim().toLowerCase()), where('sessionId', '==', formSession2Id));
+        const dup2 = await getDocs(q2);
+        if (!dup2.empty) {
+          toast.error('You have already registered for the second course session. Duplicate registrations are not allowed.');
+          setSubmitting(false);
+          return;
+        }
+      }
+
       if (isBundleMode) {
         // Compute overall bundle amount
         const s1 = sessions.find(s => s.id === formData.sessionId);
@@ -292,9 +292,9 @@ export function RegisterCourse() {
           courseId: id,
           sessionId: formData.sessionId,
           studentId: isWalkIn ? null : (user?.uid || null),
-          studentName: formData.studentName,
-          studentEmail: formData.studentEmail,
-          studentPhone: formData.studentPhone,
+          studentName: formData.studentName.trim(),
+          studentEmail: formData.studentEmail.trim().toLowerCase(),
+          studentPhone: formData.studentPhone.trim(),
           company: formData.company,
           jobTitle: formData.jobTitle,
           remarks: formData.remarks + "\n[System Notes: Registered under 2-Course Bundle promotion]",
@@ -318,9 +318,9 @@ export function RegisterCourse() {
           courseId: course2.id,
           sessionId: formSession2Id,
           studentId: isWalkIn ? null : (user?.uid || null),
-          studentName: formData.studentName,
-          studentEmail: formData.studentEmail,
-          studentPhone: formData.studentPhone,
+          studentName: formData.studentName.trim(),
+          studentEmail: formData.studentEmail.trim().toLowerCase(),
+          studentPhone: formData.studentPhone.trim(),
           company: formData.company,
           jobTitle: formData.jobTitle,
           remarks: formData.remarks + `\n[System Notes: Registered under 2-Course Bundle promotion. Linked Parent registration: ${parentRef.id}]`,
@@ -367,9 +367,9 @@ export function RegisterCourse() {
           courseId: id,
           sessionId: formData.sessionId,
           studentId: isWalkIn ? null : (user?.uid || null),
-          studentName: formData.studentName,
-          studentEmail: formData.studentEmail,
-          studentPhone: formData.studentPhone,
+          studentName: formData.studentName.trim(),
+          studentEmail: formData.studentEmail.trim().toLowerCase(),
+          studentPhone: formData.studentPhone.trim(),
           company: formData.company,
           jobTitle: formData.jobTitle,
           remarks: formData.remarks,
@@ -380,7 +380,7 @@ export function RegisterCourse() {
           amount: Number(baseAmount),
         };
 
-        const existingQ = query(collection(db, 'registrations'), where('studentEmail', '==', formData.studentEmail));
+        const existingQ = query(collection(db, 'registrations'), where('studentEmail', '==', formData.studentEmail.trim().toLowerCase()));
         const existingSnap = await getDocs(existingQ);
         const matchedDocs = existingSnap.docs.filter(d => d.data().sessionId === formData.sessionId);
 

@@ -177,12 +177,34 @@ export function StudentProfile() {
     y += 10;
 
     doc.setFont("helvetica", "normal");
-    const itemName = `${course?.title || 'Course'} (${session?.sessionName || 'Session'})`;
-    const splitTitle = doc.splitTextToSize(itemName, 130);
-    doc.text(splitTitle, 20, y);
-    doc.text(`HKD ${reg.amount || 0}`, 160, y);
     
-    y += (splitTitle.length * 6) + 10;
+    let currentY = y;
+    if (reg.isBundleParent && reg.peerCourseId) {
+       const secondCourse = Object.values(courses).find((c: any) => c.id === reg.peerCourseId) as any;
+       const title1 = doc.splitTextToSize(`1. ${course?.title || 'Course 1'} (${session?.sessionName || 'Session'})`, 125);
+       doc.text(title1, 20, currentY);
+       currentY += title1.length * 6;
+       
+       const title2 = doc.splitTextToSize(`2. ${secondCourse?.title || 'Course 2'}`, 125);
+       doc.text(title2, 20, currentY);
+       
+       doc.text(`HKD ${reg.amount || 0}`, 160, currentY);
+       
+       currentY += title2.length * 6;
+       doc.setFontSize(8);
+       doc.setTextColor(150);
+       doc.text(`(2-Course Bundle Special Deal)`, 20, currentY);
+       doc.setFontSize(12);
+       doc.setTextColor(0);
+       
+       y = currentY + 10;
+    } else {
+       const itemName = `${course?.title || 'Course'} (${session?.sessionName || 'Session'})`;
+       const splitTitle = doc.splitTextToSize(itemName, 130);
+       doc.text(splitTitle, 20, currentY);
+       doc.text(`HKD ${reg.amount || 0}`, 160, currentY);
+       y = currentY + (splitTitle.length * 6) + 10;
+    }
     
     doc.line(20, y, 190, y);
     y += 10;

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
+import { formatHkDate, getHkTime, parseHkDate } from '../../lib/utils';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -53,10 +54,10 @@ export function Home() {
         const pq = query(collection(db, 'promotions'), where('status', '==', 'active'));
         const promoSnap = await getDocs(pq);
         const promoList = promoSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        const now = new Date();
+        const now = getHkTime();
         const activePromos = promoList.filter((p: any) => {
-          if (p.startDate && new Date(p.startDate) > now) return false;
-          if (p.endDate && new Date(p.endDate) < now) return false;
+          if (p.startDate && parseHkDate(p.startDate) > now) return false;
+          if (p.endDate && parseHkDate(p.endDate) < now) return false;
           return true;
         });
         setPromotions(activePromos);

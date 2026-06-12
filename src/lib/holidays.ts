@@ -31,9 +31,9 @@ export function isWeekendOrHoliday(dateString: string): { isInvalid: boolean; re
   const dateObj = new Date(dateString);
   const dayOfWeek = dateObj.getDay();
   
-  // 0 is Sunday, 6 is Saturday
-  if (dayOfWeek === 0 || dayOfWeek === 6) {
-    return { isInvalid: true, reason: 'Weekends (Saturday/Sunday) Cannot be selected / 星期六及星期日不可選' };
+  // 0 is Sunday
+  if (dayOfWeek === 0) {
+    return { isInvalid: true, reason: 'Sunday Cannot be selected / 星期日不可選' };
   }
 
   if (HK_PUBLIC_HOLIDAYS.includes(dateString)) {
