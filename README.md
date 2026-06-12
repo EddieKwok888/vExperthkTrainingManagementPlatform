@@ -142,6 +142,11 @@ The system supports multi-language capabilities easily switchable via the UI.
 - **Firebase Hosting Integration**: Configured `firebase.json` and `.firebaserc` to establish a seamless deployment pipeline. The entire React SPA is now successfully built and hosted live on Firebase Hosting, directly integrated with the existing Firebase backend services.
 - **Branding Update**: Updated the global application title to correctly display **"VExpert HK - Training Management"** on all browser tabs instead of the default placeholder.
 
+### 6. 📊 Student Progress Tracking Fix (學生進度顯示修復)
+- **Robust Attendance Linking**: Refactored the core attendance tracking logic across the system to strictly rely on immutable `registrationId`s rather than volatile `studentId`s, preventing data loss when taking attendance for walk-in students without accounts.
+- **Dynamic Session Handling**: Removed strict date-range filters from both the Student and Instructor Dashboards. This ensures that attendance recorded for makeup classes, delayed schedules, or off-schedule training days are correctly captured and aggregated into the student's visual progress bar.
+
+
 ## 📅 Updates (2026-06-11)
 
 ### 1. 🔠 Alphabetical Student Roster Sorting (學生名單 A-Z 排序)

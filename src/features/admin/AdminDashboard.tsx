@@ -2006,7 +2006,8 @@ export function AdminDashboard() {
 
       const mergedData: Record<string, string> = {};
       enrolled.forEach((s: any) => {
-        mergedData[s.studentId] = existingAttendance[s.studentId] || "present";
+        const key = s.id;
+        mergedData[key] = existingAttendance[s.studentId] || existingAttendance[key] || "present";
       });
       setAttendanceData(mergedData);
     } catch (e: any) {
@@ -2019,14 +2020,17 @@ export function AdminDashboard() {
     setSubmittingAttendance(true);
     try {
       const batch = writeBatch(db);
-      for (const studentId of Object.keys(attendanceData)) {
-        const attendanceId = `${selectedLessonForAttendance.id}_${studentId}`;
+      for (const regId of Object.keys(attendanceData)) {
+        const studentRecord = regs.find(r => r.id === regId);
+        const studentId = studentRecord?.studentId || regId;
+        const attendanceId = `${selectedLessonForAttendance.id}_${regId}`;
         const attRef = doc(db, "attendance", attendanceId);
         batch.set(attRef, {
           lessonId: selectedLessonForAttendance.id,
           sessionId: selectedLessonForAttendance.sessionId,
           studentId: studentId,
-          status: attendanceData[studentId],
+          registrationId: regId,
+          status: attendanceData[regId],
           recordedAt: serverTimestamp(),
           recordedBy: user?.uid || "admin",
         });
@@ -2035,18 +2039,21 @@ export function AdminDashboard() {
 
       setGlobalAttendance((prev) => {
         const newAtt = [...prev];
-        for (const studentId of Object.keys(attendanceData)) {
-          const id = `${selectedLessonForAttendance.id}_${studentId}`;
+        for (const regId of Object.keys(attendanceData)) {
+          const studentRecord = regs.find(r => r.id === regId);
+          const studentId = studentRecord?.studentId || regId;
+          const id = `${selectedLessonForAttendance.id}_${regId}`;
           const existsIdx = newAtt.findIndex((a) => a.id === id);
           if (existsIdx >= 0) {
-            newAtt[existsIdx].status = attendanceData[studentId];
+            newAtt[existsIdx].status = attendanceData[regId];
           } else {
             newAtt.push({
               id,
               lessonId: selectedLessonForAttendance.id,
               sessionId: selectedLessonForAttendance.sessionId,
               studentId: studentId,
-              status: attendanceData[studentId],
+              registrationId: regId,
+              status: attendanceData[regId],
             });
           }
         }

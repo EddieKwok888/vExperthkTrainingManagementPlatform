@@ -149,14 +149,14 @@ export function AttendanceModal({
                             { id: 'absent', label: 'Absent', color: 'bg-red-600 border-red-600' }
                           ].map(
                             (item) => {
-                              const currentStatus = attendanceData[r.studentId] ?? '';
+                              const currentStatus = attendanceData[r.id] ?? '';
                               const isMarked = currentStatus === item.id || ((item.id === 'present_am' || item.id === 'present_pm') && currentStatus === 'present');
                               return (
                               <button
                                 key={item.id}
                                 onClick={() =>
                                   setAttendanceData((prev: any) => {
-                                    const cur = prev[r.studentId] || '';
+                                    const cur = prev[r.id] || '';
                                     let nextStatus = item.id;
                                     if (item.id === 'absent') {
                                       nextStatus = cur === 'absent' ? '' : 'absent';
@@ -169,7 +169,7 @@ export function AttendanceModal({
                                       else if (cur === 'present_am') nextStatus = 'present';
                                       else if (cur === 'present') nextStatus = 'present_am';
                                     }
-                                    return { ...prev, [r.studentId]: nextStatus };
+                                    return { ...prev, [r.id]: nextStatus };
                                   })
                                 }
                                 className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all tracking-wider border ${

@@ -144,10 +144,26 @@ export function StudentDashboard() {
              } catch (e) {}
 
              try {
-                const aq = query(collection(db, 'attendance'), where('studentId', '==', user.uid));
-                const attSnap = await getDocs(aq);
-                setAttendanceLogs(attSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-             } catch (e) {}
+                // Fetch attendance for all sessions the student is enrolled in
+                const attDocs: any[] = [];
+                const sessionIdsList = Array.from(new Set(regsData.map((r: any) => r.sessionId).filter(Boolean)));
+                for (let i = 0; i < sessionIdsList.length; i += 10) {
+                  const chunk = sessionIdsList.slice(i, i + 10);
+                  const attSnap = await getDocs(query(collection(db, 'attendance'), where('sessionId', 'in', chunk)));
+                  attDocs.push(...attSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+                }
+                
+                const myRegistrationIds = new Set(regsData.map((r: any) => r.id));
+                const myAtt = attDocs.filter(a => 
+                  a.studentId === user.uid || 
+                  myRegistrationIds.has(a.registrationId) || 
+                  myRegistrationIds.has(a.studentId)
+                );
+                console.log("DEBUG: fetched attendance logs for student:", myAtt, "regsData:", regsData);
+                setAttendanceLogs(myAtt);
+             } catch (e) {
+                console.error("Failed to load attendance", e);
+             }
           }
         } catch (e) {
           console.error(e);
@@ -323,11 +339,7 @@ export function StudentDashboard() {
                 let sessionLessons = lessons.filter(l => l.sessionId === r.sessionId);
                 
                 if (session) {
-                    // Filter out any accidentally created lessons that fall outside the course date range
-                    sessionLessons = sessionLessons.filter(l => {
-                      if (!session.startDate || !session.endDate || !l.lessonDate) return true;
-                      return l.lessonDate >= session.startDate && l.lessonDate <= session.endDate;
-                    });
+                    // We no longer filter by course date range to allow makeup/rescheduled lessons
                     
                     // Deduplicate existing lessons by date to prevent duplicate Day 1s
                     const uniqueLessonsMap = new Map();
@@ -351,6 +363,8 @@ export function StudentDashboard() {
                     const amMark = attsForLesson.some(a => a.status === 'present_am');
                     const pmMark = attsForLesson.some(a => a.status === 'present_pm');
                     const fullMark = attsForLesson.some(a => a.status === 'present');
+
+                    console.log(`DEBUG: Lesson ${l.id} - atts:`, attsForLesson, `am: ${amMark}, pm: ${pmMark}, full: ${fullMark}`);
 
                     if (fullMark) {
                         attendedDays += 1.0;
@@ -413,7 +427,10 @@ export function StudentDashboard() {
                                  </div>
                             </div>
                             <div className="text-right shrink-0">
-                                <div className="text-2xl font-black text-blue-600">{progressPercent}%</div>
+                                <div className="text-2xl font-black text-blue-600">
+                                    {progressPercent}%
+                                    <span className="text-[10px] font-mono text-slate-400 block -mt-1">({attendedDays}/{totalCourseDays})</span>
+                                </div>
                                 <div className="text-xs text-slate-500 font-medium">Completed</div>
                             </div>
                         </div>
@@ -485,7 +502,7 @@ export function StudentDashboard() {
                             </div>
                         </CardContent>
                     )}
-                 </Card>
+                  </Card>
                 );
               })}
             </div>

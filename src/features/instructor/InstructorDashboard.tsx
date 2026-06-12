@@ -290,8 +290,8 @@ export function InstructorDashboard() {
       
       const mergedData: Record<string, string> = {};
       enrolledStudents.forEach((s: any) => {
-        // use studentId as key for attendance
-        mergedData[s.studentId] = existingAttendance[s.studentId] || 'present';
+        const key = s.id;
+        mergedData[key] = existingAttendance[s.studentId] || existingAttendance[key] || 'present';
       });
       setAttendanceData(mergedData);
     } catch (error: any) {
@@ -332,14 +332,17 @@ export function InstructorDashboard() {
     setSubmittingAttendance(true);
     try {
       const batch = writeBatch(db);
-      for (const studentId of Object.keys(attendanceData)) {
-        const attendanceId = `${selectedLesson.id}_${studentId}`;
+      for (const regId of Object.keys(attendanceData)) {
+        const studentRecord = registrations.find(r => r.id === regId);
+        const studentId = studentRecord?.studentId || regId;
+        const attendanceId = `${selectedLesson.id}_${regId}`;
         const attRef = doc(db, 'attendance', attendanceId);
         batch.set(attRef, {
           lessonId: selectedLesson.id,
           sessionId: selectedLesson.sessionId,
           studentId: studentId,
-          status: attendanceData[studentId],
+          registrationId: regId,
+          status: attendanceData[regId],
           recordedAt: serverTimestamp(),
           recordedBy: user?.uid
         });
@@ -363,18 +366,19 @@ export function InstructorDashboard() {
     if (registrations.length === 0) return;
     const updated = { ...attendanceData };
     registrations.forEach(r => {
+      const key = r.id;
       if (status === 'clear') {
-         updated[r.studentId] = '';
+         updated[key] = '';
       } else if (status === 'absent') {
-         updated[r.studentId] = 'absent';
+         updated[key] = 'absent';
       } else if (status === 'present_am') {
-         const cur = updated[r.studentId];
-         if (cur === 'present_pm') updated[r.studentId] = 'present';
-         else if (cur !== 'present') updated[r.studentId] = 'present_am';
+         const cur = updated[key];
+         if (cur === 'present_pm') updated[key] = 'present';
+         else if (cur !== 'present') updated[key] = 'present_am';
       } else if (status === 'present_pm') {
-         const cur = updated[r.studentId];
-         if (cur === 'present_am') updated[r.studentId] = 'present';
-         else if (cur !== 'present') updated[r.studentId] = 'present_pm';
+         const cur = updated[key];
+         if (cur === 'present_am') updated[key] = 'present';
+         else if (cur !== 'present') updated[key] = 'present_pm';
       }
     });
     setAttendanceData(updated);
@@ -1156,7 +1160,7 @@ export function InstructorDashboard() {
                               </TableHeader>
                               <TableBody>
                                 {filteredRegistrations.map(r => {
-                                  const currentStatus = attendanceData[r.studentId] ?? '';
+                                  const currentStatus = attendanceData[r.id] ?? '';
                                   return (
                                     <TableRow key={r.id} className="hover:bg-slate-50/40 transition-colors border-b border-slate-50">
                                       <TableCell className="pl-6 py-4.5">
@@ -1183,7 +1187,7 @@ export function InstructorDashboard() {
                                                 <button
                                                   key={item.id}
                                                   onClick={() => setAttendanceData(prev => {
-                                                    const cur = prev[r.studentId] || '';
+                                                    const cur = prev[r.id] || '';
                                                     let nextStatus = item.id;
                                                     if (item.id === 'absent') {
                                                       nextStatus = cur === 'absent' ? '' : 'absent';
@@ -1196,7 +1200,7 @@ export function InstructorDashboard() {
                                                       else if (cur === 'present_am') nextStatus = 'present';
                                                       else if (cur === 'present') nextStatus = 'present_am';
                                                     }
-                                                    return { ...prev, [r.studentId]: nextStatus };
+                                                    return { ...prev, [r.id]: nextStatus };
                                                   })}
                                                   className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all border ${
                                                     isMarked 
