@@ -1,13 +1,14 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
-import { formatHkDate, getHkTime, parseHkDate } from '../../lib/utils';
+import { formatHkDate, getHkDateString } from '../../lib/utils';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Loader2, Search, Filter, Sparkles, Copy, Check, Gift, Zap, Calendar, FileText } from 'lucide-react';
 import { handleFirestoreError, OperationType } from '../../lib/error';
+import { WarningTextFormatter } from '../../components/ui/WarningTextFormatter';
 
 export function Home() {
   const [courses, setCourses] = useState<any[]>([]);
@@ -54,10 +55,18 @@ export function Home() {
         const pq = query(collection(db, 'promotions'), where('status', '==', 'active'));
         const promoSnap = await getDocs(pq);
         const promoList = promoSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        const now = getHkTime();
+        const todayStr = getHkDateString();
         const activePromos = promoList.filter((p: any) => {
-          if (p.startDate && parseHkDate(p.startDate) > now) return false;
-          if (p.endDate && parseHkDate(p.endDate) < now) return false;
+          if (p.category === 'welcome') return false;
+          
+          if (p.startDate) {
+             const startOnly = p.startDate.split('T')[0];
+             if (startOnly > todayStr) return false;
+          }
+          if (p.endDate) {
+             const endOnly = p.endDate.split('T')[0];
+             if (endOnly < todayStr) return false;
+          }
           return true;
         });
         setPromotions(activePromos);
@@ -202,7 +211,7 @@ export function Home() {
                             <Calendar className="w-3.5 h-3.5" /> {course.startDate ? `${course.startDate} to ${course.endDate || 'TBD'}` : 'Dates TBD'}
                           </span>
                           <br/>
-                          {course.description}
+                          <WarningTextFormatter text={course.description} />
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="flex-1 text-sm space-y-4 px-6">
@@ -277,7 +286,15 @@ export function Home() {
                             </span>
                           </div>
                           <div className="space-y-2">
-                            <h4 className="text-sm font-bold text-slate-800">{p.name}</h4>
+                            <div className="space-y-1">
+                              <h4 className="text-sm font-bold text-slate-800">{p.name}</h4>
+                              {(p.startDate || p.endDate) && (
+                                <div className="flex items-center gap-1 text-xs font-bold text-blue-700">
+                                  <Calendar className="w-3.5 h-3.5" />
+                                  <span>{(p.startDate || 'Now').split('T')[0]} to {(p.endDate || 'No Expiry').split('T')[0]}</span>
+                                </div>
+                              )}
+                            </div>
                             {isBundle ? (
                               <div className="space-y-2 pt-2 text-xs text-slate-600 border-t border-indigo-200/50 mt-2">
                                 <p className="font-bold text-[10px] text-indigo-600 uppercase tracking-wider bg-indigo-100/50 px-1.5 py-0.5 rounded w-fit">Included in bundle:</p>

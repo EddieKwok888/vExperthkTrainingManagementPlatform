@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../../components/ui/table';
@@ -86,6 +86,13 @@ export function PromotionsTab({
 }: PromotionsTabProps) {
   const [viewingPromoUsers, setViewingPromoUsers] = useState<any | null>(null);
   const [showInactive, setShowInactive] = useState<boolean>(false);
+  
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [promoCategoryFilter, showInactive]);
 
   const formatRegDate = (createdAt: any) => {
     if (!createdAt) return 'N/A';
@@ -109,6 +116,19 @@ export function PromotionsTab({
       return false;
     }
   };
+
+  const filteredPromotions = promotions.filter(p => {
+    const matchesCategory = promoCategoryFilter === 'all' || p.category === promoCategoryFilter;
+    const expired = isPromoExpired(p);
+    const isInactive = p.status === 'inactive' || expired;
+    if (!showInactive && isInactive) {
+      return false;
+    }
+    return matchesCategory;
+  });
+
+  const totalPages = Math.ceil(filteredPromotions.length / itemsPerPage) || 1;
+  const paginatedPromotions = filteredPromotions.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <div className="space-y-6">
@@ -167,16 +187,7 @@ export function PromotionsTab({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {promotions
-                .filter(p => {
-                  const matchesCategory = promoCategoryFilter === 'all' || p.category === promoCategoryFilter;
-                  const expired = isPromoExpired(p);
-                  const isInactive = p.status === 'inactive' || expired;
-                  if (!showInactive && isInactive) {
-                    return false;
-                  }
-                  return matchesCategory;
-                })
+              {paginatedPromotions
                 .map((p) => {
                   const verifiedRegs = regs.filter((r: any) => matchRegistrationToPromo(r, p) && r.status === 'verified');
                   const pendingRegs = regs.filter((r: any) => matchRegistrationToPromo(r, p) && r.status !== 'verified' && r.status !== 'rejected');
@@ -289,20 +300,29 @@ export function PromotionsTab({
                     </TableRow>
                   );
                 })}
-              {promotions.filter(p => {
-                const matchesCategory = promoCategoryFilter === 'all' || p.category === promoCategoryFilter;
-                const expired = isPromoExpired(p);
-                const isInactive = p.status === 'inactive' || expired;
-                if (!showInactive && isInactive) {
-                  return false;
-                }
-                return matchesCategory;
-              }).length === 0 && (
+              {filteredPromotions.length === 0 && (
                 <TableRow><TableCell colSpan={9} className="text-center h-24 text-slate-500 text-xs italic">No matching promotions found.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
         </CardContent>
+        {filteredPromotions.length > 10 && (
+          <div className="flex justify-end p-4 border-t border-slate-100">
+            <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+              <span className="text-xs text-slate-500 font-medium">Page</span>
+              <select
+                value={currentPage}
+                onChange={(e) => setCurrentPage(Number(e.target.value))}
+                className="bg-white border border-slate-300 text-slate-700 text-xs rounded focus:ring-blue-500 focus:border-blue-500 block px-2 py-1 outline-none font-medium cursor-pointer"
+              >
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                  <option key={page} value={page}>{page}</option>
+                ))}
+              </select>
+              <span className="text-xs text-slate-500 font-medium">of {totalPages}</span>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* Applied Promo Code Applicants List Modal */}
@@ -377,6 +397,11 @@ export function PromotionsTab({
                                   {r.company && <span>🏢 {r.company}</span>}
                                   {r.company && r.jobTitle && <span className="mx-1">•</span>}
                                   {r.jobTitle && <span>💼 {r.jobTitle}</span>}
+                                </div>
+                              )}
+                              {r.remarks && (
+                                <div className="text-[10px] text-amber-700 bg-amber-50 px-2 py-1 rounded mt-1 border border-amber-100 font-sans leading-tight line-clamp-2" title={r.remarks}>
+                                  <span className="font-bold">Remarks:</span> {r.remarks}
                                 </div>
                               )}
                             </div>

@@ -86,13 +86,13 @@ export function PromoModal({
 }: PromoModalProps) {
   return (
     <Dialog open={isPromoModalOpen} onOpenChange={setIsPromoModalOpen}>
-      <DialogContent className="max-w-xl sm:max-w-xl">
+      <DialogContent className="max-w-4xl sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {selectedPromo ? "Edit Promotion" : "Add Promotion"}
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-4">
+        <div className="space-y-6 py-4">
           <div className="space-y-2">
             <label className="text-sm font-medium">Promotion Name</label>
             <Input
@@ -103,6 +103,7 @@ export function PromoModal({
               placeholder="e.g. Early Bird 2026"
             />
           </div>
+
           <div className="space-y-2">
             <label className="text-sm font-medium">
               Marketing Channel Category
@@ -114,22 +115,22 @@ export function PromoModal({
                 setPromoForm({ ...promoForm, category: e.target.value })
               }
             >
-              {PROMO_CATEGORIES.map((cat) => (
+              {PROMO_CATEGORIES.map((cat: any) => (
                 <option key={cat.value} value={cat.value}>
                   {cat.label}
                 </option>
               ))}
             </select>
             <p className="text-xs text-slate-500">
-              Categorize this promo code to track which marketing channels
-              perform best.
+              Categorize this promo code to track which marketing channels perform best.
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+
+          <div className="grid grid-cols-2 gap-6">
             <div className="space-y-2">
               <label className="text-sm font-medium">Type</label>
               <select
-                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2"
+                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
                 value={promoForm.type}
                 onChange={(e) =>
                   setPromoForm({ ...promoForm, type: e.target.value })
@@ -144,7 +145,7 @@ export function PromoModal({
             <div className="space-y-2">
               <label className="text-sm font-medium">Status</label>
               <select
-                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2"
+                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
                 value={promoForm.status}
                 onChange={(e) =>
                   setPromoForm({ ...promoForm, status: e.target.value })
@@ -156,11 +157,9 @@ export function PromoModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Start Date (Optional)
-              </label>
+              <label className="text-sm font-medium">Start Date (Optional)</label>
               <Input
                 type="date"
                 value={promoForm.startDate || ""}
@@ -182,45 +181,74 @@ export function PromoModal({
           </div>
 
           {promoForm.type === "code" && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Promo Code</label>
-              <div className="flex gap-2">
-                <Input
-                  value={promoForm.code || ""}
-                  onChange={(e) =>
-                    setPromoForm({
-                      ...promoForm,
-                      code: e.target.value.toUpperCase(),
-                    })
-                  }
-                  placeholder="e.g. EARLY26"
-                  className="uppercase font-mono flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-                    let result = "";
-                    for (let i = 0; i < 6; i++) {
-                      result += chars.charAt(
-                        Math.floor(Math.random() * chars.length),
-                      );
+            <div className="space-y-4 pt-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Promo Code</label>
+                <div className="flex gap-2">
+                  <Input
+                    value={promoForm.code || ""}
+                    onChange={(e) =>
+                      setPromoForm({
+                        ...promoForm,
+                        code: e.target.value.toUpperCase(),
+                      })
                     }
-                    setPromoForm({ ...promoForm, code: result });
-                  }}
-                >
-                  Generate
-                </Button>
+                    placeholder="e.g. EARLY26"
+                    className="uppercase font-mono flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+                      let result = "";
+                      for (let i = 0; i < 6; i++) {
+                        result += chars.charAt(
+                          Math.floor(Math.random() * chars.length),
+                        );
+                      }
+                      setPromoForm({ ...promoForm, code: result });
+                    }}
+                  >
+                    Generate
+                  </Button>
+                </div>
               </div>
+              {promoForm.category === "corporate" && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Applicable Course (Optional)</label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+                    value={promoForm.applicableCourseIds?.[0] || ""}
+                    onChange={(e) => {
+                      const selectedId = e.target.value;
+                      setPromoForm({
+                        ...promoForm,
+                        applicableCourseIds: selectedId ? [selectedId] : []
+                      });
+                    }}
+                  >
+                    <option value="">All Courses (No restriction)</option>
+                    {courses.map((c: any) => (
+                      <option key={c.id} value={c.id}>
+                        {c.courseCode} - {c.title}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-slate-500">
+                    If selected, this promo code will only apply to the chosen course.
+                  </p>
+                </div>
+              )}
             </div>
           )}
+
           {promoForm.type === "bundle" && (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-6 pt-2">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Bundle Course 1</label>
                 <select
-                  className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2"
+                  className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
                   value={promoForm.bundleCourse1}
                   onChange={(e) =>
                     setPromoForm({
@@ -230,7 +258,7 @@ export function PromoModal({
                   }
                 >
                   <option value="">Select Course</option>
-                  {courses.map((c) => (
+                  {courses.map((c: any) => (
                     <option key={c.id} value={c.id}>
                       {c.courseCode} - {c.title}
                     </option>
@@ -240,7 +268,7 @@ export function PromoModal({
               <div className="space-y-2">
                 <label className="text-sm font-medium">Bundle Course 2</label>
                 <select
-                  className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2"
+                  className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
                   value={promoForm.bundleCourse2}
                   onChange={(e) =>
                     setPromoForm({
@@ -250,7 +278,7 @@ export function PromoModal({
                   }
                 >
                   <option value="">Select Course</option>
-                  {courses.map((c) => (
+                  {courses.map((c: any) => (
                     <option key={c.id} value={c.id}>
                       {c.courseCode} - {c.title}
                     </option>
@@ -265,7 +293,7 @@ export function PromoModal({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-6 pt-2">
             <div className="space-y-2">
               <label className="text-sm font-medium">Discount Type</label>
               <Input
@@ -292,8 +320,8 @@ export function PromoModal({
             </div>
           </div>
 
-          <div className="space-y-2 border-t pt-4 border-slate-100 mt-2">
-            <label className="text-sm font-medium flex items-center gap-2">
+          <div className="space-y-2 border-t pt-4 border-slate-100">
+            <label className="text-sm font-medium flex items-center gap-2 text-slate-800">
               <KeyRound className="w-4 h-4 text-slate-400" /> Admin Password
               Confirm <span className="text-red-500">*</span>
             </label>

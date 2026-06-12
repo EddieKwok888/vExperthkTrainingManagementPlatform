@@ -213,41 +213,52 @@ export function FeedbackTab({
       
       <CardContent className="pt-6">
         {!selectedFeedbackCourse ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {feedbacksBySession.map((group: any) => (
-              <div 
-                key={group.id} 
-                onClick={() => group.metrics.total > 0 && setSelectedFeedbackCourse(group)}
-                className={`relative bg-white border border-slate-200 rounded-xl p-5 shadow-sm transition-all duration-200 ${group.metrics.total > 0 ? 'cursor-pointer hover:shadow-md hover:border-indigo-300 hover:-translate-y-1' : 'opacity-70 cursor-not-allowed'}`}
-              >
-                {group.status && (
-                  <span className="absolute top-4 right-4 text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-100">
-                    {group.status}
-                  </span>
+          <div className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-sm">
+            <Table>
+              <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead>Course Name</TableHead>
+                  <TableHead>Start Date</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Responses</TableHead>
+                  <TableHead className="text-right">Avg Score</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {feedbacksBySession.map((group: any) => (
+                  <TableRow 
+                    key={group.id}
+                    className={group.metrics.total > 0 ? 'cursor-pointer hover:bg-slate-50' : 'opacity-70'}
+                    onClick={() => group.metrics.total > 0 && setSelectedFeedbackCourse(group)}
+                  >
+                    <TableCell className="font-bold text-slate-800">{group.courseName}</TableCell>
+                    <TableCell className="text-slate-500 text-xs">{group.isSession && group.startDate ? group.startDate : 'N/A'}</TableCell>
+                    <TableCell>
+                      {group.status && (
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-100">
+                          {group.status}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right font-semibold text-slate-700">{group.metrics.total}</TableCell>
+                    <TableCell className="text-right font-bold text-amber-600">
+                      <div className="flex justify-end items-center gap-1.5">
+                        <Star className="w-3.5 h-3.5 fill-current" /> {group.metrics.avgCourse || 'N/A'}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {group.metrics.total > 0 && <ArrowRight className="w-4 h-4 text-slate-300 inline-block" />}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {feedbacksBySession.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8 text-slate-500">No confirmed courses or feedbacks available.</TableCell>
+                  </TableRow>
                 )}
-                <div className="mb-4 pr-16">
-                  <h3 className="font-bold text-slate-800 text-sm leading-tight line-clamp-2">{group.courseName}</h3>
-                  {group.isSession && group.startDate && (
-                    <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5 font-medium"><Calendar className="w-3 h-3" /> {group.startDate}</p>
-                  )}
-                </div>
-                
-                <div className="flex items-center gap-4 mt-6 pt-4 border-t border-slate-100">
-                  <div className="flex-1">
-                    <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-1">Responses</p>
-                    <p className="font-black text-slate-800 flex items-center gap-1.5"><Users className="w-4 h-4 text-slate-400" /> {group.metrics.total}</p>
-                  </div>
-                  <div className="flex-1 border-l border-slate-100 pl-4">
-                    <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-1">Avg Score</p>
-                    <p className="font-black text-amber-600 flex items-center gap-1.5"><Star className="w-4 h-4 fill-current" /> {group.metrics.avgCourse || 'N/A'}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-            
-            {feedbacksBySession.length === 0 && (
-              <div className="col-span-full py-12 text-center text-slate-500 font-medium">No confirmed courses or feedbacks available.</div>
-            )}
+              </TableBody>
+            </Table>
           </div>
         ) : (
           <div className="space-y-8 animate-in fade-in duration-300">

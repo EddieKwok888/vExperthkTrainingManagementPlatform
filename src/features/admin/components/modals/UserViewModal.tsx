@@ -92,6 +92,7 @@ export interface UserViewModalProps {
   sessions: any;
   setIsUserViewModalOpen: any;
   setMtmYear: any;
+  schoolInfo?: any;
 }
 
 export function UserViewModal({
@@ -114,6 +115,7 @@ export function UserViewModal({
   sessions,
   setIsUserViewModalOpen,
   setMtmYear,
+  schoolInfo = {},
 }: UserViewModalProps) {
   const [systemCategories, setSystemCategories] = useState<string[]>([]);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
@@ -142,42 +144,85 @@ export function UserViewModal({
     try {
       const docPdf = new jsPDF();
       
-      docPdf.setFontSize(22);
+      let yPos = 40;
+      // Header
+      if (schoolInfo.logo_url && schoolInfo.logo_url.startsWith("data:image")) {
+        try {
+          docPdf.addImage(schoolInfo.logo_url, "PNG", 20, 10, 25, 25);
+          docPdf.setTextColor(0, 0, 0);
+          docPdf.setFontSize(22);
+          docPdf.text(schoolInfo.name || "School Name", 50, 22);
+          docPdf.setFontSize(10);
+          docPdf.setTextColor(100);
+          docPdf.text(schoolInfo.address || "Address", 50, 30);
+          docPdf.text(schoolInfo.phone || "Phone", 50, 35);
+        } catch (e) {
+          docPdf.setTextColor(0, 0, 0);
+          docPdf.setFontSize(22);
+          docPdf.text(schoolInfo.name || "School Name", 20, 20);
+          docPdf.setFontSize(10);
+          docPdf.setTextColor(100);
+          docPdf.text(schoolInfo.address || "Address", 20, 28);
+          docPdf.text(schoolInfo.phone || "Phone", 20, 33);
+        }
+      } else {
+        docPdf.setTextColor(0, 0, 0);
+        docPdf.setFontSize(22);
+        docPdf.text(schoolInfo.name || "School Name", 20, 20);
+        docPdf.setFontSize(10);
+        docPdf.setTextColor(100);
+        docPdf.text(schoolInfo.address || "Address", 20, 28);
+        docPdf.text(schoolInfo.phone || "Phone", 20, 33);
+      }
+
+      docPdf.setDrawColor(0);
+      docPdf.setLineWidth(0.5);
+      docPdf.line(20, yPos, 190, yPos);
+      yPos += 12;
+
+      docPdf.setFontSize(20);
       docPdf.setTextColor(40, 40, 40);
-      docPdf.text("Instructor Profile", 14, 22);
+      docPdf.setFont("helvetica", "bold");
+      docPdf.text("Instructor Profile", 20, yPos);
+      yPos += 10;
       
       docPdf.setFontSize(14);
       docPdf.setTextColor(60, 60, 60);
-      docPdf.text(selectedUser.name || "N/A", 14, 32);
+      docPdf.setFont("helvetica", "bold");
+      docPdf.text(selectedUser.name || "N/A", 20, yPos);
+      yPos += 8;
       
       docPdf.setFontSize(10);
       docPdf.setTextColor(100, 100, 100);
-      docPdf.text(`Email: ${selectedUser.email || "N/A"}`, 14, 40);
-      docPdf.text(`Phone: ${selectedUser.phone || "N/A"}`, 14, 46);
-      docPdf.text(`Company: ${selectedUser.company || "N/A"}`, 14, 52);
+      docPdf.setFont("helvetica", "normal");
+      docPdf.text(`Email: ${selectedUser.email || "N/A"}`, 20, yPos);
+      yPos += 6;
+      docPdf.text(`Phone: ${selectedUser.phone || "N/A"}`, 20, yPos);
+      yPos += 6;
+      docPdf.text(`Company: ${selectedUser.company || "N/A"}`, 20, yPos);
+      yPos += 12;
       
-      let yPos = 65;
       const tutor = selectedUser.tutorProfile || {};
       
       if (tutor.bio) {
         docPdf.setFontSize(12);
         docPdf.setTextColor(40, 40, 40);
         docPdf.setFont("helvetica", "bold");
-        docPdf.text("Professional Summary", 14, yPos);
+        docPdf.text("Professional Summary", 20, yPos);
         yPos += 8;
         
         docPdf.setFont("helvetica", "normal");
         docPdf.setFontSize(10);
         docPdf.setTextColor(60, 60, 60);
-        const splitBio = docPdf.splitTextToSize(tutor.bio, 180);
-        docPdf.text(splitBio, 14, yPos);
+        const splitBio = docPdf.splitTextToSize(tutor.bio, 170); // 190 - 20 = 170
+        docPdf.text(splitBio, 20, yPos);
         yPos += (splitBio.length * 5) + 10;
       }
       
       docPdf.setFontSize(12);
       docPdf.setTextColor(40, 40, 40);
       docPdf.setFont("helvetica", "bold");
-      docPdf.text("Details", 14, yPos);
+      docPdf.text("Details", 20, yPos);
       yPos += 8;
 
       docPdf.setFont("helvetica", "normal");
@@ -186,10 +231,10 @@ export function UserViewModal({
       
       const printLine = (label: string, value: string) => {
         docPdf.setFont("helvetica", "bold");
-        docPdf.text(`${label}:`, 14, yPos);
+        docPdf.text(`${label}:`, 20, yPos);
         docPdf.setFont("helvetica", "normal");
-        const splitValue = docPdf.splitTextToSize(value, 130);
-        docPdf.text(splitValue, 55, yPos);
+        const splitValue = docPdf.splitTextToSize(value, 120);
+        docPdf.text(splitValue, 60, yPos);
         yPos += (splitValue.length * 5) + 2;
       };
 
@@ -263,14 +308,6 @@ export function UserViewModal({
                     </span>
                   </div>
                 </div>
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-slate-500 uppercase font-bold">
-                  User ID
-                </p>
-                <p className="text-sm font-mono text-slate-700">
-                  {selectedUser.id}
-                </p>
               </div>
             </div>
 

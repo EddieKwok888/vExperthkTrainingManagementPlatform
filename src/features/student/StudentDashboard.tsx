@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { db } from '../../lib/firebase';
-import { collection, query, getDocs, where } from 'firebase/firestore';
+import { collection, query, getDocs, where, doc, getDoc } from 'firebase/firestore';
 import { AuthContext } from '../../App';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -8,43 +8,75 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/ta
 import { Loader2, Download, GraduationCap, FileText, Calendar, BookOpen, CheckCircle, Circle, PlayCircle, LayoutDashboard, Award } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { handleFirestoreError, OperationType } from '../../lib/error';
+import { WarningTextFormatter } from '../../components/ui/WarningTextFormatter';
 import { formatHkDate, getHkDateString } from '../../lib/utils';
 import { jsPDF } from 'jspdf';
 import { ProfileSettingsTab } from '../../components/profile/ProfileSettingsTab';
 import { User as UserIcon } from 'lucide-react';
 
-const generateCertificatePDF = (cert: any) => {
-  const doc = new jsPDF({ orientation: 'landscape' });
-  doc.setFillColor(240, 248, 255);
-  doc.rect(0, 0, 297, 210, 'F');
-  doc.setDrawColor(37, 99, 235);
-  doc.setLineWidth(2);
-  doc.rect(10, 10, 277, 190, 'S');
-  doc.setTextColor(30, 58, 138);
-  doc.setFontSize(40);
-  doc.text("Certificate of Completion", 148, 50, { align: 'center' });
-  doc.setTextColor(100, 116, 139);
-  doc.setFontSize(16);
-  doc.text("This is to certify that", 148, 80, { align: 'center' });
-  doc.setTextColor(15, 23, 42);
-  doc.setFontSize(30);
-  doc.text(cert.studentName || "Student Name", 148, 105, { align: 'center' });
-  doc.setTextColor(100, 116, 139);
-  doc.setFontSize(16);
-  doc.text("has successfully completed the course", 148, 130, { align: 'center' });
-  doc.setTextColor(37, 99, 235);
-  doc.setFontSize(24);
-  doc.text(cert.course_title || cert.courseTitle || "Course Title", 148, 150, { align: 'center' });
-  doc.setTextColor(100, 116, 139);
-  doc.setFontSize(12);
-  doc.text(`Issue Date: ${cert.issuedAt ? new Date(cert.issuedAt?.seconds ? cert.issuedAt.seconds * 1000 : cert.issuedAt).toLocaleDateString() : 'N/A'}`, 148, 175, { align: 'center' });
-  doc.text(`Certificate ID: ${cert.id || 'N/A'}`, 148, 182, { align: 'center' });
-  doc.setFillColor(234, 179, 8);
-  doc.circle(148, 195, 12, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(10);
-  doc.text("OFFICIAL", 148, 196, { align: 'center' });
-  doc.save(`Certificate-${cert.course_title || cert.courseTitle || 'Course'}.pdf`);
+const generateCertificatePDF = async (cert: any) => {
+  const pdf = new jsPDF({ orientation: 'landscape' });
+  pdf.setFillColor(240, 248, 255);
+  pdf.rect(0, 0, 297, 210, 'F');
+  pdf.setDrawColor(37, 99, 235);
+  pdf.setLineWidth(2);
+  pdf.rect(10, 10, 277, 190, 'S');
+
+  try {
+    const docRef = doc(db, 'settings', 'school_info');
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists() && docSnap.data().logo_url) {
+      const logoUrl = docSnap.data().logo_url;
+      if (logoUrl.startsWith('data:image')) {
+        pdf.addImage(logoUrl, 'PNG', 133, 15, 30, 30); // Center logo at the top
+      }
+    }
+  } catch (e) {
+    console.error('Could not load logo for certificate', e);
+  }
+
+  pdf.setTextColor(30, 58, 138);
+  pdf.setFontSize(40);
+  pdf.text("Certificate of Completion", 148, 60, { align: 'center' });
+  pdf.setTextColor(100, 116, 139);
+  pdf.setFontSize(16);
+  pdf.text("This is to certify that", 148, 85, { align: 'center' });
+  pdf.setTextColor(15, 23, 42);
+  pdf.setFontSize(30);
+  pdf.text(cert.studentName || "Student Name", 148, 110, { align: 'center' });
+  pdf.setTextColor(100, 116, 139);
+  pdf.setFontSize(16);
+  pdf.text("has successfully completed the course", 148, 135, { align: 'center' });
+  pdf.setTextColor(37, 99, 235);
+  pdf.setFontSize(24);
+  pdf.text(cert.course_title || cert.courseTitle || "Course Title", 148, 155, { align: 'center' });
+  pdf.setTextColor(100, 116, 139);
+  pdf.setFontSize(12);
+  
+  let issueDateStr = "N/A";
+  if (cert.issuedAt || cert.issued_at) {
+    const dVal = cert.issuedAt || cert.issued_at;
+    const d = new Date(dVal.seconds ? dVal.seconds * 1000 : dVal);
+    if (!isNaN(d.getTime())) {
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      issueDateStr = `${day}/${month}/${d.getFullYear()}`;
+    }
+  } else {
+    const d = new Date();
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    issueDateStr = `${day}/${month}/${d.getFullYear()}`;
+  }
+  pdf.text(`Issue Date: ${issueDateStr}`, 148, 175, { align: 'center' });
+  
+  pdf.setFillColor(234, 179, 8);
+  pdf.circle(148, 195, 12, 'F');
+  pdf.setTextColor(255, 255, 255);
+  pdf.setFontSize(10);
+  pdf.text("OFFICIAL", 148, 196, { align: 'center' });
+  pdf.save(`Certificate-${cert.course_title || cert.courseTitle || 'Course'}.pdf`);
 };
 
 export function StudentDashboard() {
@@ -258,7 +290,7 @@ export function StudentDashboard() {
                    <div className="text-4xl font-bold text-emerald-600">{certificates.length}</div>
                 </CardContent>
              </Card>
-             <Card className="border-blue-100 bg-gradient-to-br from-blue-50 to-white shadow-sm cursor-pointer" onClick={() => setActiveTab('progress')}>
+             <Card className="border-blue-100 bg-gradient-to-br from-blue-50 to-white shadow-sm cursor-pointer" onClick={() => navigate('/')}>
                 <CardHeader className="py-4">
                    <div className="flex items-center gap-3">
                       <div className="bg-blue-100 p-2 rounded-full text-blue-600">
@@ -378,9 +410,12 @@ export function StudentDashboard() {
                 });
 
                 const progressPercent = totalCourseDays <= 0 ? 0 : Math.min(100, Math.round((attendedDays / totalCourseDays) * 100));
+                const isExpired = !!session && (session.endDate || session.startDate || '') < today;
+                const hasSubmittedFeedback = feedbacks.some(f => f.sessionId === r.sessionId);
+                const shouldGrayOut = isExpired && hasSubmittedFeedback;
 
                 return (
-                 <Card key={r.id} className="flex flex-col border-slate-200 shadow-sm overflow-hidden">
+                 <Card key={r.id} className={`flex flex-col border-slate-200 shadow-sm overflow-hidden ${shouldGrayOut ? 'opacity-60 grayscale bg-slate-50' : ''}`}>
                     <div className="bg-white p-5 border-b border-slate-100">
                         <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> My Class Schedule</h4>
                         
@@ -404,7 +439,7 @@ export function StudentDashboard() {
                         <div className="flex justify-between items-start gap-4">
                             <div>
                                  <div className="flex flex-col gap-2">
-                                     {course?.description && <p className="text-sm text-slate-600 line-clamp-2">{course.description}</p>}
+                                     {course?.description && <p className="text-sm text-slate-600 line-clamp-2"><WarningTextFormatter text={course.description} /></p>}
                                      <div className="flex flex-wrap items-center gap-2 text-xs">
                                          {course?.category && <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded uppercase font-bold">{course.category}</span>}
                                          {course?.level && <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded uppercase font-bold">{course.level}</span>}
@@ -413,9 +448,9 @@ export function StudentDashboard() {
                                          <span className="text-slate-500 font-medium ml-1">Payment: <span className={r.status?.toLowerCase() === 'verified' ? 'text-green-600 font-bold' : 'text-amber-600 font-bold'}>{r.status?.toUpperCase()}</span></span>
                                      </div>
                                      <div className="mt-2 flex flex-wrap gap-2">
-                                         {course?.outlineName && course?.outlineData && (
+                                         {course?.outlineData && (
                                              <a href={course.outlineData} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs font-bold uppercase tracking-wider transition-colors w-fit">
-                                                 <Download className="w-3.5 h-3.5" /> {course.outlineName}
+                                                 <Download className="w-3.5 h-3.5" /> {course?.category === 'Microsoft' ? 'Microsoft Document Link' : course?.category === 'AWS' ? 'AWS Document Link' : course?.outlineName || 'Document Link'}
                                              </a>
                                          )}
                                          <Link to={`/payment-status/${r.id}`}>
@@ -427,10 +462,7 @@ export function StudentDashboard() {
                                  </div>
                             </div>
                             <div className="text-right shrink-0">
-                                <div className="text-2xl font-black text-blue-600">
-                                    {progressPercent}%
-                                    <span className="text-[10px] font-mono text-slate-400 block -mt-1">({attendedDays}/{totalCourseDays})</span>
-                                </div>
+                                <div className="text-2xl font-black text-blue-600">{progressPercent}%</div>
                                 <div className="text-xs text-slate-500 font-medium">Completed</div>
                             </div>
                         </div>
@@ -443,7 +475,6 @@ export function StudentDashboard() {
                         <CardContent className="p-0 border-t border-slate-100 bg-slate-50/50">
                             <div className="p-5">
                                 {(() => {
-                                    const hasSubmittedFeedback = feedbacks.some(f => f.sessionId === r.sessionId);
                                     const cert = certificates.find(c => c.registrationId === r.id);
                                     
                                     if (!hasSubmittedFeedback && !cert) {
@@ -463,6 +494,14 @@ export function StudentDashboard() {
                                                         Submit Feedback
                                                     </Button>
                                                 </Link>
+                                            </div>
+                                        );
+                                    }
+
+                                    if (shouldGrayOut) {
+                                        return (
+                                            <div className="text-center text-sm font-semibold text-slate-500 py-2">
+                                                Course Completed. Certificates can be found in the Certificates tab.
                                             </div>
                                         );
                                     }
@@ -528,7 +567,6 @@ export function StudentDashboard() {
                        <div>
                          <h4 className="font-bold text-slate-800">{c.course_title || "Course Certificate"}</h4>
                                                    <p className="text-xs text-slate-500 mt-1">Issued: {formatHkDate(c.issuedAt)}</p>
-                         <p className="text-xs font-mono text-slate-400 mt-1">ID: {c.id}</p>
                          <a onClick={() => generateCertificatePDF(c)} className="inline-block mt-3 cursor-pointer">
                            <Button size="sm" className="gap-2 bg-slate-800 hover:bg-slate-900 text-white"><Download className="w-3 h-3"/> Download PDF</Button>
                          </a>

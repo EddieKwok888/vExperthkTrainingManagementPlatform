@@ -47,6 +47,34 @@ export function ProfileSettingsTab({ user, userData, role }: ProfileSettingsTabP
   const isGoogleUser = user?.providerData?.some((p: any) => p.providerId === 'google.com');
 
   useEffect(() => {
+    const fetchUserData = async () => {
+      if (!user?.uid) return;
+      try {
+        const docRef = doc(db, 'users', user.uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setName(data.name || '');
+          setPhone(data.phone || '');
+          setCompany(data.company || '');
+          
+          if (isInstructor) {
+            const tp = data.tutorProfile || {};
+            setBio(tp.bio || '');
+            setTeachingLanguages(tp.teachingLanguages || []);
+            setAvailableDays(tp.availableDays || []);
+            setQualifiedCategories(data.qualifiedCategories || []);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch user data:", error);
+      }
+    };
+    
+    fetchUserData();
+  }, [user?.uid, isInstructor]);
+
+  useEffect(() => {
     if (isInstructor) {
       const fetchCategories = async () => {
         try {

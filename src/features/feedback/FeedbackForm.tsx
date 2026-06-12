@@ -12,39 +12,68 @@ import { AuthContext } from '../../App';
 import { jsPDF } from 'jspdf';
 import { DEFAULT_TEMPLATE } from '../admin/components/FeedbackTemplateTab';
 
-const generateCertificatePDF = (cert: any) => {
-  const doc = new jsPDF({ orientation: 'landscape' });
-  doc.setFillColor(240, 248, 255);
-  doc.rect(0, 0, 297, 210, 'F');
-  doc.setDrawColor(37, 99, 235);
-  doc.setLineWidth(2);
-  doc.rect(10, 10, 277, 190, 'S');
-  doc.setTextColor(30, 58, 138);
-  doc.setFontSize(40);
-  doc.text("Certificate of Completion", 148, 50, { align: 'center' });
-  doc.setTextColor(100, 116, 139);
-  doc.setFontSize(16);
-  doc.text("This is to certify that", 148, 80, { align: 'center' });
-  doc.setTextColor(15, 23, 42);
-  doc.setFontSize(30);
-  doc.text(cert.studentName || "Student Name", 148, 105, { align: 'center' });
-  doc.setTextColor(100, 116, 139);
-  doc.setFontSize(16);
-  doc.text("has successfully completed the course", 148, 130, { align: 'center' });
-  doc.setTextColor(37, 99, 235);
-  doc.setFontSize(24);
-  doc.text(cert.course_title || cert.courseTitle || "Course Title", 148, 150, { align: 'center' });
-  doc.setTextColor(100, 116, 139);
-  doc.setFontSize(12);
-  const dateStr = new Date().toLocaleDateString();
-  doc.text(`Issue Date: ${dateStr}`, 148, 175, { align: 'center' });
-  doc.text(`Certificate ID: ${cert.id || 'N/A'}`, 148, 182, { align: 'center' });
-  doc.setFillColor(234, 179, 8);
-  doc.circle(148, 195, 12, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(10);
-  doc.text("OFFICIAL", 148, 196, { align: 'center' });
-  doc.save(`Certificate-${cert.course_title || cert.courseTitle || 'Course'}.pdf`);
+const generateCertificatePDF = async (cert: any) => {
+  const pdf = new jsPDF({ orientation: 'landscape' });
+  pdf.setFillColor(240, 248, 255);
+  pdf.rect(0, 0, 297, 210, 'F');
+  pdf.setDrawColor(37, 99, 235);
+  pdf.setLineWidth(2);
+  pdf.rect(10, 10, 277, 190, 'S');
+
+  try {
+    const docRef = doc(db, 'settings', 'school_info');
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists() && docSnap.data().logo_url) {
+      const logoUrl = docSnap.data().logo_url;
+      if (logoUrl.startsWith('data:image')) {
+        pdf.addImage(logoUrl, 'PNG', 133, 15, 30, 30); // Center logo at the top
+      }
+    }
+  } catch (e) {
+    console.error('Could not load logo for certificate', e);
+  }
+
+  pdf.setTextColor(30, 58, 138);
+  pdf.setFontSize(40);
+  pdf.text("Certificate of Completion", 148, 60, { align: 'center' });
+  pdf.setTextColor(100, 116, 139);
+  pdf.setFontSize(16);
+  pdf.text("This is to certify that", 148, 85, { align: 'center' });
+  pdf.setTextColor(15, 23, 42);
+  pdf.setFontSize(30);
+  pdf.text(cert.studentName || "Student Name", 148, 110, { align: 'center' });
+  pdf.setTextColor(100, 116, 139);
+  pdf.setFontSize(16);
+  pdf.text("has successfully completed the course", 148, 135, { align: 'center' });
+  pdf.setTextColor(37, 99, 235);
+  pdf.setFontSize(24);
+  pdf.text(cert.course_title || cert.courseTitle || "Course Title", 148, 155, { align: 'center' });
+  pdf.setTextColor(100, 116, 139);
+  pdf.setFontSize(12);
+  
+  let issueDateStr = "N/A";
+  if (cert.issuedAt || cert.issued_at) {
+    const dVal = cert.issuedAt || cert.issued_at;
+    const d = new Date(dVal.seconds ? dVal.seconds * 1000 : dVal);
+    if (!isNaN(d.getTime())) {
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      issueDateStr = `${day}/${month}/${d.getFullYear()}`;
+    }
+  } else {
+    const d = new Date();
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    issueDateStr = `${day}/${month}/${d.getFullYear()}`;
+  }
+  pdf.text(`Issue Date: ${issueDateStr}`, 148, 175, { align: 'center' });
+  
+  pdf.setFillColor(234, 179, 8);
+  pdf.circle(148, 195, 12, 'F');
+  pdf.setTextColor(255, 255, 255);
+  pdf.setFontSize(10);
+  pdf.text("OFFICIAL", 148, 196, { align: 'center' });
+  pdf.save(`Certificate-${cert.course_title || cert.courseTitle || 'Course'}.pdf`);
 };
 
 export function FeedbackForm() {
@@ -80,8 +109,9 @@ export function FeedbackForm() {
           const courseRef = doc(db, 'courses', id);
           const courseSnap = await getDoc(courseRef);
           if (courseSnap.exists()) {
-            setCourseName(courseSnap.data().title || 'Course');
-            tId = courseSnap.data().tutorId;
+            const data = courseSnap.data();
+            setCourseName(data.courseCode ? `${data.courseCode} - ${data.title || 'Course'}` : (data.title || 'Course'));
+            tId = data.tutorId;
           }
         }
         
@@ -361,7 +391,7 @@ export function FeedbackForm() {
               <input type="checkbox" checked={marketingConsent} onChange={e => setMarketingConsent(e.target.checked)} className="mt-1 w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer" />
               <div className="text-sm text-slate-600 leading-relaxed">
                  <p className="font-bold text-slate-800 mb-1">Marketing Consent</p>
-                 <p className="font-medium">Kenfil Hong Kong Limited may use my comment for marketing purpose. Please check the box to indicate your consent.</p>
+                 <p className="font-medium">vExpert AI Training Academy may use my comment for marketing purpose. Please check the box to indicate your consent.</p>
                  <p className="italic mt-2 text-xs text-slate-400">Note: We assure you that your personal information will be kept confidential and will not be shared with any third party.</p>
               </div>
            </label>
@@ -377,7 +407,7 @@ export function FeedbackForm() {
       </Card>
       
       <div className="text-center text-xs font-medium text-slate-400 py-4">
-         © {new Date().getFullYear()} Copyright: <strong className="text-slate-500 font-bold">Kenfil Hong Kong Limited</strong>
+         © {new Date().getFullYear()} Copyright: <strong className="text-slate-500 font-bold">vExpert AI Training Academy</strong>
       </div>
     </div>
   );

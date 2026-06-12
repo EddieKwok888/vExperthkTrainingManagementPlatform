@@ -43,22 +43,32 @@ export function RegisterCourse() {
     studentEmail: '',
     studentPhone: '',
     company: '',
-    jobTitle: '',
-    sessionId: '',
-    remarks: ''
+    sessionId: ''
   });
 
   const isWalkIn = searchParams.get('admin_walkin') === 'true';
 
   // Auto-fill user profile info if signed in and not walk-in
   useEffect(() => {
-    if (user && !isWalkIn) {
-      setFormData(prev => ({
-        ...prev,
-        studentName: user.displayName || prev.studentName || '',
-        studentEmail: user.email || prev.studentEmail || ''
-      }));
-    }
+    const fetchUserProfile = async () => {
+      if (user && !isWalkIn) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          const userData = userDoc.exists() ? userDoc.data() : null;
+          
+          setFormData(prev => ({
+            ...prev,
+            studentName: user.displayName || userData?.name || prev.studentName || '',
+            studentEmail: user.email || userData?.email || prev.studentEmail || '',
+            studentPhone: userData?.phone || prev.studentPhone || '',
+            company: userData?.company || prev.company || ''
+          }));
+        } catch (e) {
+          console.error("Failed to fetch user profile", e);
+        }
+      }
+    };
+    fetchUserProfile();
   }, [user, isWalkIn]);
 
   useEffect(() => {
@@ -296,8 +306,7 @@ export function RegisterCourse() {
           studentEmail: formData.studentEmail.trim().toLowerCase(),
           studentPhone: formData.studentPhone.trim(),
           company: formData.company,
-          jobTitle: formData.jobTitle,
-          remarks: formData.remarks + "\n[System Notes: Registered under 2-Course Bundle promotion]",
+          remarks: "[System Notes: Registered under 2-Course Bundle promotion]",
           pax,
           promoCode: appliedPromo?.code || appliedPromo?.name || null,
           promoId: appliedPromo?.id || null,
@@ -322,8 +331,7 @@ export function RegisterCourse() {
           studentEmail: formData.studentEmail.trim().toLowerCase(),
           studentPhone: formData.studentPhone.trim(),
           company: formData.company,
-          jobTitle: formData.jobTitle,
-          remarks: formData.remarks + `\n[System Notes: Registered under 2-Course Bundle promotion. Linked Parent registration: ${parentRef.id}]`,
+          remarks: `[System Notes: Registered under 2-Course Bundle promotion. Linked Parent registration: ${parentRef.id}]`,
           pax,
           promoCode: appliedPromo?.code || appliedPromo?.name || null,
           promoId: appliedPromo?.id || null,
@@ -371,8 +379,6 @@ export function RegisterCourse() {
           studentEmail: formData.studentEmail.trim().toLowerCase(),
           studentPhone: formData.studentPhone.trim(),
           company: formData.company,
-          jobTitle: formData.jobTitle,
-          remarks: formData.remarks,
           pax, // Save number of tickets
           promoCode: appliedPromo?.code || null,
           promoId: appliedPromo?.id || null,
@@ -641,22 +647,6 @@ export function RegisterCourse() {
                 <label className="text-sm font-medium">Company</label>
                 <Input name="company" value={formData.company} onChange={handleChange} placeholder="Acme Corp" />
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Job Title</label>
-              <Input name="jobTitle" value={formData.jobTitle} onChange={handleChange} placeholder="Software Engineer" />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Remarks or Special Requirements</label>
-              <textarea 
-                name="remarks"
-                value={formData.remarks}
-                onChange={handleChange}
-                placeholder="Any dietary requirements or special accommodations?"
-                className="flex min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
-              />
             </div>
 
             <Button type="submit" className="w-full h-12 text-md mt-4 font-bold bg-indigo-600 hover:bg-indigo-700 text-white" disabled={submitting || sessions.length === 0 || (isBundleMode && sessions2.length === 0)}>

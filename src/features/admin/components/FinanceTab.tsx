@@ -399,6 +399,18 @@ export const FinanceTab = React.memo(function FinanceTab({
                        <div className="font-bold text-slate-800 font-sans">{r.studentName}</div>
                        <div className="text-[10px] text-slate-500 font-medium font-sans">{r.studentEmail}</div>
                        <div className="text-[10px] text-slate-400 italic mt-0.5 font-sans">{r.studentPhone}</div>
+                       {(r.company || r.jobTitle) && (
+                         <div className="text-[9px] text-slate-500 mt-1 font-sans leading-tight bg-slate-50 px-1.5 py-0.5 rounded w-fit border border-slate-100">
+                           {r.company && <span className="font-semibold">🏢 {r.company}</span>}
+                           {r.company && r.jobTitle && <span className="mx-1">•</span>}
+                           {r.jobTitle && <span>💼 {r.jobTitle}</span>}
+                         </div>
+                       )}
+                       {r.remarks && (
+                         <div className="text-[9px] text-amber-700 bg-amber-50 px-1.5 py-1 rounded mt-1 border border-amber-100 font-sans leading-tight">
+                           <span className="font-bold">Remarks:</span> {r.remarks}
+                         </div>
+                       )}
                      </TableCell>
                      <TableCell className="px-6">
                        {r.paymentMethod ? (
@@ -481,31 +493,20 @@ export const FinanceTab = React.memo(function FinanceTab({
             </Table>
           </div>
 
-          {filteredRegs.length > 0 && (
-            <div className="flex items-center justify-between p-4 border-t border-slate-100 bg-slate-50/50">
-              <div className="text-xs text-slate-500 font-medium font-sans">
-                Showing {Math.min(filteredRegs.length, (currentPage - 1) * itemsPerPage + 1)} to {Math.min(filteredRegs.length, currentPage * itemsPerPage)} of {filteredRegs.length} entries
-              </div>
-              <div className="flex items-center gap-1">
-                <span className="text-xs text-slate-500 mr-2 font-medium font-sans">Page {currentPage} of {totalPages}</span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+          {filteredRegs.length > 10 && (
+            <div className="flex justify-end p-4 border-t border-slate-100">
+              <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+                <span className="text-xs text-slate-500 font-medium">Page</span>
+                <select
+                  value={currentPage}
+                  onChange={(e) => setCurrentPage(Number(e.target.value))}
+                  className="bg-white border border-slate-300 text-slate-700 text-xs rounded focus:ring-blue-500 focus:border-blue-500 block px-2 py-1 outline-none font-medium cursor-pointer"
                 >
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                  disabled={currentPage === totalPages}
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                    <option key={page} value={page}>{page}</option>
+                  ))}
+                </select>
+                <span className="text-xs text-slate-500 font-medium">of {totalPages}</span>
               </div>
             </div>
           )}

@@ -123,7 +123,22 @@ The system supports multi-language capabilities easily switchable via the UI.
 
 > 📜 **View past updates:** Older update logs have been archived. Please check the [CHANGELOG.md](CHANGELOG.md) file for historical updates.
 
-## 📅 Today's Updates (2026-06-12)
+## 📅 Today's Updates (2026-06-13)
+
+### 1. 🎓 Instant PDF Certificate Generation (一鍵下載修業證書)
+- **Direct Download**: Students can now directly download their course completion certificates in high quality from the "My Courses" tab.
+- **Native PDF Engine Integration**: Beautiful landscape certificates are instantly generated client-side using the native `jsPDF` engine, complete with school logos and custom styling.
+
+### 2. 👤 Profile Settings & Auto-Fill (個人資料管理與自動填寫)
+- **Centralized Profile Management**: Added a robust profile settings interface where users can easily manage their contact details and preferences.
+- **Smart Form Auto-Fill**: The course registration form now intelligently pre-fills student information (Name, Email, Phone, Company) directly from their saved Firestore profile, accelerating checkout.
+- **Streamlined Checkout**: Cleaned up the registration form by removing obsolete fields to reduce friction and improve conversion rates.
+
+### 3. 🛡️ UI & Dashboard Enhancements (介面及系統優化)
+- **Warning Text Formatter**: Introduced a new dedicated component to neatly handle and format critical system alerts and validation warnings.
+- **Profile Optimization**: Refined the student dashboard UI, cleaning up empty states and streamlining the certificate view table.
+
+## 📅 Updates (2026-06-12)
 
 ### 1. 🛡️ Duplicate Registration Prevention (防重複報名機制)
 - **Validation**: Implemented an automated validation check during course registration to ensure that a student cannot register for the same course session twice using the same email address. This prevents accidental duplicate bookings and keeps class rosters accurate.

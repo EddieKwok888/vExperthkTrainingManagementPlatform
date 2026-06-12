@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 // Trigger Dev Server Reload
 import { Search, Plus, Trash2, ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../../components/ui/card';
@@ -71,6 +71,16 @@ export const CoursesTab: React.FC<CoursesTabProps> = ({
       return 0;
     });
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+  const totalPages = Math.ceil(sortedCourses.length / itemsPerPage) || 1;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [courseSearchTerm, sortField, sortDirection]);
+
+  const paginatedCourses = sortedCourses.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
@@ -131,7 +141,7 @@ export const CoursesTab: React.FC<CoursesTabProps> = ({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedCourses.map(c => (
+                {paginatedCourses.map(c => (
                   <TableRow key={c.id}>
                     <TableCell className="font-mono text-xs">{c.courseCode || '-'}</TableCell>
                     <TableCell className="font-medium text-slate-800 whitespace-pre-wrap max-w-[250px] leading-snug">{c.title}</TableCell>
@@ -193,6 +203,23 @@ export const CoursesTab: React.FC<CoursesTabProps> = ({
               </TableBody>
             </Table>
           </div>
+          {sortedCourses.length > 10 && (
+            <div className="flex justify-end mt-4 pt-4 border-t border-slate-100">
+              <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+                <span className="text-xs text-slate-500 font-medium">Page</span>
+                <select
+                  value={currentPage}
+                  onChange={(e) => setCurrentPage(Number(e.target.value))}
+                  className="bg-white border border-slate-300 text-slate-700 text-xs rounded focus:ring-blue-500 focus:border-blue-500 block px-2 py-1 outline-none font-medium cursor-pointer"
+                >
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                    <option key={page} value={page}>{page}</option>
+                  ))}
+                </select>
+                <span className="text-xs text-slate-500 font-medium">of {totalPages}</span>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

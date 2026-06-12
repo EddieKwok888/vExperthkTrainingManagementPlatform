@@ -109,7 +109,7 @@ export function CourseCreationModal({
 
               <div className="space-y-1.5 mt-2">
                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                  Course Outline (Microsoft Link)
+                  Course Outline
                 </label>
                 <Input
                   placeholder="https://... (SharePoint/OneDrive/Docs)"

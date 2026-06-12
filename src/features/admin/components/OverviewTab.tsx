@@ -247,7 +247,7 @@ export function OverviewTab({
             <div className="bg-rose-50 px-4 py-3 border-b border-rose-100">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-rose-600" />
-                <h3 className="text-sm font-bold text-rose-700 uppercase tracking-wider">Low Enrollment Warning</h3>
+                <h3 className="text-sm font-bold text-red-600 uppercase tracking-wider">Low Enrollment Warning</h3>
               </div>
               <p className="text-[10px] text-rose-500 mt-0.5 leading-tight">Starting in 14 days with &lt;50% capacity</p>
             </div>

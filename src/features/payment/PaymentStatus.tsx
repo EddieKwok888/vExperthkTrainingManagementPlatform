@@ -98,25 +98,12 @@ export function PaymentStatus() {
 
   const generateInvoiceNumber = async (regData: any) => {
     const prefix = schoolSettings?.invoice_prefix || 'INV';
-    let datePart = 'unknown';
     
-    if (regData?.sessionId) {
-      const sSnap = await getDoc(doc(db, 'course_sessions', regData.sessionId));
-      if (sSnap.exists()) {
-        const sessionData = sSnap.data();
-        if (sessionData?.startDate) {
-          datePart = sessionData.startDate.replace(/[\s-]/g, '');
-        }
-      }
-    }
-    
-    if (datePart === 'unknown') {
-      const today = new Date();
-      const yyyy = today.getFullYear();
-      const mm = String(today.getMonth() + 1).padStart(2, '0');
-      const dd = String(today.getDate()).padStart(2, '0');
-      datePart = `${yyyy}${mm}${dd}`;
-    }
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const datePart = `${yyyy}${mm}${dd}`;
     
     const startPrefix = `${prefix}-${datePart}-`;
     const regsSnap = await getDocs(query(
@@ -194,11 +181,14 @@ export function PaymentStatus() {
 
       if (reg?.promoId) {
         try {
-          await updateDoc(doc(db, 'promotions', reg.promoId), {
-            usageCount: increment(1)
-          });
+          const promoDoc = await getDoc(doc(db, 'promotions', reg.promoId));
+          const promoUpdates: any = { usageCount: increment(1) };
+          if (promoDoc.exists() && promoDoc.data().category === 'welcome') {
+            promoUpdates.status = 'inactive';
+          }
+          await updateDoc(doc(db, 'promotions', reg.promoId), promoUpdates);
         } catch (promoErr) {
-          console.error("Failed to increment promotion usage count:", promoErr);
+          console.error("Failed to update promotion:", promoErr);
         }
       }
       toast.success("PayPal payment successful!");

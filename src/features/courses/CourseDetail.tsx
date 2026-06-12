@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
 
 import { jsPDF } from 'jspdf';
+import { WarningTextFormatter } from '../../components/ui/WarningTextFormatter';
 
 export function CourseDetail() {
   const { id } = useParams<{ id: string }>();
@@ -105,15 +106,6 @@ export function CourseDetail() {
     window.dispatchEvent(event);
   };
 
-  const formatTextWithWarning = (text: string) => {
-    if (!text) return null;
-    const regex = /(warning\b[^\n]*)/i; // match the word warning and the rest of the line
-    const parts = text.split(/(warning\b[^\n]*)/i);
-    return parts.map((part, i) => 
-      part.toLowerCase().startsWith('warning') ? <span key={i} className="text-red-600 font-bold">{part}</span> : <span key={i}>{part}</span>
-    );
-  };
-
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>;
   if (!course) return <div className="text-center py-20 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400">Course not found</div>;
 
@@ -165,7 +157,7 @@ export function CourseDetail() {
                         <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
                           <MapPin className="w-3 h-3 text-indigo-400" /> Target Audience
                         </h3>
-                        <p className="text-slate-300 text-sm leading-relaxed font-medium whitespace-pre-wrap">{formatTextWithWarning(course.targetAudience)}</p>
+                        <p className="text-slate-300 text-sm leading-relaxed font-medium whitespace-pre-wrap"><WarningTextFormatter text={course.targetAudience} /></p>
                       </div>
                     )}
                     {course.prerequisites && (
@@ -173,7 +165,7 @@ export function CourseDetail() {
                         <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
                           <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Prerequisites
                         </h3>
-                        <p className="text-slate-300 text-sm leading-relaxed font-medium whitespace-pre-wrap">{formatTextWithWarning(course.prerequisites)}</p>
+                        <p className="text-slate-300 text-sm leading-relaxed font-medium whitespace-pre-wrap"><WarningTextFormatter text={course.prerequisites} /></p>
                       </div>
                     )}
                   </div>
@@ -185,7 +177,7 @@ export function CourseDetail() {
                     <div className="space-y-6">
                       {course.description && (
                         <div className="bg-[#0D1426] p-6 rounded-2xl border border-slate-800 text-slate-400 text-sm leading-relaxed whitespace-pre-wrap shadow-inner font-medium">
-                          {formatTextWithWarning(course.description)}
+                          <WarningTextFormatter text={course.description} />
                         </div>
                       )}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

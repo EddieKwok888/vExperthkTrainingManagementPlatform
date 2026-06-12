@@ -9,6 +9,7 @@ import {
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { formatHkDate, getHkDateString, getHkTime } from "../../../lib/utils";
+import { isWeekendOrHoliday } from "../../../lib/holidays";
 import {
   Building2,
   CalendarIcon,
@@ -168,6 +169,38 @@ export function SchedulingTab({
           <CardContent className="pt-6">
             <div className="space-y-6">
               {(() => {
+                const selectedDateObj = new Date(scheduleDate);
+                const dayOfWeek = selectedDateObj.getDay();
+
+                if (dayOfWeek === 0) {
+                  return (
+                    <div className="py-12 border-2 border-dashed border-slate-200 rounded-xl text-center text-slate-500 flex flex-col items-center">
+                      <Building2 className="w-10 h-10 mb-3 text-slate-300" />
+                      <p className="font-medium text-sm">
+                        No setups required for Sunday.
+                      </p>
+                    </div>
+                  );
+                }
+
+                const datesToFetch = [scheduleDate];
+                if (dayOfWeek === 6) {
+                   let nextWorkingDayObj = new Date(selectedDateObj);
+                   nextWorkingDayObj.setDate(nextWorkingDayObj.getDate() + 2);
+                   
+                   let maxTries = 30;
+                   while (maxTries > 0) {
+                      const dateStr = nextWorkingDayObj.toISOString().split("T")[0];
+                      const { isInvalid } = isWeekendOrHoliday(dateStr);
+                      if (!isInvalid) {
+                          datesToFetch.push(dateStr);
+                          break;
+                      }
+                      nextWorkingDayObj.setDate(nextWorkingDayObj.getDate() + 1);
+                      maxTries--;
+                   }
+                }
+
                 let configRooms = schoolInfo?.rooms
                   ? schoolInfo.rooms
                       .split(",")
@@ -186,87 +219,79 @@ export function SchedulingTab({
                   new Set([...configRooms, ...usedRooms, "unassigned"]),
                 ) as string[];
 
-                const activeLessonsToday = lessons.filter(
-                  (l) => (l.lessonDate || l.lesson_date || "") === scheduleDate,
-                );
-
-                const activeSessionsToday = sessions.filter((s) => {
-                  if (
-                    s.sessionStatus !== "confirmed" &&
-                    s.sessionStatus !== "full" &&
-                    s.sessionStatus !== "completed"
-                  )
-                    return false;
-                  const isDailyLesson = activeLessonsToday.some(
-                    (l) => l.sessionId === s.id,
-                  );
-                  if (isDailyLesson) return true;
-                  if (!s.startDate || !s.endDate) return false;
-                  if (
-                    s.deliveryMode === "self_paced" ||
-                    s.deliveryMode === "video"
-                  )
-                    return false;
-                  return (
-                    s.startDate <= scheduleDate && s.endDate >= scheduleDate
-                  );
-                });
-
                 const allSessionsToDisplay: any[] = [];
-                const processedSessionIds = new Set();
+                const uniqueLessons = new Map();
 
-                activeLessonsToday.forEach((l) => {
-                  const session = sessions.find(
-                    (s) => s.id === l.sessionId || s.id === l.session_id,
-                  );
-                  if (!session) return;
-                  if (
-                    session.sessionStatus !== "confirmed" &&
-                    session.sessionStatus !== "full" &&
-                    session.sessionStatus !== "completed"
-                  )
-                    return;
+                datesToFetch.forEach(targetDate => {
+                   const activeLessons = lessons.filter(l => (l.lessonDate || l.lesson_date || "") === targetDate)
+                   .filter(l => {
+                      const session = sessions.find((s) => s.id === l.sessionId || s.id === l.session_id);
+                      const isOnline = session?.deliveryMode === "online" || 
+                                       (session?.room || "").toLowerCase().includes("online") || 
+                                       (session?.classroom || "").toLowerCase().includes("online") || 
+                                       (l.classroom || "").toLowerCase().includes("online");
+                      if (isOnline) return false;
 
-                  allSessionsToDisplay.push({
-                    id: l.id,
-                    sessionId: session.id,
-                    room:
-                      l.classroom ||
-                      session.room ||
-                      session.classroom ||
-                      "unassigned",
-                    startTime: l.startTime || session.startTime,
-                    endTime: l.endTime || session.endTime,
-                    courseId: session.courseId,
-                    sessionName: session.sessionName,
-                    tutorId:
-                      l.tutorId ||
-                      l.tutor_id ||
-                      session.tutorId ||
-                      session.tutor_id,
-                    remarks: session.remarks || session.notes || "",
-                    isLesson: true,
-                    lessonTitle: l.lessonTitle,
-                  });
-                  processedSessionIds.add(session.id);
-                });
+                      const st = l.startTime || session?.startTime || "";
+                      const et = l.endTime || session?.endTime || "";
+                      const key = `${targetDate}-${l.sessionId || l.session_id}-${st}-${et}`;
+                      if (uniqueLessons.has(key)) return false;
+                      uniqueLessons.set(key, true);
+                      return true;
+                   });
 
-                activeSessionsToday.forEach((s) => {
-                  if (processedSessionIds.has(s.id)) return;
-                  allSessionsToDisplay.push({
-                    id: s.id,
-                    sessionId: s.id,
-                    room:
-                      s.room || s.classroom || s.deliveryMode || "unassigned",
-                    startTime: s.startTime,
-                    endTime: s.endTime,
-                    courseId: s.courseId,
-                    sessionName: s.sessionName,
-                    tutorId: s.tutorId || s.tutor_id,
-                    remarks: s.remarks || s.notes || "",
-                    isLesson: false,
-                    lessonTitle: "",
-                  });
+                   const activeSessions = sessions.filter(s => {
+                      if (s.sessionStatus !== "confirmed" && s.sessionStatus !== "full" && s.sessionStatus !== "completed") return false;
+                      
+                      const isOnline = s.deliveryMode === "online" || 
+                                       (s.room || "").toLowerCase().includes("online") || 
+                                       (s.classroom || "").toLowerCase().includes("online");
+                      if (isOnline) return false;
+
+                      const isDailyLesson = activeLessons.some((l) => l.sessionId === s.id || l.session_id === s.id);
+                      if (isDailyLesson) return false;
+                      if (!s.startDate || !s.endDate) return false;
+                      if (s.deliveryMode === "self_paced" || s.deliveryMode === "video") return false;
+                      return (s.startDate <= targetDate && s.endDate >= targetDate);
+                   });
+
+                   activeLessons.forEach((l) => {
+                     const session = sessions.find((s) => s.id === l.sessionId || s.id === l.session_id);
+                     if (!session) return;
+                     if (session.sessionStatus !== "confirmed" && session.sessionStatus !== "full" && session.sessionStatus !== "completed") return;
+
+                     allSessionsToDisplay.push({
+                        id: `${l.id}-${targetDate}`,
+                        sessionId: session.id,
+                        targetDate,
+                        room: l.classroom || session.room || session.classroom || "unassigned",
+                        startTime: l.startTime || session.startTime,
+                        endTime: l.endTime || session.endTime,
+                        courseId: session.courseId,
+                        sessionName: session.sessionName,
+                        tutorId: l.tutorId || l.tutor_id || session.tutorId || session.tutor_id,
+                        remarks: session.remarks || session.notes || "",
+                        isLesson: true,
+                        lessonTitle: l.lessonTitle,
+                     });
+                   });
+
+                   activeSessions.forEach((s) => {
+                     allSessionsToDisplay.push({
+                        id: `${s.id}-${targetDate}`,
+                        sessionId: s.id,
+                        targetDate,
+                        room: s.room || s.classroom || s.deliveryMode || "unassigned",
+                        startTime: s.startTime,
+                        endTime: s.endTime,
+                        courseId: s.courseId,
+                        sessionName: s.sessionName,
+                        tutorId: s.tutorId || s.tutor_id,
+                        remarks: s.remarks || s.notes || "",
+                        isLesson: false,
+                        lessonTitle: "",
+                     });
+                   });
                 });
 
                 const roomGroups: Record<string, any[]> = {};
@@ -290,9 +315,11 @@ export function SchedulingTab({
                 }
 
                 return roomKeys.map((rName) => {
-                  const roomItems = roomGroups[rName].sort((a, b) =>
-                    (a.startTime || "").localeCompare(b.startTime || ""),
-                  );
+                  const roomItems = roomGroups[rName].sort((a, b) => {
+                    const dateCmp = a.targetDate.localeCompare(b.targetDate);
+                    if (dateCmp !== 0) return dateCmp;
+                    return (a.startTime || "").localeCompare(b.startTime || "");
+                  });
                   return (
                     <div
                       key={rName}
@@ -355,9 +382,14 @@ export function SchedulingTab({
                                     )}
                                   </div>
                                   <div className="flex items-center gap-2 self-start">
-                                    <div className="text-sm font-black bg-white border border-slate-200 text-slate-800 px-3 py-1.5 rounded-lg shadow-sm whitespace-nowrap flex items-center gap-2">
-                                      <Clock className="w-4 h-4 text-slate-400" />
-                                      {item.startTime} - {item.endTime}
+                                    <div className="text-sm font-black bg-white border border-slate-200 text-slate-800 px-3 py-1.5 rounded-lg shadow-sm whitespace-nowrap flex flex-col items-end gap-1">
+                                      <div className="flex items-center gap-2">
+                                        <Clock className="w-4 h-4 text-slate-400" />
+                                        {item.startTime} - {item.endTime}
+                                      </div>
+                                      {datesToFetch.length > 1 && (
+                                         <div className="text-[10px] text-blue-600 font-bold uppercase">{item.targetDate}</div>
+                                      )}
                                     </div>
                                   </div>
                                 </div>
@@ -433,7 +465,8 @@ export function SchedulingTab({
           </CardHeader>
           <CardContent className="pt-6">
             <div className="space-y-4">
-              {tutors.map((tutor) => {
+              {[...tutors].sort((a,b) => a.name.localeCompare(b.name)).map((tutor) => {
+                const uniqueTutorLessons = new Map();
                 const tutorLessons = lessons.filter((l) => {
                   const session = sessions.find(
                     (s) => s.id === l.sessionId || s.id === l.session_id,
@@ -443,26 +476,29 @@ export function SchedulingTab({
                     l.tutor_id ||
                     session?.tutorId ||
                     session?.tutor_id;
-                  const date = l.lessonDate || l.lesson_date || "";
-                  return tid === tutor.id && date === scheduleDate;
-                });
-
-                const tutorSessions = sessions.filter((s) => {
-                  if (
-                    s.sessionStatus !== "confirmed" &&
-                    s.sessionStatus !== "full" &&
-                    s.sessionStatus !== "completed"
-                  )
-                    return false;
-                  const tid = s.tutorId || s.tutor_id;
-                  if (tid !== tutor.id) return false;
-                  if (!s.startDate || !s.endDate) return false;
-                  return (
-                    s.startDate <= scheduleDate && s.endDate >= scheduleDate
+                  let date = l.lessonDate || l.lesson_date || "";
+                  
+                  if (session && session.startDate && session.endDate) {
+                    if (date < session.startDate || date > session.endDate) {
+                      date = session.startDate;
+                    }
+                  }
+                  
+                  if (tid !== tutor.id || date !== scheduleDate) return false;
+                  return true;
+                }).filter((l) => {
+                  const session = sessions.find(
+                    (s) => s.id === l.sessionId || s.id === l.session_id,
                   );
+                  const st = l.startTime || session?.startTime || "";
+                  const et = l.endTime || session?.endTime || "";
+                  const key = `${l.sessionId || l.session_id}-${st}-${et}`;
+                  if (uniqueTutorLessons.has(key)) return false;
+                  uniqueTutorLessons.set(key, true);
+                  return true;
                 });
 
-                if (tutorLessons.length === 0 && tutorSessions.length === 0)
+                if (tutorLessons.length === 0)
                   return null;
 
                 return (
@@ -505,6 +541,9 @@ export function SchedulingTab({
                               <div className="text-xs text-indigo-700 mt-1">
                                 {timeDisplay}
                               </div>
+                              <div className="text-xs text-indigo-500 mt-1">
+                                Duration: {session?.startDate} to {session?.endDate}
+                              </div>
                               <div className="text-xs text-indigo-500 mt-1 flex items-center gap-1">
                                 <MapPin className="w-3 h-3" />{" "}
                                 {(
@@ -518,40 +557,6 @@ export function SchedulingTab({
                             </div>
                           );
                         })}
-                      </div>
-                    )}
-
-                    {tutorSessions.length > 0 && (
-                      <div>
-                        <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">
-                          Active Assigned Intakes Spanning This Date
-                        </h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                          {tutorSessions
-                            .sort((a, b) =>
-                              (a.startDate || "").localeCompare(
-                                b.startDate || "",
-                              ),
-                            )
-                            .map((s) => {
-                              const course = courses.find(
-                                (c) => c.id === s.courseId,
-                              );
-                              return (
-                                <div
-                                  key={s.id}
-                                  className="p-3 border border-slate-200 bg-slate-50/50 rounded flex flex-col justify-center"
-                                >
-                                  <div className="font-bold text-slate-700 text-xs mb-1">
-                                    {course?.title || s.sessionName}
-                                  </div>
-                                  <div className="text-[10px] text-slate-500 font-medium">
-                                    Duration: {s.startDate} to {s.endDate}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                        </div>
                       </div>
                     )}
                   </div>
@@ -682,7 +687,7 @@ export function SchedulingTab({
                           : tutors.find((t) => t.id === tid)?.name || "Unknown";
                       const sessionsForTid = groupedByInstructor[tid].sort(
                         (a, b) =>
-                          (a.startDate || "").localeCompare(b.startDate || ""),
+                          (b.startDate || "").localeCompare(a.startDate || ""),
                       );
 
                       return (
@@ -769,29 +774,32 @@ export function SchedulingTab({
                   ];
 
                 return availableRooms.map((roomName) => {
+                  const uniqueRoomLessons = new Map();
                   const roomLessons = lessons.filter((l) => {
                     const session = sessions.find(
                       (s) => s.id === l.sessionId || s.id === l.session_id,
                     );
-                    const r =
-                      l.classroom || session?.room || session?.classroom;
-                    const date = l.lessonDate || l.lesson_date || "";
-                    return r === roomName && date === scheduleDate;
-                  });
-
-                  const roomSessions = sessions.filter((s) => {
-                    if (
-                      s.sessionStatus !== "confirmed" &&
-                      s.sessionStatus !== "full" &&
-                      s.sessionStatus !== "completed"
-                    )
-                      return false;
-                    const r = s.room || s.classroom || s.deliveryMode;
+                    const r = l.classroom || session?.room || session?.classroom;
                     if (r !== roomName) return false;
-                    if (!s.startDate || !s.endDate) return false;
-                    return (
-                      s.startDate <= scheduleDate && s.endDate >= scheduleDate
+
+                    let date = l.lessonDate || l.lesson_date || "";
+                    if (session && session.startDate && session.endDate) {
+                      if (date < session.startDate || date > session.endDate) {
+                        date = session.startDate;
+                      }
+                    }
+                    
+                    return date === scheduleDate;
+                  }).filter((l) => {
+                    const session = sessions.find(
+                      (s) => s.id === l.sessionId || s.id === l.session_id,
                     );
+                    const st = l.startTime || session?.startTime || "";
+                    const et = l.endTime || session?.endTime || "";
+                    const key = `${l.sessionId || l.session_id}-${st}-${et}`;
+                    if (uniqueRoomLessons.has(key)) return false;
+                    uniqueRoomLessons.set(key, true);
+                    return true;
                   });
 
                   return (
@@ -804,8 +812,7 @@ export function SchedulingTab({
                         {roomName}
                       </h3>
                       <div className="space-y-4 text-sm">
-                        {roomLessons.length === 0 &&
-                          roomSessions.length === 0 && (
+                        {roomLessons.length === 0 && (
                             <div className="p-4 text-center text-slate-400 text-xs italic uppercase tracking-wider">
                               Available (No Bookings)
                             </div>
@@ -859,49 +866,6 @@ export function SchedulingTab({
                             })}
                           </div>
                         )}
-
-                        {roomSessions.length > 0 && (
-                          <div>
-                            <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">
-                              Active Course Intakes Spanning This Date
-                            </h4>
-                            <div className="space-y-2">
-                              {roomSessions
-                                .sort((a, b) =>
-                                  (a.startDate || "").localeCompare(
-                                    b.startDate || "",
-                                  ),
-                                )
-                                .map((s) => {
-                                  const course = courses.find(
-                                    (c) => c.id === s.courseId,
-                                  );
-                                  const tutor = tutors.find(
-                                    (t) => t.id === (s.tutorId || s.tutor_id),
-                                  );
-                                  return (
-                                    <div
-                                      key={s.id}
-                                      className="p-2 border border-slate-200 bg-white shadow-sm rounded flex flex-col justify-center"
-                                    >
-                                      <div className="font-bold text-slate-700 text-xs mb-1">
-                                        {course?.title || s.sessionName}
-                                      </div>
-                                      <div className="text-[10px] text-slate-500 font-medium mb-1">
-                                        Duration: {s.startDate} to {s.endDate}
-                                      </div>
-                                      <div className="text-[10px] text-slate-500">
-                                        Instructor:{" "}
-                                        <span className="font-semibold text-slate-700">
-                                          {tutor?.name || "Unassigned"}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                            </div>
-                          </div>
-                        )}
                       </div>
                     </div>
                   );
@@ -943,7 +907,8 @@ export function SchedulingTab({
                       );
                       return l.classroom || session?.room || session?.classroom;
                     })
-                    .filter(Boolean);
+                    .filter(Boolean)
+                    .filter((r: any) => !r.toLowerCase().includes("online"));
                   let availableRooms = Array.from(
                     new Set([...configRooms, ...usedRooms]),
                   ) as string[];
@@ -980,6 +945,11 @@ export function SchedulingTab({
                 )
                   return false;
                 if (s.endDate && s.endDate < today) return false;
+                
+                const isOnline = s.deliveryMode === "online" || 
+                                 (s.room || "").toLowerCase().includes("online") || 
+                                 (s.classroom || "").toLowerCase().includes("online");
+                if (isOnline) return false;
                 const r = s.room || s.classroom || s.deliveryMode;
                 if (scheduleRoomFilter && r !== scheduleRoomFilter)
                   return false;

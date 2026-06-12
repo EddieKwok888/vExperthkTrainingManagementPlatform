@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -85,6 +85,16 @@ export function UsersTab({
   navigate,
   role,
 }: UsersTabProps) {
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, roleFilter, statusFilter, activeTab]);
+
+  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage) || 1;
+  const paginatedUsers = filteredUsers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   return (
     <div className="space-y-6">
       <ReadOnlyAlert moduleKey={activeTab} getPermission={getPermission} />
@@ -213,7 +223,7 @@ export function UsersTab({
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredUsers.map((u) => (
+                paginatedUsers.map((u) => (
                   <TableRow key={u.id}>
                     <TableCell>
                       <div className="flex items-center gap-3">
@@ -394,6 +404,23 @@ export function UsersTab({
             </TableBody>
           </Table>
         </CardContent>
+        {filteredUsers.length > 10 && (
+          <div className="flex justify-end p-4 border-t border-slate-100">
+            <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+              <span className="text-xs text-slate-500 font-medium">Page</span>
+              <select
+                value={currentPage}
+                onChange={(e) => setCurrentPage(Number(e.target.value))}
+                className="bg-white border border-slate-300 text-slate-700 text-xs rounded focus:ring-blue-500 focus:border-blue-500 block px-2 py-1 outline-none font-medium cursor-pointer"
+              >
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                  <option key={page} value={page}>{page}</option>
+                ))}
+              </select>
+              <span className="text-xs text-slate-500 font-medium">of {totalPages}</span>
+            </div>
+          </div>
+        )}
       </Card>
     </div>
   );

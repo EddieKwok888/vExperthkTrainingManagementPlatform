@@ -159,6 +159,95 @@ export function SessionsTab({
   fetchData,
   db,
 }: SessionsTabProps) {
+  const [activeRunsPage, setActiveRunsPage] = React.useState(1);
+  const [confirmedRunsPage, setConfirmedRunsPage] = React.useState(1);
+  const itemsPerPage = 10;
+
+  React.useEffect(() => { setActiveRunsPage(1); }, [courseRunSearchTerm, runsStartDate, runsEndDate, showCompletedRuns]);
+  React.useEffect(() => { setConfirmedRunsPage(1); }, [sessionCertSearchTerm, sessionCertsStartDate, sessionCertsEndDate]);
+
+  const filteredActiveRuns = sessions
+    .filter((s) => {
+      const hasCertificates = certificates.some(
+        (cert: any) => {
+          const reg = regs.find((r: any) => r.id === cert.registrationId);
+          return reg?.sessionId === s.id;
+        },
+      );
+      if (hasCertificates) return false;
+
+      if (!showCompletedRuns && (s.sessionStatus === "completed" || s.sessionStatus === "cancelled")) return false;
+      if (s.sessionStatus === "confirmed" || s.sessionStatus === "full") return false;
+      if (runsStartDate && s.startDate && s.startDate < runsStartDate) return false;
+      if (runsEndDate && s.startDate && s.startDate > runsEndDate) return false;
+
+      if (courseRunSearchTerm) {
+        const course = courses.find((c: any) => c.id === s.courseId);
+        const instructor = tutors.find((t: any) => t.id === s.tutorId);
+        const term = courseRunSearchTerm.toLowerCase();
+        return (
+          course?.courseCode?.toLowerCase().includes(term) ||
+          s.sessionName?.toLowerCase().includes(term) ||
+          course?.title?.toLowerCase().includes(term) ||
+          instructor?.name?.toLowerCase().includes(term) ||
+          s.sessionStatus?.toLowerCase().includes(term)
+        );
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      const isAConf = a.sessionStatus === "confirmed";
+      const isBConf = b.sessionStatus === "confirmed";
+      if (isAConf && !isBConf) return -1;
+      if (!isAConf && isBConf) return 1;
+      const dateA = a.startDate || "9999-12-31";
+      const dateB = b.startDate || "9999-12-31";
+      return dateA.localeCompare(dateB);
+    });
+
+  const activeRunsTotalPages = Math.ceil(filteredActiveRuns.length / itemsPerPage) || 1;
+  const paginatedActiveRuns = filteredActiveRuns.slice((activeRunsPage - 1) * itemsPerPage, activeRunsPage * itemsPerPage);
+
+  const filteredConfirmedRuns = sessions
+    .filter((s) => {
+      const hasCertificates = certificates.some(
+        (cert: any) => {
+          const reg = regs.find((r: any) => r.id === cert.registrationId);
+          return reg?.sessionId === s.id;
+        },
+      );
+      if (hasCertificates) return false;
+
+      if (s.sessionStatus !== "confirmed" && s.sessionStatus !== "full") return false;
+      if (sessionCertsStartDate && s.startDate && s.startDate < sessionCertsStartDate) return false;
+      if (sessionCertsEndDate && s.startDate && s.startDate > sessionCertsEndDate) return false;
+
+      if (sessionCertSearchTerm) {
+        const course = courses.find((c: any) => c.id === s.courseId);
+        const instructor = tutors.find((t: any) => t.id === s.tutorId);
+        const term = sessionCertSearchTerm.toLowerCase();
+        return (
+          course?.courseCode?.toLowerCase().includes(term) ||
+          s.sessionName?.toLowerCase().includes(term) ||
+          course?.title?.toLowerCase().includes(term) ||
+          instructor?.name?.toLowerCase().includes(term)
+        );
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      const isAConf = a.sessionStatus === "confirmed" || a.sessionStatus === "full";
+      const isBConf = b.sessionStatus === "confirmed" || b.sessionStatus === "full";
+      if (isAConf && !isBConf) return -1;
+      if (!isAConf && isBConf) return 1;
+      const dateA = a.startDate || "9999-12-31";
+      const dateB = b.startDate || "9999-12-31";
+      return dateA.localeCompare(dateB);
+    });
+
+  const confirmedRunsTotalPages = Math.ceil(filteredConfirmedRuns.length / itemsPerPage) || 1;
+  const paginatedConfirmedRuns = filteredConfirmedRuns.slice((confirmedRunsPage - 1) * itemsPerPage, confirmedRunsPage * itemsPerPage);
+
   return (
     <div className="space-y-6">
       <ReadOnlyAlert moduleKey="sessions" getPermission={getPermission} />
@@ -321,94 +410,7 @@ export function SessionsTab({
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {sessions
-                          .filter((s) => {
-                            const hasCertificates = certificates.some(
-                              (cert: any) => {
-                                const reg = regs.find(
-                                  (r: any) => r.id === cert.registrationId,
-                                );
-                                return reg?.sessionId === s.id;
-                              },
-                            );
-                            if (hasCertificates) return false;
-
-                            // 1. Hide completed and cancelled runs unless toggled on
-                            if (
-                              !showCompletedRuns &&
-                              (s.sessionStatus === "completed" ||
-                                s.sessionStatus === "cancelled")
-                            ) {
-                              return false;
-                            }
-
-                            // 1.5 Hide confirmed and full sessions from Active Courses
-                            if (
-                              s.sessionStatus === "confirmed" ||
-                              s.sessionStatus === "full"
-                            ) {
-                              return false;
-                            }
-
-                            // 2. Date selection checks session's startDate
-                            if (
-                              runsStartDate &&
-                              s.startDate &&
-                              s.startDate < runsStartDate
-                            ) {
-                              return false;
-                            }
-                            if (
-                              runsEndDate &&
-                              s.startDate &&
-                              s.startDate > runsEndDate
-                            ) {
-                              return false;
-                            }
-
-                            // 3. Search query lookup
-                            if (courseRunSearchTerm) {
-                              const course = courses.find(
-                                (c: any) => c.id === s.courseId,
-                              );
-                              const instructor = tutors.find(
-                                (t: any) => t.id === s.tutorId,
-                              );
-                              const term = courseRunSearchTerm.toLowerCase();
-                              const matchCourseCode = course?.courseCode
-                                ?.toLowerCase()
-                                .includes(term);
-                              const matchSessionName = s.sessionName
-                                ?.toLowerCase()
-                                .includes(term);
-                              const matchCourseTitle = course?.title
-                                ?.toLowerCase()
-                                .includes(term);
-                              const matchInstructor = instructor?.name
-                                ?.toLowerCase()
-                                .includes(term);
-                              const matchStatus = s.sessionStatus
-                                ?.toLowerCase()
-                                .includes(term);
-                              return (
-                                matchCourseCode ||
-                                matchSessionName ||
-                                matchCourseTitle ||
-                                matchInstructor ||
-                                matchStatus
-                              );
-                            }
-                            return true;
-                          })
-                          .sort((a, b) => {
-                            const isAConf = a.sessionStatus === "confirmed";
-                            const isBConf = b.sessionStatus === "confirmed";
-                            if (isAConf && !isBConf) return -1;
-                            if (!isAConf && isBConf) return 1;
-                            const dateA = a.startDate || "9999-12-31";
-                            const dateB = b.startDate || "9999-12-31";
-                            return dateA.localeCompare(dateB);
-                          })
+                        {paginatedActiveRuns
                           .map((s) => {
                             const course = courses.find(
                               (c) => c.id === s.courseId,
@@ -577,6 +579,23 @@ export function SessionsTab({
                       </TableBody>
                     </Table>
                   </div>
+                  {filteredActiveRuns.length > 10 && (
+                    <div className="flex justify-end mt-4 pt-4 border-t border-slate-100">
+                      <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+                        <span className="text-xs text-slate-500 font-medium">Page</span>
+                        <select
+                          value={activeRunsPage}
+                          onChange={(e) => setActiveRunsPage(Number(e.target.value))}
+                          className="bg-white border border-slate-300 text-slate-700 text-xs rounded focus:ring-blue-500 focus:border-blue-500 block px-2 py-1 outline-none font-medium cursor-pointer"
+                        >
+                          {Array.from({ length: activeRunsTotalPages }, (_, i) => i + 1).map(page => (
+                            <option key={page} value={page}>{page}</option>
+                          ))}
+                        </select>
+                        <span className="text-xs text-slate-500 font-medium">of {activeRunsTotalPages}</span>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </>
@@ -935,82 +954,16 @@ export function SessionsTab({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sessions
-                  .filter((s) => {
-                    // 1. Only show confirmed/full sessions
-                    if (
-                      s.sessionStatus !== "full" &&
-                      s.sessionStatus !== "confirmed"
-                    ) {
-                      return false;
-                    }
+                {paginatedConfirmedRuns.map((s) => {
+                  const course = courses.find((c) => c.id === s.courseId);
+                  const instructor = tutors.find((t) => t.id === s.tutorId);
+                  const sessionRegs = regs.filter(
+                    (r) => r.sessionId === s.id && r.status === "verified",
+                  );
 
-                    // 2. Date range checks session's startDate
-                    if (
-                      sessionCertsStartDate &&
-                      s.startDate &&
-                      s.startDate < sessionCertsStartDate
-                    ) {
-                      return false;
-                    }
-                    if (
-                      sessionCertsEndDate &&
-                      s.startDate &&
-                      s.startDate > sessionCertsEndDate
-                    ) {
-                      return false;
-                    }
-
-                    // 3. Search query lookup
-                    if (sessionCertSearchTerm) {
-                      const course = courses.find(
-                        (c: any) => c.id === s.courseId,
-                      );
-                      const instructor = tutors.find(
-                        (t: any) => t.id === s.tutorId,
-                      );
-                      const term = sessionCertSearchTerm.toLowerCase();
-                      const matchCourseCode = course?.courseCode
-                        ?.toLowerCase()
-                        .includes(term);
-                      const matchSessionName = s.sessionName
-                        ?.toLowerCase()
-                        .includes(term);
-                      const matchCourseTitle = course?.title
-                        ?.toLowerCase()
-                        .includes(term);
-                      const matchInstructor = instructor?.name
-                        ?.toLowerCase()
-                        .includes(term);
-                      const matchStatus = s.sessionStatus
-                        ?.toLowerCase()
-                        .includes(term);
-                      return (
-                        matchCourseCode || matchSessionName || matchCourseTitle || matchInstructor || matchStatus
-                      );
-                    }
-
-                    return true;
-                  })
-                  .sort((a, b) => {
-                    const isAConf = a.sessionStatus === "confirmed" || a.sessionStatus === "full";
-                    const isBConf = b.sessionStatus === "confirmed" || b.sessionStatus === "full";
-                    if (isAConf && !isBConf) return -1;
-                    if (!isAConf && isBConf) return 1;
-                    const dateA = a.startDate || "9999-12-31";
-                    const dateB = b.startDate || "9999-12-31";
-                    return dateA.localeCompare(dateB);
-                  })
-                  .map((s) => {
-                    const course = courses.find((c) => c.id === s.courseId);
-                    const instructor = tutors.find((t) => t.id === s.tutorId);
-                    const sessionRegs = regs.filter(
-                      (r) => r.sessionId === s.id && r.status === "verified",
-                    );
-
-                    return (
-                      <TableRow
-                        key={s.id}
+                  return (
+                    <TableRow
+                      key={s.id}
                         className="hover:bg-slate-50/50"
                       >
                         <TableCell>
@@ -1145,6 +1098,23 @@ export function SessionsTab({
               </TableBody>
             </Table>
           </CardContent>
+          {filteredConfirmedRuns.length > 10 && (
+            <div className="flex justify-end p-4 border-t border-slate-100">
+              <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+                <span className="text-xs text-slate-500 font-medium">Page</span>
+                <select
+                  value={confirmedRunsPage}
+                  onChange={(e) => setConfirmedRunsPage(Number(e.target.value))}
+                  className="bg-white border border-slate-300 text-slate-700 text-xs rounded focus:ring-blue-500 focus:border-blue-500 block px-2 py-1 outline-none font-medium cursor-pointer"
+                >
+                  {Array.from({ length: confirmedRunsTotalPages }, (_, i) => i + 1).map(page => (
+                    <option key={page} value={page}>{page}</option>
+                  ))}
+                </select>
+                <span className="text-xs text-slate-500 font-medium">of {confirmedRunsTotalPages}</span>
+              </div>
+            </div>
+          )}
         </Card>
       )}
     </div>

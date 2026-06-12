@@ -291,7 +291,7 @@ export function InstructorDashboard() {
       const mergedData: Record<string, string> = {};
       enrolledStudents.forEach((s: any) => {
         const key = s.id;
-        mergedData[key] = existingAttendance[s.studentId] || existingAttendance[key] || 'present';
+        mergedData[key] = existingAttendance[s.studentId] || existingAttendance[key] || '';
       });
       setAttendanceData(mergedData);
     } catch (error: any) {

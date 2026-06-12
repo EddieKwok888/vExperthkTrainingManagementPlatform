@@ -1607,12 +1607,15 @@ export function AdminDashboard() {
       if (status === "verified") {
         if (foundReg?.promoId) {
           try {
-            await updateDoc(doc(db, "promotions", foundReg.promoId), {
-              usageCount: increment(1),
-            });
+            const promoDoc = await getDoc(doc(db, "promotions", foundReg.promoId));
+            const promoUpdates: any = { usageCount: increment(1) };
+            if (promoDoc.exists() && promoDoc.data().category === 'welcome') {
+              promoUpdates.status = 'inactive';
+            }
+            await updateDoc(doc(db, "promotions", foundReg.promoId), promoUpdates);
           } catch (promoErr) {
             console.error(
-              "Failed to increment promotion usage count: ",
+              "Failed to update promotion: ",
               promoErr,
             );
           }
@@ -1771,8 +1774,10 @@ export function AdminDashboard() {
       return matchesSearch && matchesRole && matchesStatus;
     })
     .sort((a, b) => {
-      const aValue = a[sortConfig.key] || "";
-      const bValue = b[sortConfig.key] || "";
+      let aValue = a[sortConfig.key] || "";
+      let bValue = b[sortConfig.key] || "";
+      if (typeof aValue === "string") aValue = aValue.toLowerCase();
+      if (typeof bValue === "string") bValue = bValue.toLowerCase();
       if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1;
       if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1;
       return 0;
@@ -2007,7 +2012,7 @@ export function AdminDashboard() {
       const mergedData: Record<string, string> = {};
       enrolled.forEach((s: any) => {
         const key = s.id;
-        mergedData[key] = existingAttendance[s.studentId] || existingAttendance[key] || "present";
+        mergedData[key] = existingAttendance[s.studentId] || existingAttendance[key] || "";
       });
       setAttendanceData(mergedData);
     } catch (e: any) {
@@ -2600,13 +2605,27 @@ export function AdminDashboard() {
 
       doc.setTextColor(100, 116, 139);
       doc.setFontSize(12);
+      let issueDateStr = "N/A";
+      if (cert.issuedAt || cert.issued_at) {
+        const dVal = cert.issuedAt || cert.issued_at;
+        const d = new Date(dVal.seconds ? dVal.seconds * 1000 : dVal);
+        if (!isNaN(d.getTime())) {
+          const day = String(d.getDate()).padStart(2, '0');
+          const month = String(d.getMonth() + 1).padStart(2, '0');
+          issueDateStr = `${day}/${month}/${d.getFullYear()}`;
+        }
+      } else {
+        const d = new Date();
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        issueDateStr = `${day}/${month}/${d.getFullYear()}`;
+      }
       doc.text(
-        `Issue Date: ${formatHkDate(cert.issuedAt || cert.issued_at || new Date())}`,
+        `Issue Date: ${issueDateStr}`,
         148,
         180,
         { align: "center" },
       );
-      doc.text(`Certificate ID: ${cert.id}`, 148, 190, { align: "center" });
     });
 
     doc.save(`${courseTitle.replace(/\s+/g, "_")}_Certificates.pdf`);
@@ -2824,6 +2843,20 @@ export function AdminDashboard() {
   const handleGenerateInvoice = (reg: any) => {
     const doc = new jsPDF();
 
+    // Normalize courseList for AdminDashboard raw records
+    let courseList = reg.courseList;
+    if (!courseList) {
+       courseList = [];
+       const relatedCourse = courses.find((c) => c.id === reg.courseId);
+       if (relatedCourse) courseList.push(relatedCourse.title);
+       if (reg.isBundleParent && reg.peerCourseId) {
+          const secondCourse = courses.find((c) => c.id === reg.peerCourseId);
+          if (secondCourse) courseList.push(secondCourse.title);
+       }
+    }
+    const totalAmount = reg.totalAmount || reg.amount || 0;
+    const invNumber = reg.invoiceNumber || reg.invoice_number || "N/A";
+
     // Header
     if (schoolInfo.logo_url && schoolInfo.logo_url.startsWith("data:image")) {
       try {
@@ -2862,16 +2895,16 @@ export function AdminDashboard() {
     doc.text("OFFICIAL RECEIPT", 105, 55, { align: "center" });
 
     doc.setFontSize(12);
-    doc.text(`Receipt No: ${reg.invoice_number || "N/A"}`, 20, 70);
+    doc.text(`Receipt No: ${invNumber}`, 20, 70);
     doc.text(`Date: ${formatHkDate(reg.createdAt)}`, 140, 70);
 
     // Student Info
     doc.setFontSize(11);
     doc.text("Billed To:", 20, 85);
     doc.setFontSize(12);
-    doc.text(reg.studentName, 20, 92);
+    doc.text(reg.studentName || "N/A", 20, 92);
     doc.setFontSize(10);
-    doc.text(reg.studentEmail, 20, 97);
+    doc.text(reg.studentEmail || "N/A", 20, 97);
 
     // Itemized Table
     doc.setDrawColor(200);
@@ -2882,36 +2915,33 @@ export function AdminDashboard() {
     doc.text("Description", 25, 117);
     doc.text("Amount", 160, 117);
 
-    const relatedCourse = courses.find((c) => c.id === reg.courseId);
-    
-    if (reg.isBundleParent && reg.peerCourseId) {
-      const secondCourse = courses.find((c) => c.id === reg.peerCourseId);
-      const title1 = doc.splitTextToSize(`1. ${relatedCourse?.title || "Course 1"}`, 125);
-      doc.text(title1, 25, 130);
-      let yOffset = title1.length * 5;
-      
-      const title2 = doc.splitTextToSize(`2. ${secondCourse?.title || "Course 2"}`, 125);
-      doc.text(title2, 25, 130 + yOffset);
-      
-      doc.text(`$${reg.amount || 0}`, 160, 130 + yOffset);
-      
-      yOffset += title2.length * 5;
+    if (courseList && courseList.length > 1) {
+      let yOffset = 0;
+      courseList.forEach((title: string, index: number) => {
+        const titleText = doc.splitTextToSize(`${index + 1}. ${title}`, 125);
+        doc.text(titleText, 25, 130 + yOffset);
+        if (index === 0) {
+           doc.text(`HKD ${totalAmount}`, 160, 130 + yOffset);
+        }
+        yOffset += titleText.length * 5;
+      });
       doc.setFontSize(8);
       doc.setTextColor(150);
-      doc.text(`(2-Course Bundle Special Deal)`, 25, 130 + yOffset);
+      doc.text(`(Bundle Special Deal)`, 25, 130 + yOffset);
       doc.setFontSize(10);
       doc.setTextColor(0);
     } else {
-      const title1 = doc.splitTextToSize(relatedCourse?.title || "Course Payment", 125);
+      const singleTitle = courseList?.[0] || "Course Payment";
+      const title1 = doc.splitTextToSize(singleTitle, 125);
       doc.text(title1, 25, 130);
-      doc.text(`$${reg.amount || 0}`, 160, 130);
+      doc.text(`HKD ${totalAmount}`, 160, 130);
     }
 
     // Total
     doc.line(140, 170, 190, 170);
     doc.setFontSize(12);
     doc.text("Total Paid:", 140, 180);
-    doc.text(`$${reg.amount || 0}`, 170, 180);
+    doc.text(`HKD ${totalAmount}`, 170, 180);
 
     // Payment Method
     doc.setFontSize(10);
@@ -2931,7 +2961,7 @@ export function AdminDashboard() {
     doc.setTextColor(0);
     doc.text("Thank you for your business!", 105, 270, { align: "center" });
 
-    doc.save(`${reg.invoiceNumber || "receipt"}_${reg.studentName}.pdf`);
+    doc.save(`${invNumber === 'N/A' ? 'receipt' : invNumber}_${reg.studentName || "student"}.pdf`);
   };
 
   const handleCreateBranch = async () => {
@@ -3306,7 +3336,7 @@ export function AdminDashboard() {
     { id: "overview", label: t("nav.overview"), icon: LayoutDashboard },
     { id: "courses", label: "Templates", icon: BookOpen },
     { id: "sessions", label: "Courses", icon: CalendarIcon },
-    { id: "certificates", label: t("nav.certificates"), icon: Database },
+
     { id: "scheduling", label: t("nav.scheduling"), icon: CalendarRange },
     { id: "tutors", label: t("nav.tutors"), icon: Clock },
     { id: "feedback", label: t("nav.feedback"), icon: MessageSquare },
@@ -3425,6 +3455,14 @@ export function AdminDashboard() {
   useEffect(() => {
     if (!loading && role && activeTab) {
       const allowed = getAccessibleTabs().map((t) => t.id);
+      
+      if (activeTab === "feedback-template") {
+        if (!allowed.includes("feedback") && allowed.length > 0) {
+          setActiveTab(allowed[0]);
+        }
+        return;
+      }
+
       if (allowed.length > 0 && !allowed.includes(activeTab)) {
         setActiveTab(allowed[0]);
       }
@@ -3609,313 +3647,7 @@ export function AdminDashboard() {
               </div>
             )}
 
-            {activeTab === "certificates" && (
-              <div className="space-y-6">
-                <ReadOnlyAlert moduleKey="certificates" />
-                <Card className="border-none shadow-xl shadow-slate-200/50 bg-white/80 backdrop-blur-sm">
-                  <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-4 border-b border-slate-50 gap-4">
-                    <div>
-                      <CardTitle className="text-xl font-black text-slate-800 tracking-tight">
-                        Certificates History
-                      </CardTitle>
-                      <CardDescription className="text-xs font-medium text-slate-500">
-                        Record of all issued digital certificates
-                      </CardDescription>
-                    </div>
-                    <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
-                      <div className="relative w-full sm:w-48">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <Input
-                          placeholder="Search course name..."
-                          className="pl-9 h-8 text-xs focus:ring-blue-500 border-slate-200"
-                          value={certSearchTerm}
-                          onChange={(e) => setCertSearchTerm(e.target.value)}
-                        />
-                      </div>
-                      <div className="relative w-full sm:w-40 flex items-center bg-white border border-slate-200 rounded-md overflow-hidden">
-                        <CalendarIcon className="w-4 h-4 ml-3 text-slate-400 shrink-0" />
-                        <select
-                          className="h-8 text-xs bg-transparent focus:ring-0 focus:outline-none flex-1 px-2 cursor-pointer min-w-0"
-                          value={certDateTerm}
-                          onChange={(e) => setCertDateTerm(e.target.value)}
-                        >
-                          <option value="">All months</option>
-                          {Array.from(
-                            new Set(
-                              certificates
-                                .map((c: any) => {
-                                  const dateObj = c.issuedAt?.toDate
-                                    ? c.issuedAt.toDate()
-                                    : new Date(c.issuedAt || c.issued_at);
-                                  return isNaN(dateObj.getTime())
-                                    ? ""
-                                    : `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, "0")}`;
-                                })
-                                .filter(Boolean),
-                            ),
-                          )
-                            .sort()
-                            .reverse()
-                            .map((monthStr) => {
-                              const [year, month] = (monthStr as string).split(
-                                "-",
-                              );
-                              const label = new Date(
-                                parseInt(year),
-                                parseInt(month) - 1,
-                              ).toLocaleString("en-US", {
-                                month: "long",
-                                year: "numeric",
-                              });
-                              return (
-                                <option key={monthStr as string} value={label}>
-                                  {label}
-                                </option>
-                              );
-                            })}
-                        </select>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          handleExportCSV(certificates, "certificates")
-                        }
-                        className="gap-2 h-8 text-[10px] font-bold uppercase tracking-wider border-slate-200"
-                      >
-                        <Download className="w-3.5 h-3.5" /> Export
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-0">
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="hover:bg-transparent border-slate-100">
-                            <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                              Course
-                            </TableHead>
-                            <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                              Issued At
-                            </TableHead>
-                            <TableHead className="px-6 py-4 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                              Actions
-                            </TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {Object.entries(
-                            certificates
-                              .filter((cert: any) => {
-                                const reg = regs.find(
-                                  (r) => r.id === cert.registrationId,
-                                );
-                                const session = sessions.find(
-                                  (s) => s.id === reg?.sessionId,
-                                );
-                                return session?.sessionStatus === "completed";
-                              })
-                              .reduce(
-                                (acc, cert) => {
-                                  const reg = regs.find(
-                                    (r) => r.id === cert.registrationId,
-                                  );
-                                  const session = sessions.find(
-                                    (s) => s.id === reg?.sessionId,
-                                  );
-                                  const sessionLabel = session
-                                    ? `${session.sessionName} (${session.startDate} to ${session.endDate})`
-                                    : "Unknown Course";
 
-                                  const key = `${cert.courseId || "Unknown Course"}_${session?.id || "unknown"}`;
-                                  if (!acc[key])
-                                    acc[key] = {
-                                      courseTitle:
-                                        cert.courseTitle || cert.course_title,
-                                      sessionLabel: sessionLabel,
-                                      certs: [],
-                                    };
-                                  acc[key].certs.push(cert);
-                                  return acc;
-                                },
-                                {} as Record<
-                                  string,
-                                  {
-                                    courseTitle: string;
-                                    sessionLabel: string;
-                                    certs: any[];
-                                  }
-                                >,
-                              ),
-                          )
-                            .filter(([key, data]: [string, any]) => {
-                              let match = true;
-                              if (certSearchTerm) {
-                                match =
-                                  match &&
-                                  !!data.courseTitle
-                                    ?.toLowerCase()
-                                    .includes(certSearchTerm.toLowerCase());
-                              }
-                              if (certDateTerm) {
-                                const issuedAt =
-                                  data.certs.length > 0
-                                    ? data.certs[0].issuedAt ||
-                                      data.certs[0].issued_at
-                                    : null;
-                                const dateObj = issuedAt?.toDate
-                                  ? issuedAt.toDate()
-                                  : new Date(issuedAt);
-                                const certMonthStr =
-                                  issuedAt && !isNaN(dateObj.getTime())
-                                    ? dateObj.toLocaleString("en-US", {
-                                        month: "long",
-                                        year: "numeric",
-                                      })
-                                    : "";
-                                match = match && certMonthStr === certDateTerm;
-                              }
-                              return match;
-                            })
-                            .sort(
-                              (
-                                [, dataA]: [string, any],
-                                [, dataB]: [string, any],
-                              ) => {
-                                const dateA =
-                                  dataA.certs.length > 0
-                                    ? dataA.certs[0].issuedAt?.toDate
-                                      ? dataA.certs[0].issuedAt.toDate()
-                                      : new Date(
-                                          dataA.certs[0].issuedAt ||
-                                            dataA.certs[0].issued_at,
-                                        )
-                                    : new Date(0);
-                                const dateB =
-                                  dataB.certs.length > 0
-                                    ? dataB.certs[0].issuedAt?.toDate
-                                      ? dataB.certs[0].issuedAt.toDate()
-                                      : new Date(
-                                          dataB.certs[0].issuedAt ||
-                                            dataB.certs[0].issued_at,
-                                        )
-                                    : new Date(0);
-                                return dateB.getTime() - dateA.getTime();
-                              },
-                            )
-                            .map(([key, data]: [string, any]) => (
-                              <TableRow
-                                key={key}
-                                className="border-slate-50 hover:bg-slate-50/50 transition-colors"
-                              >
-                                <TableCell className="px-6 py-4">
-                                  <div className="font-bold text-slate-800">
-                                    {data.courseTitle || "Unknown Course"}
-                                  </div>
-                                  <div className="text-xs font-medium text-slate-500 mt-0.5">
-                                    {data.sessionLabel}
-                                  </div>
-                                </TableCell>
-                                <TableCell className="px-6 py-4">
-                                  <div className="text-xs font-bold text-slate-700">
-                                    {data.certs.length > 0
-                                      ? formatHkDate(
-                                          data.certs[0].issuedAt ||
-                                            data.certs[0].issued_at,
-                                        )
-                                      : "N/A"}
-                                  </div>
-                                  <div className="text-[10px] text-slate-400 mt-0.5">
-                                    {data.certs.length} certificates
-                                  </div>
-                                </TableCell>
-                                <TableCell className="px-6 py-4 text-right">
-                                  <div className="flex justify-end gap-2">
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() =>
-                                        generateBulkCertificatesPDF(
-                                          data.certs,
-                                          `${data.courseTitle} - ${data.sessionLabel}`,
-                                        )
-                                      }
-                                      className="gap-2 h-8 px-3 text-[10px] font-bold uppercase tracking-wider text-blue-600 border-blue-100 hover:bg-blue-50/50"
-                                    >
-                                      <Download className="w-3 h-3" /> Download{" "}
-                                      {data.certs.length} PDFs
-                                    </Button>
-                                    {getPermission("certificates") !==
-                                    "view" ? (
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={async () => {
-                                          if (
-                                            window.confirm(
-                                              "Are you sure you want to remove all certificates for this course session? This cannot be undone.",
-                                            )
-                                          ) {
-                                            try {
-                                              const deletePromises =
-                                                data.certs.map((c: any) =>
-                                                  deleteDoc(
-                                                    doc(
-                                                      collection(
-                                                        db,
-                                                        "certificates",
-                                                      ),
-                                                      c.id,
-                                                    ),
-                                                  ),
-                                                );
-                                              await Promise.all(deletePromises);
-                                              setCertificates((prev) =>
-                                                prev.filter(
-                                                  (p) =>
-                                                    !data.certs.some(
-                                                      (c: any) => c.id === p.id,
-                                                    ),
-                                                ),
-                                              );
-                                              toast.success(
-                                                "Certificates removed successfully",
-                                              );
-                                            } catch (e: any) {
-                                              toast.error(e.message);
-                                            }
-                                          }
-                                        }}
-                                        className="gap-2 h-8 px-3 text-[10px] font-bold uppercase tracking-wider text-red-600 hover:bg-red-50 hover:text-red-700"
-                                      >
-                                        <Trash2 className="w-3 h-3" /> Remove
-                                      </Button>
-                                    ) : (
-                                      <span className="text-[10px] text-slate-400 font-bold bg-slate-100 border border-slate-200 px-3 py-2 rounded">
-                                        Locked
-                                      </span>
-                                    )}
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          {certificates.length === 0 && (
-                            <TableRow>
-                              <TableCell
-                                colSpan={3}
-                                className="text-center py-12 text-slate-400 text-xs italic tracking-wider"
-                              >
-                                No certificates found in system records.
-                              </TableCell>
-                            </TableRow>
-                          )}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
 
             {activeTab === "scheduling" && (
               <SchedulingTab
@@ -4182,6 +3914,7 @@ export function AdminDashboard() {
         sessions={sessions}
         setIsUserViewModalOpen={setIsUserViewModalOpen}
         setMtmYear={setMtmYear}
+        schoolInfo={schoolInfo}
       />
 
       {/* Edit Course Modal */}
@@ -4211,6 +3944,14 @@ export function AdminDashboard() {
         name={name}
         sessions={sessions}
         setDeleteConfirmOpen={setDeleteConfirmOpen}
+      />
+      <CategoryManagerModal
+        open={categoryManagerOpen}
+        onOpenChange={setCategoryManagerOpen}
+        courseCategories={courseCategories}
+        setCourseCategories={setCourseCategories}
+        courses={courses}
+        setCourses={setCourses}
       />
       <CourseCreationModal
         open={courseCreationModalOpen}

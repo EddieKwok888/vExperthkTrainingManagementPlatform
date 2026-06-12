@@ -196,31 +196,20 @@ export const LogsTab = React.memo(function LogsTab({
           </TableBody>
         </Table>
 
-        {filteredLogs.length > 0 && (
-          <div className="flex items-center justify-between p-4 border-t border-slate-100 bg-slate-50/50">
-            <div className="text-xs text-slate-500 font-medium">
-              Showing {Math.min(filteredLogs.length, (currentPage - 1) * itemsPerPage + 1)} to {Math.min(filteredLogs.length, currentPage * itemsPerPage)} of {filteredLogs.length} entries
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-slate-500 mr-2 font-medium">Page {currentPage} of {totalPages}</span>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 w-8 p-0"
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+        {filteredLogs.length > 10 && (
+          <div className="flex justify-end p-4 border-t border-slate-100">
+            <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+              <span className="text-xs text-slate-500 font-medium">Page</span>
+              <select
+                value={currentPage}
+                onChange={(e) => setCurrentPage(Number(e.target.value))}
+                className="bg-white border border-slate-300 text-slate-700 text-xs rounded focus:ring-blue-500 focus:border-blue-500 block px-2 py-1 outline-none font-medium cursor-pointer"
               >
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 w-8 p-0"
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              >
-                <ChevronRight className="w-4 h-4" />
-              </Button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                  <option key={page} value={page}>{page}</option>
+                ))}
+              </select>
+              <span className="text-xs text-slate-500 font-medium">of {totalPages}</span>
             </div>
           </div>
         )}

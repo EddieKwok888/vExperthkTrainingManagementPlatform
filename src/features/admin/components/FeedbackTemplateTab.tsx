@@ -189,7 +189,7 @@ export function FeedbackTemplateTab() {
                           <input type="checkbox" className="mt-1 w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer" readOnly checked={true} />
                           <div className="text-sm text-slate-600 leading-relaxed">
                              <p className="font-bold text-slate-800 mb-1">Marketing Consent</p>
-                             <p className="font-medium">Kenfil Hong Kong Limited may use my comment for marketing purpose. Please check the box to indicate your consent.</p>
+                             <p className="font-medium">vExpert AI Training Academy may use my comment for marketing purpose. Please check the box to indicate your consent.</p>
                              <p className="italic mt-2 text-xs text-slate-400">Note: We assure you that your personal information will be kept confidential and will not be shared with any third party.</p>
                           </div>
                        </label>
