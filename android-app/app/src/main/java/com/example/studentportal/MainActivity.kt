@@ -7,13 +7,17 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,7 +27,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.FieldValue
@@ -37,8 +43,9 @@ import kotlinx.coroutines.tasks.await
 import java.util.Calendar
 
 data class Registration(val id: String, val courseId: String, val sessionId: String, val status: String)
-data class Course(val id: String, val title: String, val courseCode: String)
-data class EnrolledCourseData(val registration: Registration, val course: Course?)
+data class Course(val id: String, val title: String, val courseCode: String, val description: String, val category: String, val level: String, val day: String)
+data class Session(val id: String, val startDate: String, val endDate: String, val classroom: String)
+data class EnrolledCourseData(val registration: Registration, val course: Course?, val session: Session?)
 
 class MainActivity : ComponentActivity() {
 
@@ -220,14 +227,35 @@ class MainActivity : ComponentActivity() {
                                 Course(
                                     id = doc.id,
                                     title = doc.getString("title") ?: "Unknown",
-                                    courseCode = doc.getString("courseCode") ?: ""
+                                    courseCode = doc.getString("courseCode") ?: "",
+                                    description = doc.getString("description") ?: "",
+                                    category = doc.getString("category") ?: "",
+                                    level = doc.getString("level") ?: "",
+                                    day = doc.getString("day") ?: ""
+                                )
+                            })
+                        }
+                        
+                        val sessionIds = regs.map { it.sessionId }.distinct()
+                        val sessionList = mutableListOf<Session>()
+                        sessionIds.chunked(10).forEach { chunk ->
+                            val sSnap = db.collection("course_sessions")
+                                .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
+                                .get().await()
+                            sessionList.addAll(sSnap.documents.map { doc ->
+                                Session(
+                                    id = doc.id,
+                                    startDate = doc.getString("startDate") ?: "",
+                                    endDate = doc.getString("endDate") ?: "",
+                                    classroom = doc.getString("room") ?: doc.getString("classroom") ?: ""
                                 )
                             })
                         }
 
                         enrolledCourses = regs.map { reg ->
                             val matchedCourse = courseList.find { it.id == reg.courseId }
-                            EnrolledCourseData(reg, matchedCourse)
+                            val matchedSession = sessionList.find { it.id == reg.sessionId }
+                            EnrolledCourseData(reg, matchedCourse, matchedSession)
                         }
                     }
                     statusMessage = "" // 成功後清空訊息
@@ -311,24 +339,75 @@ class MainActivity : ComponentActivity() {
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = Color.White),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            shape = RoundedCornerShape(8.dp)
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "${data.course?.courseCode} ${data.course?.title}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1E293B)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
+            Column {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.DateRange, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.Gray)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("MY CLASS SCHEDULE", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "${data.course?.courseCode} ${data.course?.title}".trim(),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1E293B)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    val dateText = if (data.session != null && data.session.startDate.isNotEmpty()) {
+                        "${data.session.startDate} to ${data.session.endDate}"
+                    } else "Schedule not available"
+                    Text(text = dateText, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2563EB))
+                }
                 
-                val statusColor = if (data.registration.status.equals("verified", true)) Color(0xFF16A34A) else Color(0xFFD97706)
-                Text(
-                    text = "狀態: ${data.registration.status.uppercase()}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = statusColor,
-                    fontWeight = FontWeight.Bold
-                )
+                HorizontalDivider(color = Color(0xFFF1F5F9))
+                
+                Column(modifier = Modifier.fillMaxWidth().background(Color(0xFFF8FAFC)).padding(16.dp)) {
+                    if (!data.course?.description.isNullOrEmpty()) {
+                        Text(
+                            text = data.course?.description ?: "",
+                            fontSize = 13.sp,
+                            color = Color(0xFF475569),
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+                    
+                    val statusColor = if (data.registration.status.equals("verified", true)) Color(0xFF16A34A) else Color(0xFFD97706)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Payment: ${data.registration.status.uppercase()}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = statusColor
+                        )
+                        
+                        if (!data.session?.classroom.isNullOrEmpty()) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.background(Color(0xFFEEF2FF), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Icon(Icons.Filled.LocationOn, contentDescription = null, modifier = Modifier.size(12.dp), tint = Color(0xFF4F46E5))
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text(
+                                    text = "Room: ${data.session?.classroom}",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF4F46E5)
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
