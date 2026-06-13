@@ -529,7 +529,17 @@ class MainActivity : ComponentActivity() {
 
         attRef.get().addOnSuccessListener { doc ->
             if (doc.exists()) {
-                attRef.update(updates).addOnSuccessListener { onResult("簽到成功！(${if (isAM) "上午" else "下午"}更新)") }
+                val alreadyPresent = if (isAM) {
+                    doc.getBoolean("present_am") == true || doc.getString("status") == "present_am" || doc.getString("status") == "present"
+                } else {
+                    doc.getBoolean("present_pm") == true || doc.getString("status") == "present_pm" || doc.getString("status") == "present"
+                }
+
+                if (alreadyPresent) {
+                    onResult("你已經點過名了！(已簽到)")
+                } else {
+                    attRef.update(updates).addOnSuccessListener { onResult("簽到成功！(${if (isAM) "上午" else "下午"}更新)") }
+                }
             } else {
                 attRef.set(hashMapOf(
                     "lessonId" to actualLessonId, "studentId" to userId,

@@ -95,6 +95,17 @@ export function AttendPage() {
         
         const attSnap = await getDoc(attRef);
         if (attSnap.exists()) {
+          const data = attSnap.data();
+          const alreadyPresent = isAM 
+            ? (data.present_am === true || data.status === 'present_am' || data.status === 'present')
+            : (data.present_pm === true || data.status === 'present_pm' || data.status === 'present');
+
+          if (alreadyPresent) {
+            setStatus('success');
+            setMessage(`You have already checked in for the ${isAM ? 'Morning' : 'Afternoon'} session.`);
+            return;
+          }
+
           const updates: any = {};
           if (isAM) updates.present_am = true;
           else updates.present_pm = true;

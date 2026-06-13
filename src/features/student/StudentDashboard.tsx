@@ -392,9 +392,9 @@ export function StudentDashboard() {
                 
                 sessionLessons.forEach(l => {
                     const attsForLesson = attendanceLogs.filter(a => a.lessonId === l.id);
-                    const amMark = attsForLesson.some(a => a.status === 'present_am');
-                    const pmMark = attsForLesson.some(a => a.status === 'present_pm');
-                    const fullMark = attsForLesson.some(a => a.status === 'present');
+                    const amMark = attsForLesson.some(a => a.status === 'present_am' || a.present_am === true);
+                    const pmMark = attsForLesson.some(a => a.status === 'present_pm' || a.present_pm === true);
+                    const fullMark = attsForLesson.some(a => a.status === 'present' || a.present === true || (a.present_am === true && a.present_pm === true));
 
                     console.log(`DEBUG: Lesson ${l.id} - atts:`, attsForLesson, `am: ${amMark}, pm: ${pmMark}, full: ${fullMark}`);
 
