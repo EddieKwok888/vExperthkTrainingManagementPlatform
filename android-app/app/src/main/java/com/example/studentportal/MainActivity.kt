@@ -43,11 +43,6 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         auth = Firebase.auth
 
-        if (auth.currentUser == null) {
-            auth.signInWithEmailAndPassword("student@example.com", "password123")
-                .addOnSuccessListener { /* 登入成功 */ }
-        }
-
         setContent {
             MaterialTheme {
                 StudentPortalApp()
@@ -62,11 +57,17 @@ class MainActivity : ComponentActivity() {
         var enrolledCourses by remember { mutableStateOf<List<EnrolledCourseData>>(emptyList()) }
         var isLoading by remember { mutableStateOf(true) }
 
-        val user = auth.currentUser
+        LaunchedEffect(Unit) {
+            try {
+                var user = auth.currentUser
+                if (user == null) {
+                    statusMessage = "系統登入中..."
+                    val result = auth.signInWithEmailAndPassword("student@example.com", "password123").await()
+                    user = result.user
+                }
 
-        LaunchedEffect(user) {
-            if (user != null) {
-                try {
+                if (user != null) {
+                    statusMessage = "讀取課程資料中..."
                     val regSnap = db.collection("registrations")
                         .whereEqualTo("studentId", user.uid)
                         .get().await()
@@ -103,11 +104,14 @@ class MainActivity : ComponentActivity() {
                             EnrolledCourseData(reg, matchedCourse)
                         }
                     }
-                } catch (e: Exception) {
-                    statusMessage = "讀取課程資料失敗"
-                } finally {
-                    isLoading = false
+                    statusMessage = "" // 成功後清空訊息
+                } else {
+                    statusMessage = "無法獲取登入資訊"
                 }
+            } catch (e: Exception) {
+                statusMessage = "發生錯誤: ${e.message}"
+            } finally {
+                isLoading = false
             }
         }
 
