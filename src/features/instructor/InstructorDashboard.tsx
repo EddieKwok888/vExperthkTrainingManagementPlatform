@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { db } from '../../lib/firebase';
-import { collection, query, where, getDocs, doc, getDoc, setDoc, addDoc, serverTimestamp, orderBy, limit, writeBatch } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, setDoc, addDoc, serverTimestamp, orderBy, limit, writeBatch, onSnapshot } from 'firebase/firestore';
 import { AuthContext } from '../../App';
 import { jsPDF } from 'jspdf';
 import { useTranslation } from 'react-i18next';
