@@ -27,6 +27,8 @@ import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.FieldValue
+import com.google.firebase.FirebaseApp
+import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
@@ -41,7 +43,9 @@ data class EnrolledCourseData(val registration: Registration, val course: Course
 class MainActivity : ComponentActivity() {
 
     private lateinit var auth: FirebaseAuth
-    private val db = Firebase.firestore
+    private val db: FirebaseFirestore by lazy {
+        FirebaseFirestore.getInstance(FirebaseApp.getInstance(), "ai-studio-3f3273cb-74ea-47b3-9822-07292d150a5b")
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
