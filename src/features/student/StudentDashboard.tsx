@@ -432,7 +432,7 @@ export function StudentDashboard() {
                                 {(session.room || session.classroom) && (
                                     <div className="font-medium text-slate-600 flex items-center gap-1.5 mt-0.5">
                                         <MapPin className="w-4 h-4 text-indigo-600" />
-                                        <span>Classroom: <span className="font-bold text-slate-800">{session.room || session.classroom}</span></span>
+                                        <span>Classroom: <span className="font-bold text-slate-800">{(session.room || session.classroom).replace(/\s*\(Persons:.*?\)/gi, '')}</span></span>
                                     </div>
                                 )}
                             </div>

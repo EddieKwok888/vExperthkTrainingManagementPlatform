@@ -247,7 +247,7 @@ class MainActivity : ComponentActivity() {
                                     id = doc.id,
                                     startDate = doc.getString("startDate") ?: "",
                                     endDate = doc.getString("endDate") ?: "",
-                                    classroom = doc.getString("room") ?: doc.getString("classroom") ?: ""
+                                    classroom = (doc.getString("room") ?: doc.getString("classroom") ?: "").replace(Regex("\\s*\\(Persons:.*?\\)", RegexOption.IGNORE_CASE), "")
                                 )
                             })
                         }
