@@ -138,6 +138,10 @@ The system supports multi-language capabilities easily switchable via the UI.
 - **Warning Text Formatter**: Introduced a new dedicated component to neatly handle and format critical system alerts and validation warnings.
 - **Profile Optimization**: Refined the student dashboard UI, cleaning up empty states and streamlining the certificate view table.
 
+### 4. 📱 QR Code Attendance Workflow (支援 QR 掃描點名流程)
+- **Instructor Dashboard Simplification**: Removed outdated bulk attendance tools ("一鍵點名") to align with the new app-based QR code scanning workflow. Instructors can now seamlessly review the real-time scanned attendance statuses directly synced from the database.
+- **Test Data Management**: Added a handy "Clear Records" button allowing instructors to easily reset attendance testing states locally before finalizing the actual class roster.
+
 ## 📅 Updates (2026-06-12)
 
 ### 1. 🛡️ Duplicate Registration Prevention (防重複報名機制)

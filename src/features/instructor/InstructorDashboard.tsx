@@ -361,30 +361,6 @@ export function InstructorDashboard() {
     }
   };
 
-  // Bulk operation to mark everyone
-  const handleBulkMarkAttendance = (status: 'absent' | 'present_am' | 'present_pm' | 'clear') => {
-    if (registrations.length === 0) return;
-    const updated = { ...attendanceData };
-    registrations.forEach(r => {
-      const key = r.id;
-      if (status === 'clear') {
-         updated[key] = '';
-      } else if (status === 'absent') {
-         updated[key] = 'absent';
-      } else if (status === 'present_am') {
-         const cur = updated[key];
-         if (cur === 'present_pm') updated[key] = 'present';
-         else if (cur !== 'present') updated[key] = 'present_am';
-      } else if (status === 'present_pm') {
-         const cur = updated[key];
-         if (cur === 'present_am') updated[key] = 'present';
-         else if (cur !== 'present') updated[key] = 'present_pm';
-      }
-    });
-    setAttendanceData(updated);
-    const label = status === 'present_am' ? 'AM Present' : status === 'present_pm' ? 'PM Present' : status === 'clear' ? 'Cleared' : 'Absent';
-    toast.success(status === 'clear' ? '已重置所有點名紀錄 (Cleared all)' : `Marked all as ${label}`);
-  };
 
   const generateMTMReport = () => {
     if (!user?.uid) return;
@@ -1086,9 +1062,7 @@ export function InstructorDashboard() {
                                 />
                               </div>
 
-                              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right hidden md:block">
-                                Use the floating toolbar to bulk mark attendance
-                              </div>
+
 
                             </div>
                           )}
@@ -1096,44 +1070,29 @@ export function InstructorDashboard() {
                           {/* Floating Persistent Toolbar for Quick Actions */}
                           {selectedLesson && (
                             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 md:gap-5 bg-white/95 backdrop-blur-md shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-slate-200/80 rounded-full px-4 md:px-6 py-3 ring-1 ring-slate-900/5 animate-in slide-in-from-bottom-8 fade-in flex-wrap justify-center w-[95%] md:w-max">
-                              <div className="hidden md:flex items-center gap-2 pr-5 border-r border-slate-200/80">
+                              <div className="flex items-center gap-2 pr-5 border-r border-slate-200/80">
                                 <div className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center border border-indigo-100">
                                   <Sparkles className="w-4 h-4 text-indigo-600" />
                                 </div>
                                 <div className="flex flex-col">
                                   <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 leading-tight">Class Course</span>
-                                  <span className="text-xs font-bold text-slate-800 tracking-tight leading-tight">Quick Actions</span>
+                                  <span className="text-xs font-bold text-slate-800 tracking-tight leading-tight">Attendance</span>
                                 </div>
                               </div>
                               
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => handleBulkMarkAttendance('present_am')}
-                                  className="bg-emerald-50 border border-emerald-250 hover:border-emerald-400 hover:bg-emerald-100 text-emerald-700 text-[10px] md:text-xs font-extrabold uppercase px-3 md:px-5 py-2 md:py-2.5 rounded-full transition-all cursor-pointer shadow-sm hover:shadow-md hover:-translate-y-0.5"
+                              <div className="pl-1 md:pl-2 flex items-center gap-2">
+                                <Button
+                                  variant="outline"
+                                  onClick={() => {
+                                    const updated = { ...attendanceData };
+                                    Object.keys(updated).forEach(k => updated[k] = '');
+                                    setAttendanceData(updated);
+                                    toast.success('已清空畫面上的點名狀態，請點擊 Save Changes 儲存！');
+                                  }}
+                                  className="border-slate-200 text-slate-600 hover:bg-slate-50 rounded-full font-bold text-[10px] md:text-xs uppercase tracking-wider h-8 md:h-10 px-4 shadow-sm transition-all"
                                 >
-                                  AM 一鍵點名
-                                </button>
-                                <button
-                                  onClick={() => handleBulkMarkAttendance('present_pm')}
-                                  className="bg-indigo-50 border border-indigo-250 hover:border-indigo-400 hover:bg-indigo-100 text-indigo-700 text-[10px] md:text-xs font-extrabold uppercase px-3 md:px-5 py-2 md:py-2.5 rounded-full transition-all cursor-pointer shadow-sm hover:shadow-md hover:-translate-y-0.5"
-                                >
-                                  PM 一鍵點名
-                                </button>
-                                <button
-                                  onClick={() => handleBulkMarkAttendance('absent')}
-                                  className="bg-red-50 border border-red-250 hover:border-red-400 hover:bg-red-100 text-red-700 text-[10px] md:text-xs font-extrabold uppercase px-3 md:px-5 py-2 md:py-2.5 rounded-full transition-all cursor-pointer shadow-sm hover:shadow-md hover:-translate-y-0.5 hidden sm:block"
-                                >
-                                  All Absent
-                                </button>
-                                <button
-                                  onClick={() => handleBulkMarkAttendance('clear')}
-                                  className="bg-slate-50 border border-slate-250 hover:border-slate-400 hover:bg-slate-100 text-slate-700 text-[10px] md:text-xs font-extrabold uppercase px-3 md:px-5 py-2 md:py-2.5 rounded-full transition-all cursor-pointer shadow-sm hover:shadow-md hover:-translate-y-0.5 hidden sm:block"
-                                >
-                                  一鍵重置
-                                </button>
-                              </div>
-                              
-                              <div className="pl-3 md:pl-5 border-l border-slate-200/80">
+                                  Clear Records
+                                </Button>
                                 <Button
                                   onClick={handleSaveAttendance}
                                   disabled={submittingAttendance}
