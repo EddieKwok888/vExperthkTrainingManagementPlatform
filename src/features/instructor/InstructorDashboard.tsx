@@ -30,6 +30,10 @@ export function InstructorDashboard() {
   
   // Tab control
   const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'hours' | 'reports' | 'profile'>('overview');
+  const [stats, setStats] = useState({ upcomingSessions: 0, activeStudents: 0, averageRating: 0 });
+  
+  // Real-time attendance listener state
+  const [dbAttendance, setDbAttendance] = useState<Record<string, string>>({});
   
   // DB states
   const [sessions, setSessions] = useState<any[]>([]);
@@ -280,11 +284,22 @@ export function InstructorDashboard() {
       const regsSnap = await getDocs(query(collection(db, 'registrations'), where('sessionId', '==', lesson.sessionId), where('status', '==', 'verified')));
       const enrolledStudents = regsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       setRegistrations(enrolledStudents);
-      
-      // Get attendance for THIS LESSON
-      const attendanceSnap = await getDocs(query(collection(db, 'attendance'), where('lessonId', '==', lesson.id)));
+      // Initial attendance data is fetched via onSnapshot in useEffect below
+      // We still clear the local attendance data on lesson change
+      setAttendanceData({});
+      setDbAttendance({});
+    } catch (error: any) {
+      toast.error(error.message);
+    }
+  };
+
+  // Real-time attendance sync
+  useEffect(() => {
+    if (!selectedLesson) return;
+    const q = query(collection(db, 'attendance'), where('lessonId', '==', selectedLesson.id));
+    const unsubscribe = onSnapshot(q, (snap) => {
       const existingAttendance: Record<string, string> = {};
-      attendanceSnap.docs.forEach(d => {
+      snap.docs.forEach(d => {
         const data = d.data();
         let derivedStatus = data.status || '';
         if (!derivedStatus) {
@@ -297,16 +312,24 @@ export function InstructorDashboard() {
         if (data.registrationId) existingAttendance[data.registrationId] = derivedStatus;
       });
       
-      const mergedData: Record<string, string> = {};
-      enrolledStudents.forEach((s: any) => {
-        const key = s.id;
-        mergedData[key] = existingAttendance[s.studentId] || existingAttendance[key] || '';
+      setDbAttendance(existingAttendance);
+      
+      setAttendanceData(prev => {
+         const mergedData: Record<string, string> = { ...prev };
+         registrations.forEach((s: any) => {
+           const key = s.id;
+           const newStat = existingAttendance[s.studentId] || existingAttendance[key] || '';
+           if (newStat) {
+              mergedData[key] = newStat;
+           }
+         });
+         return mergedData;
       });
-      setAttendanceData(mergedData);
-    } catch (error: any) {
-      toast.error(error.message);
-    }
-  };
+    }, (error) => {
+      console.error("DEBUG: Firebase onSnapshot error in InstructorDashboard:", error);
+    });
+    return () => unsubscribe();
+  }, [selectedLesson, registrations]);
 
   const handleCreateQuickLesson = async () => {
     if (!selectedSessionId) return;
