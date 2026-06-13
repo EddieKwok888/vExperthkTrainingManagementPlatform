@@ -5,7 +5,7 @@ import { AuthContext } from '../../App';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
-import { Loader2, Download, GraduationCap, FileText, Calendar, BookOpen, CheckCircle, Circle, PlayCircle, LayoutDashboard, Award } from 'lucide-react';
+import { Loader2, Download, GraduationCap, FileText, Calendar, BookOpen, CheckCircle, Circle, PlayCircle, LayoutDashboard, Award, MapPin } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { handleFirestoreError, OperationType } from '../../lib/error';
@@ -425,10 +425,16 @@ export function StudentDashboard() {
                         </h3>
                         
                         {session ? (
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-start gap-1 sm:gap-8 text-sm py-2">
+                            <div className="flex flex-col gap-1.5 text-sm py-2">
                                 <div className="font-medium text-slate-700">
                                     <span className="text-blue-600 font-bold mr-2">{session.startDate} to {session.endDate}</span>
                                 </div>
+                                {(session.room || session.classroom) && (
+                                    <div className="font-medium text-slate-600 flex items-center gap-1.5 mt-0.5">
+                                        <MapPin className="w-4 h-4 text-indigo-600" />
+                                        <span>Classroom: <span className="font-bold text-slate-800">{session.room || session.classroom}</span></span>
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             <div className="text-sm text-slate-400 italic">Schedule not available</div>
