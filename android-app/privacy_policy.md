@@ -6,7 +6,7 @@
 
 ## 隱私權政策 (繁體中文)
 
-**最後更新日期：2024年**
+**最後更新日期：2026年**
 
 感謝您使用 **vExpert AI Training Academy** (以下簡稱「本應用程式」)。本應用程式非常重視您的隱私權。本隱私權政策說明了當您使用本應用程式時，我們如何收集、使用、保護及處理您的個人資料。
 
@@ -49,7 +49,7 @@
 
 ## Privacy Policy (English)
 
-**Last updated: 2024**
+**Last updated: 2026**
 
 Thank you for using **vExpert AI Training Academy** ("the App"). We are committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mobile application.
 
