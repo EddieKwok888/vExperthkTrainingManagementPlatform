@@ -98,14 +98,6 @@ export function CourseDetail() {
     }
   };
 
-  const handleAskAI = () => {
-    // We can dispatch a custom event that the ChatBot component will listen to
-    const event = new CustomEvent('open-chatbot', { 
-      detail: { initialMessage: `Tell me more about the course "${course?.title}".` }
-    });
-    window.dispatchEvent(event);
-  };
-
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>;
   if (!course) return <div className="text-center py-20 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400">Course not found</div>;
 

@@ -94,7 +94,6 @@ export interface SessionsTabProps {
   lessonGen: any;
   setLessonGen: (val: any) => void;
   handleGenerateLessonsAuto: (sessionId: string) => Promise<string | number>;
-  handleOpenAttendanceModal: (session: any) => void;
   handleUpdateLesson: (lessonId: string, updates: any) => Promise<void>;
   sessionCertSearchTerm: string;
   setSessionCertSearchTerm: (val: string) => void;
@@ -144,7 +143,6 @@ export function SessionsTab({
   lessonGen,
   setLessonGen,
   handleGenerateLessonsAuto,
-  handleOpenAttendanceModal,
   handleUpdateLesson,
   sessionCertSearchTerm,
   setSessionCertSearchTerm,
@@ -808,16 +806,6 @@ export function SessionsTab({
                               </div>
                             </div>
                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 px-2 text-[10px] font-bold uppercase tracking-wider text-green-600 hover:text-green-700 hover:bg-green-50 mr-1"
-                                title="Attendance"
-                                onClick={() => handleOpenAttendanceModal(l)}
-                              >
-                                <ClipboardList className="w-3.5 h-3.5 mr-1" />{" "}
-                                Attendance
-                              </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"

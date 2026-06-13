@@ -239,14 +239,7 @@ export function CertificateModal({
                     >
                       <UserPlus className="w-3 h-3 mr-1" /> Add Walk-in
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-[10px] uppercase font-bold text-slate-500"
-                      onClick={() => setPastDaysToShow((p: number) => p + 1)}
-                    >
-                      <History className="w-3 h-3 mr-1" /> Show Previous Day
-                    </Button>
+
                   </div>
                 </div>
                 <div className="border border-slate-100 rounded-xl overflow-x-auto bg-white shadow-sm">
@@ -314,9 +307,7 @@ export function CertificateModal({
                             <TableHead className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                               Student Identity
                             </TableHead>
-                            <TableHead className="px-6 py-4 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest min-w-[200px]">
-                              Attendance Checks
-                            </TableHead>
+
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -335,74 +326,7 @@ export function CertificateModal({
                                     {student.studentEmail}
                                   </div>
                                 </TableCell>
-                                <TableCell className="px-6 py-4 text-right">
-                                  <div className="flex flex-col gap-2 justify-end items-end w-full">
-                                    {displayLessons.map((lesson: any) => {
-                                      const status = raw[lesson.id] || "unmarked";
-                                      
-                                      const getButtons = (s: string) => {
-                                        return [
-                                          { id: 'present_am', label: 'AM Present', color: 'bg-emerald-600 border-emerald-600' },
-                                          { id: 'present_pm', label: 'PM Present', color: 'bg-indigo-600 border-indigo-600' },
-                                          { id: 'absent', label: 'Absent', color: 'bg-red-600 border-red-600' }
-                                        ].map(item => {
-                                          const isMarked = s === item.id || ((item.id === 'present_am' || item.id === 'present_pm') && s === 'present');
-                                          return (
-                                            <button
-                                              key={item.id}
-                                              onClick={() => {
-                                                let nextStatus = item.id;
-                                                if (item.id === 'absent') {
-                                                  nextStatus = s === 'absent' ? '' : 'absent';
-                                                } else if (item.id === 'present_am') {
-                                                  if (s === 'present_am') nextStatus = '';
-                                                  else if (s === 'present_pm') nextStatus = 'present';
-                                                  else if (s === 'present') nextStatus = 'present_pm';
-                                                } else if (item.id === 'present_pm') {
-                                                  if (s === 'present_pm') nextStatus = '';
-                                                  else if (s === 'present_am') nextStatus = 'present';
-                                                  else if (s === 'present') nextStatus = 'present_am';
-                                                }
-                                                handleUpdateSingleAttendance && handleUpdateSingleAttendance(
-                                                  student.studentId,
-                                                  lesson.id,
-                                                  lesson.sessionId,
-                                                  nextStatus
-                                                );
-                                              }}
-                                              className={`px-2 py-1 rounded-md text-[9px] font-black uppercase transition-all tracking-wider border ${
-                                                isMarked
-                                                  ? `${item.color} text-white shadow-md`
-                                                  : "border-slate-200 text-slate-400 bg-white hover:border-slate-300 hover:text-slate-700"
-                                              }`}
-                                            >
-                                              {item.label}
-                                            </button>
-                                          );
-                                        });
-                                      };
 
-                                      return (
-                                        <div
-                                          key={lesson.id}
-                                          className="flex flex-row items-center gap-3 bg-slate-50/50 p-1.5 rounded-lg border border-slate-100/60 w-max shrink-0"
-                                        >
-                                          <div className="flex flex-col items-end">
-                                              <span className="text-[10px] font-bold text-slate-500 text-right truncate">
-                                                {lesson.lessonTitle || `Lesson`}
-                                              </span>
-                                              <span className="text-[9px] font-medium text-slate-400 text-right truncate">
-                                                {lesson.lessonDate}
-                                              </span>
-                                          </div>
-                                          <div className="flex gap-1 min-w-[70px] justify-end">
-                                            {getButtons(status)}
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </TableCell>
                               </TableRow>
                             );
                           })}

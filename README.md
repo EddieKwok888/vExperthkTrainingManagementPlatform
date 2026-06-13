@@ -30,11 +30,12 @@ The system operates with a robust Role-Based Access Control (RBAC) model:
 - **Registration**: Enroll in course sessions.
 - **My Courses**: View upcoming classes, enrolled sessions, and attendance records.
 - **Feedback System**: Submit post-course feedback.
+- **Android Native App (Student Portal)**: Dedicated mobile application where students can view their course schedules and scan Dynamic/Static QR codes to mark AM/PM attendance with duplicate-scan prevention.
 
 ### For Instructors
 - **Instructor Dashboard**: Overview of assigned teaching hours.
 - **Class Management**: View list of students per class.
-- **Attendance Tracking**: Mark student attendance (AM / PM / Evening).
+- **Attendance Tracking**: Generate secure Dynamic QR codes or Static QR codes for students to scan. View real-time AM/PM attendance syncing on the dashboard.
 - **Schedule**: View upcoming lessons and shifts.
 
 ### For Administrators & Staff (Admin Portal)

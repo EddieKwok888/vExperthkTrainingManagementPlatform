@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "123456789012",
-    "project_id": "dummy-project",
-    "storage_bucket": "dummy-project.appspot.com"
+    "project_number": "706877386137",
+    "project_id": "gen-lang-client-0202962405",
+    "storage_bucket": "gen-lang-client-0202962405.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:123456789012:android:abcdef0123456789",
+        "mobilesdk_app_id": "1:706877386137:android:1a2b3c4d5e6f7g8h9i0j",
         "android_client_info": {
           "package_name": "com.example.studentportal"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "dummy-api-key"
+          "current_key": "AIzaSyDIMdLzlPi2tanhKXNAnCdgNRv6Iq1BCT4"
         }
       ],
       "services": {

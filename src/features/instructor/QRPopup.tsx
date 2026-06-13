@@ -43,7 +43,6 @@ export function QRPopup() {
 
     // Generate token function
     const generateNewToken = async () => {
-      // Use the raw lessonId from useParams which contains both actual ID and _AM / _PM
       const actualLessonId = lessonId.split('_')[0];
       const period = lessonId.includes('_PM') ? 'PM' : 'AM';
       const newToken = `DYN-${actualLessonId}_${period}-${Math.random().toString(36).substring(2, 10)}`;
@@ -59,8 +58,9 @@ export function QRPopup() {
           expiresAt: Date.now() + 15000, // 15 seconds from now locally
           updatedAt: serverTimestamp()
         });
-      } catch (e) {
+      } catch (e: any) {
         console.error("Failed to write token", e);
+        toast.error("Firebase 寫入 Token 失敗: " + e.message);
       }
     };
 
@@ -111,8 +111,12 @@ export function QRPopup() {
           fgColor="#0f172a"
           level="H"
         />
-        
-        {/* Progress bar border effect around the QR code could be cool, but we'll use a simple indicator below */}
+      </div>
+
+      <div className="mt-6 text-center">
+        <p className="text-xs text-slate-500 font-mono mb-2">
+          DocID: {lessonId} | Token: {token}
+        </p>
       </div>
       
       <div className="mt-12 flex flex-col items-center w-full max-w-md">

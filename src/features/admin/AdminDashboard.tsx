@@ -198,11 +198,7 @@ const SessionsTab = React.lazy(() =>
 const UsersTab = React.lazy(() =>
   import("./components/UsersTab").then((m) => ({ default: m.UsersTab })),
 );
-const AttendanceModal = React.lazy(() =>
-  import("./components/modals/AttendanceModal").then((m) => ({
-    default: m.AttendanceModal,
-  })),
-);
+
 const CertificateModal = React.lazy(() =>
   import("./components/modals/CertificateModal").then((m) => ({
     default: m.CertificateModal,
@@ -233,11 +229,7 @@ const PromoModal = React.lazy(() =>
     default: m.PromoModal,
   })),
 );
-const SessionAttendanceModal = React.lazy(() =>
-  import("./components/modals/SessionAttendanceModal").then((m) => ({
-    default: m.SessionAttendanceModal,
-  })),
-);
+
 const SessionCreationModal = React.lazy(() =>
   import("./components/modals/SessionCreationModal").then((m) => ({
     default: m.SessionCreationModal,
@@ -419,14 +411,6 @@ export function AdminDashboard() {
   const [attendanceData, setAttendanceData] = useState<Record<string, string>>(
     {},
   );
-  const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
-  const [isSessionAttendanceModalOpen, setIsSessionAttendanceModalOpen] =
-    useState(false);
-  const [selectedSessionForAttendance, setSelectedSessionForAttendance] =
-    useState<any>(null);
-  const [selectedLessonForAttendance, setSelectedLessonForAttendance] =
-    useState<any>(null);
-  const [submittingAttendance, setSubmittingAttendance] = useState(false);
 
   // User Management Modals
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
@@ -1993,95 +1977,7 @@ export function AdminDashboard() {
     }));
   };
 
-  const handleOpenAttendanceModal = async (lesson: any) => {
-    setSelectedLessonForAttendance(lesson);
-    setIsAttendanceModalOpen(true);
 
-    try {
-      const attendanceSnap = await getDocs(
-        query(collection(db, "attendance"), where("lessonId", "==", lesson.id)),
-      );
-      const existingAttendance: Record<string, string> = {};
-      attendanceSnap.docs.forEach((d) => {
-        existingAttendance[d.data().studentId] = d.data().status;
-      });
-      const enrolled = regs.filter(
-        (r) => r.sessionId === lesson.sessionId && r.status === "verified",
-      );
-
-      const mergedData: Record<string, string> = {};
-      enrolled.forEach((s: any) => {
-        const key = s.id;
-        mergedData[key] = existingAttendance[s.studentId] || existingAttendance[key] || "";
-      });
-      setAttendanceData(mergedData);
-    } catch (e: any) {
-      toast.error(e.message);
-    }
-  };
-
-  const handleSaveAttendanceAdmin = async () => {
-    if (!selectedLessonForAttendance) return;
-    setSubmittingAttendance(true);
-    try {
-      const batch = writeBatch(db);
-      for (const regId of Object.keys(attendanceData)) {
-        const studentRecord = regs.find(r => r.id === regId);
-        const studentId = studentRecord?.studentId || regId;
-        const attendanceId = `${selectedLessonForAttendance.id}_${regId}`;
-        const attRef = doc(db, "attendance", attendanceId);
-        batch.set(attRef, {
-          lessonId: selectedLessonForAttendance.id,
-          sessionId: selectedLessonForAttendance.sessionId,
-          studentId: studentId,
-          registrationId: regId,
-          status: attendanceData[regId],
-          recordedAt: serverTimestamp(),
-          recordedBy: user?.uid || "admin",
-        });
-      }
-      await batch.commit();
-
-      setGlobalAttendance((prev) => {
-        const newAtt = [...prev];
-        for (const regId of Object.keys(attendanceData)) {
-          const studentRecord = regs.find(r => r.id === regId);
-          const studentId = studentRecord?.studentId || regId;
-          const id = `${selectedLessonForAttendance.id}_${regId}`;
-          const existsIdx = newAtt.findIndex((a) => a.id === id);
-          if (existsIdx >= 0) {
-            newAtt[existsIdx].status = attendanceData[regId];
-          } else {
-            newAtt.push({
-              id,
-              lessonId: selectedLessonForAttendance.id,
-              sessionId: selectedLessonForAttendance.sessionId,
-              studentId: studentId,
-              registrationId: regId,
-              status: attendanceData[regId],
-            });
-          }
-        }
-        return newAtt;
-      });
-
-      await logAudit(
-        user?.uid || "admin",
-        user?.email || "",
-        "ADMIN_MARK_ATTENDANCE",
-        "attendance",
-        selectedLessonForAttendance.id,
-        { students: Object.keys(attendanceData).length },
-      );
-
-      toast.success("Attendance saved successfully");
-      setIsAttendanceModalOpen(false);
-    } catch (error: any) {
-      toast.error(error.message);
-    } finally {
-      setSubmittingAttendance(false);
-    }
-  };
 
   const handleExportAttendanceSheet = (
     session: any,
@@ -2115,7 +2011,12 @@ export function AdminDashboard() {
 
     const sessionLessons = lessons.filter(
       (l) => l.sessionId === session.id || l.session_id === session.id,
-    );
+    ).filter((l: any) => {
+      // Filter out any accidentally created lessons that fall outside the course date range
+      const lDate = l.lessonDate || l.lesson_date;
+      if (!session?.startDate || !session?.endDate || !lDate) return true;
+      return lDate >= session.startDate && lDate <= session.endDate;
+    });
     let courseDates: string[] = [];
     if (sessionLessons && sessionLessons.length > 0) {
       const dates = sessionLessons
@@ -3746,7 +3647,6 @@ export function AdminDashboard() {
                 lessonGen={lessonGen}
                 setLessonGen={setLessonGen}
                 handleGenerateLessonsAuto={handleGenerateLessonsAuto}
-                handleOpenAttendanceModal={handleOpenAttendanceModal}
                 handleUpdateLesson={handleUpdateLesson}
                 sessionCertSearchTerm={sessionCertSearchTerm}
                 setSessionCertSearchTerm={setSessionCertSearchTerm}
@@ -4012,27 +3912,6 @@ export function AdminDashboard() {
         sessions={sessions}
         setIsCertModalOpen={setIsCertModalOpen}
         setPastDaysToShow={setPastDaysToShow}
-      />
-
-      <AttendanceModal
-        attendanceData={attendanceData}
-        handleSaveAttendanceAdmin={handleSaveAttendanceAdmin}
-        isAttendanceModalOpen={isAttendanceModalOpen}
-        regs={regs}
-        selectedLessonForAttendance={selectedLessonForAttendance}
-        setAttendanceData={setAttendanceData}
-        setIsAttendanceModalOpen={setIsAttendanceModalOpen}
-        submittingAttendance={submittingAttendance}
-      />
-      <SessionAttendanceModal
-        handleOpenAttendanceModal={handleOpenAttendanceModal}
-        isSessionAttendanceModalOpen={isSessionAttendanceModalOpen}
-        lessons={lessons}
-        selectedSessionForAttendance={selectedSessionForAttendance}
-        sessions={sessions}
-        setActiveTab={setActiveTab}
-        setIsSessionAttendanceModalOpen={setIsSessionAttendanceModalOpen}
-        setViewingLessonsForSession={setViewingLessonsForSession}
       />
 
       {/* Manual Hours Modal */}

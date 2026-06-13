@@ -197,11 +197,22 @@ service cloud.firestore {
     }
 
     match /attendance/{attendanceId} {
-      allow list: if isAdmin() || isTutor();
-      allow get: if isAdmin() || isTutor() || (isSignedIn() && resource.data.studentId == request.auth.uid);
-      allow create: if (isAdmin() || isTutor()) && isValidAttendance(incoming());
-      allow update: if (isAdmin() || isTutor()) && isValidAttendance(incoming());
+      allow read: if isAdmin() || isTutor() || (isSignedIn() && (
+        resource.data.studentId == request.auth.uid || 
+        (resource.data.registrationId != null && get(/databases/$(database)/documents/registrations/$(resource.data.registrationId)).data.studentId == request.auth.uid) ||
+        (resource.data.registrationId != null && get(/databases/$(database)/documents/registrations/$(resource.data.registrationId)).data.studentEmail == request.auth.token.email)
+      ));
+      allow create: if (isAdmin() || isTutor() || isSignedIn()) && isValidAttendance(incoming());
+      allow update: if (isAdmin() || isTutor() || (isSignedIn() && (
+        resource.data.studentId == request.auth.uid || 
+        (resource.data.registrationId != null && get(/databases/$(database)/documents/registrations/$(resource.data.registrationId)).data.studentId == request.auth.uid) ||
+        (resource.data.registrationId != null && get(/databases/$(database)/documents/registrations/$(resource.data.registrationId)).data.studentEmail == request.auth.token.email)
+      ))) && isValidAttendance(incoming());
       allow delete: if isAdmin();
+    }
+
+    match /attendance_tokens/{tokenId} {
+      allow read, write: if isSignedIn();
     }
 
     match /teaching_hours/{hourId} {

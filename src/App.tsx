@@ -34,7 +34,6 @@ const QRPopup = React.lazy(() => import('./features/instructor/QRPopup').then(m 
 const AttendPage = React.lazy(() => import('./features/student/AttendPage').then(m => ({ default: m.AttendPage })));
 import { StudentDashboard } from './features/student/StudentDashboard';
 import { FeedbackForm } from './features/feedback/FeedbackForm';
-import { ChatBot } from './components/common/ChatBot';
 import { StudentProfile } from './features/student/StudentProfile';
 import { UserRole } from './types';
 
@@ -401,7 +400,6 @@ function Layout() {
           <Outlet />
         </main>
       </div>
-      <ChatBot />
     </div>
   )
 }

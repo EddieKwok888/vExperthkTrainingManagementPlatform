@@ -307,18 +307,47 @@ export function InstructorDashboard() {
             else if (data.present_pm) derivedStatus = 'present_pm';
             else if (data.present === true) derivedStatus = 'present';
         }
-        if (data.studentId) existingAttendance[data.studentId] = derivedStatus;
-        if (data.registrationId) existingAttendance[data.registrationId] = derivedStatus;
+
+        const updateStatus = (k: string) => {
+            if (!k) return;
+            const current = existingAttendance[k];
+            if (!current || current === 'absent' || current === '') {
+                existingAttendance[k] = derivedStatus;
+            } else if (derivedStatus === 'present' || derivedStatus === 'present_am' || derivedStatus === 'present_pm') {
+                if (current !== 'present') {
+                    existingAttendance[k] = derivedStatus;
+                }
+            }
+        };
+
+        if (data.studentId) updateStatus(data.studentId);
+        if (data.registrationId) updateStatus(data.registrationId);
+        if (data.studentEmail) updateStatus(data.studentEmail);
       });
       
       setDbAttendance(existingAttendance);
       
       setAttendanceData(prev => {
          const mergedData: Record<string, string> = { ...prev };
+         // Use the current registrations array instead of filteredRegistrations to avoid missing data
          registrations.forEach((s: any) => {
            const key = s.id;
-           const newStat = existingAttendance[s.studentId] || existingAttendance[key] || '';
-           if (newStat) {
+           const statByKey = existingAttendance[key];
+           const statByStudent = s.studentId ? existingAttendance[s.studentId] : null;
+           const statByEmail = s.studentEmail ? existingAttendance[s.studentEmail] : null;
+
+           let newStat = '';
+           if (statByStudent && statByStudent !== 'absent') {
+               newStat = statByStudent;
+           } else if (statByEmail && statByEmail !== 'absent') {
+               newStat = statByEmail;
+           } else if (statByKey && statByKey !== 'absent') {
+               newStat = statByKey;
+           } else {
+               newStat = statByKey || statByEmail || statByStudent || '';
+           }
+
+           if (newStat && mergedData[key] !== newStat) {
               mergedData[key] = newStat;
            }
          });
@@ -366,22 +395,29 @@ export function InstructorDashboard() {
       for (const regId of Object.keys(attendanceData)) {
         const studentRecord = registrations.find(r => r.id === regId);
         const studentId = studentRecord?.studentId || regId;
-        const attendanceId = `${selectedLesson.id}_${studentId}`;
-        const attRef = doc(db, 'attendance', attendanceId);
+        const attendanceId1 = `${selectedLesson.id}_${regId}`;
+        const attendanceId2 = `${selectedLesson.id}_${studentId}`;
+        const attRef1 = doc(db, 'attendance', attendanceId1);
+        const attRef2 = doc(db, 'attendance', attendanceId2);
         
         const statusVal = attendanceData[regId] || '';
-        batch.set(attRef, {
+        
+        const payload = {
           lessonId: selectedLesson.id,
           sessionId: selectedLesson.sessionId,
-          studentId: studentId,
-          registrationId: regId,
           status: statusVal,
           present_am: statusVal === 'present_am' || statusVal === 'present',
           present_pm: statusVal === 'present_pm' || statusVal === 'present',
-          present: statusVal === 'present',
+          absent: statusVal === 'absent',
+          timestamp: serverTimestamp(),
           recordedAt: serverTimestamp(),
           recordedBy: user?.uid
-        });
+        };
+
+        batch.set(attRef1, { ...payload, registrationId: regId, studentId: studentRecord?.studentId || regId }, { merge: true });
+        if (attendanceId1 !== attendanceId2) {
+            batch.set(attRef2, { ...payload, registrationId: regId, studentId: studentId }, { merge: true });
+        }
       }
       await batch.commit();
       
@@ -1119,11 +1155,23 @@ export function InstructorDashboard() {
                               <div className="pl-1 md:pl-2 flex items-center gap-2">
                                 <Button
                                   variant="outline"
-                                  onClick={() => {
-                                    const updated = { ...attendanceData };
-                                    Object.keys(updated).forEach(k => updated[k] = '');
-                                    setAttendanceData(updated);
-                                    toast.success('已清空畫面上的點名狀態，請點擊 Save Changes 儲存！');
+                                  onClick={async () => {
+                                    if (!window.confirm('確定要清除所有紀錄嗎？此動作將刪除該課堂的所有點名紀錄。')) return;
+                                    setSubmittingAttendance(true);
+                                    try {
+                                      const batch = writeBatch(db);
+                                      const attDocs = await getDocs(query(collection(db, 'attendance'), where('lessonId', '==', selectedLesson.id)));
+                                      attDocs.docs.forEach((docSnap) => {
+                                        batch.delete(docSnap.ref);
+                                      });
+                                      await batch.commit();
+                                      setAttendanceData({});
+                                      toast.success("Attendance records cleared successfully!");
+                                    } catch (err: any) {
+                                      toast.error("Failed to clear records: " + err.message);
+                                    } finally {
+                                      setSubmittingAttendance(false);
+                                    }
                                   }}
                                   className="border-slate-200 text-slate-600 hover:bg-slate-50 rounded-full font-bold text-[10px] md:text-xs uppercase tracking-wider h-8 md:h-10 px-4 shadow-sm transition-all"
                                 >

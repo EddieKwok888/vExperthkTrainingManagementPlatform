@@ -19,16 +19,40 @@ export function StaticQRModal({ token, onClose }: StaticQRModalProps) {
 
   const handleDownload = () => {
     if (!qrRef.current) return;
-    const canvas = qrRef.current.querySelector('canvas');
-    if (!canvas) {
+    const qrCanvas = qrRef.current.querySelector('canvas');
+    if (!qrCanvas) {
       toast.error("Could not find QR Code image.");
       return;
     }
     
-    // Create a temporary link to download the canvas as an image
-    const pngUrl = canvas
-      .toDataURL("image/png")
-      .replace("image/png", "image/octet-stream");
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Scale up for crisp rendering
+    const scale = 3;
+    canvas.width = 280 * scale;
+    canvas.height = 360 * scale;
+    
+    // Fill white background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Draw Title
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#1e293b';
+    ctx.font = `bold ${22 * scale}px sans-serif`;
+    ctx.fillText(displayTitle, canvas.width / 2, 50 * scale);
+    
+    // Draw Subtitle
+    ctx.fillStyle = '#64748b';
+    ctx.font = `normal ${14 * scale}px sans-serif`;
+    ctx.fillText(displaySubtitle, canvas.width / 2, 80 * scale);
+    
+    // Draw QR Code
+    ctx.drawImage(qrCanvas, 40 * scale, 120 * scale, 200 * scale, 200 * scale);
+
+    const pngUrl = canvas.toDataURL("image/png");
       
     let downloadLink = document.createElement("a");
     downloadLink.href = pngUrl;
@@ -47,6 +71,23 @@ export function StaticQRModal({ token, onClose }: StaticQRModalProps) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  let displayTitle = "Static QR Code";
+  let displaySubtitle = "Scan this QR code to sign in";
+
+  if (token && token.startsWith("STAT-")) {
+    const lastDashIdx = token.lastIndexOf('-');
+    if (lastDashIdx > 5) {
+      const datePart = token.substring(lastDashIdx + 1);
+      const middlePart = token.substring(5, lastDashIdx);
+      const periodPart = middlePart.split('_').pop();
+
+      if (datePart.length === 8) {
+        const formattedDate = `${datePart.substring(0,4)}-${datePart.substring(4,6)}-${datePart.substring(6,8)}`;
+        displayTitle = `Class ${formattedDate} (${periodPart})`;
+      }
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 relative flex flex-col items-center">
@@ -57,26 +98,27 @@ export function StaticQRModal({ token, onClose }: StaticQRModalProps) {
           <X className="w-5 h-5" />
         </button>
 
-        <h2 className="text-xl font-bold text-slate-800 mb-2">Static QR Code</h2>
-        <p className="text-sm text-slate-500 text-center mb-6">
-          Download this QR code and paste it into your PowerPoint presentation.
-        </p>
+        <div ref={qrRef} className="bg-white p-6 flex flex-col items-center rounded-2xl">
+          <h2 className="text-xl font-bold text-slate-800 mb-2 text-center" style={{ color: '#1e293b' }}>{displayTitle}</h2>
+          <p className="text-sm text-slate-500 text-center mb-6" style={{ color: '#64748b' }}>
+            {displaySubtitle}
+          </p>
 
-        <div 
-          ref={qrRef} 
-          className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-6"
-        >
-          <QRCodeCanvas
-            value={url}
-            size={200}
-            bgColor={"#ffffff"}
-            fgColor={"#000000"}
-            level={"H"}
-            includeMargin={false}
-          />
+          <div 
+            className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-2"
+          >
+            <QRCodeCanvas
+              value={url}
+              size={200}
+              bgColor={"#ffffff"}
+              fgColor={"#000000"}
+              level={"H"}
+              includeMargin={false}
+            />
+          </div>
         </div>
 
-        <div className="flex flex-col w-full gap-3">
+        <div className="flex flex-col w-full gap-3 mt-4">
           <Button 
             onClick={handleDownload}
             className="w-full font-bold bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center gap-2"

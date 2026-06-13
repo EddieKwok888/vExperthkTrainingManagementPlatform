@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.QrCodeScanner
@@ -46,7 +47,7 @@ import java.util.Calendar
 data class Registration(val id: String, val courseId: String, val sessionId: String, val status: String)
 data class Course(val id: String, val title: String, val courseCode: String, val description: String, val category: String, val level: String, val day: String)
 data class Session(val id: String, val startDate: String, val endDate: String, val classroom: String, val deliveryMode: String, val meetingLink: String)
-data class EnrolledCourseData(val registration: Registration, val course: Course?, val session: Session?)
+data class EnrolledCourseData(val registration: Registration, val course: Course?, val session: Session?, val presentAm: Boolean = false, val presentPm: Boolean = false)
 
 class MainActivity : ComponentActivity() {
 
@@ -179,8 +180,9 @@ class MainActivity : ComponentActivity() {
         var statusMessage by remember { mutableStateOf("歡迎回到 Student Portal") }
         var enrolledCourses by remember { mutableStateOf<List<EnrolledCourseData>>(emptyList()) }
         var isLoading by remember { mutableStateOf(true) }
+        var refreshTrigger by remember { mutableStateOf(0) }
 
-        LaunchedEffect(Unit) {
+        LaunchedEffect(refreshTrigger) {
             try {
                 val user = auth.currentUser
 
@@ -239,27 +241,46 @@ class MainActivity : ComponentActivity() {
                         
                         val sessionIds = regs.map { it.sessionId }.distinct()
                         val sessionList = mutableListOf<Session>()
-                        sessionIds.chunked(10).forEach { chunk ->
-                            val sSnap = db.collection("course_sessions")
-                                .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
-                                .get().await()
-                            sessionList.addAll(sSnap.documents.map { doc ->
-                                Session(
-                                    id = doc.id,
-                                    startDate = doc.getString("startDate") ?: "",
-                                    endDate = doc.getString("endDate") ?: "",
-                                    classroom = (doc.getString("room") ?: doc.getString("classroom") ?: "").replace(Regex("\\s*\\(Persons:.*?\\)", RegexOption.IGNORE_CASE), ""),
-                                    deliveryMode = doc.getString("deliveryMode") ?: "",
-                                    meetingLink = doc.getString("meetingLink") ?: ""
-                                )
-                            })
+                        val lessonList = mutableListOf<com.google.firebase.firestore.DocumentSnapshot>()
+
+                        if (sessionIds.isNotEmpty()) {
+                            sessionIds.chunked(10).forEach { chunk ->
+                                val sSnap = db.collection("course_sessions")
+                                    .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
+                                    .get().await()
+                                sessionList.addAll(sSnap.documents.map { doc ->
+                                    Session(
+                                        id = doc.id,
+                                        startDate = doc.getString("startDate") ?: "",
+                                        endDate = doc.getString("endDate") ?: "",
+                                        classroom = (doc.getString("room") ?: doc.getString("classroom") ?: "").replace(Regex("\\s*\\(Persons:.*?\\)", RegexOption.IGNORE_CASE), ""),
+                                        deliveryMode = doc.getString("deliveryMode") ?: "",
+                                        meetingLink = doc.getString("meetingLink") ?: ""
+                                    )
+                                })
+                                val lSnap = db.collection("lessons")
+                                    .whereIn("sessionId", chunk)
+                                    .get().await()
+                                lessonList.addAll(lSnap.documents)
+                            }
                         }
+
+                        val attSnap = db.collection("attendance")
+                            .whereEqualTo("studentId", user.uid)
+                            .get().await()
 
                         enrolledCourses = regs.filter { it.sessionId.isNotEmpty() }.mapNotNull { reg ->
                             val matchedCourse = courseList.find { it.id == reg.courseId }
                             val matchedSession = sessionList.find { it.id == reg.sessionId }
                             if (matchedCourse != null && matchedSession != null) {
-                                EnrolledCourseData(reg, matchedCourse, matchedSession)
+                                val sessionLessonIds = lessonList.filter { it.getString("sessionId") == reg.sessionId }.map { it.id }
+                                val attsForSession = attSnap.documents.filter { doc ->
+                                    val lId = doc.getString("lessonId") ?: ""
+                                    sessionLessonIds.contains(lId) || doc.getString("sessionId") == reg.sessionId
+                                }
+                                val isAm = attsForSession.any { it.getBoolean("present_am") == true || it.getString("status") == "present_am" || it.getString("status") == "present" }
+                                val isPm = attsForSession.any { it.getBoolean("present_pm") == true || it.getString("status") == "present_pm" || it.getString("status") == "present" }
+                                EnrolledCourseData(reg, matchedCourse, matchedSession, isAm, isPm)
                             } else null
                         }.sortedWith(Comparator { a, b ->
                             val sessionA = a.session!!
@@ -319,6 +340,9 @@ class MainActivity : ComponentActivity() {
                             processAttendanceToken(token) { result ->
                                 statusMessage = result
                                 Toast.makeText(this@MainActivity, result, Toast.LENGTH_LONG).show()
+                                if (result.contains("簽到成功")) {
+                                    refreshTrigger++
+                                }
                             }
                         }
                     },
@@ -332,9 +356,10 @@ class MainActivity : ComponentActivity() {
             Column(modifier = Modifier.padding(innerPadding).fillMaxSize().background(Color(0xFFF8FAFC))) {
                 
                 if (statusMessage.isNotEmpty()) {
+                    val isWarning = statusMessage.contains("已簽到成功")
                     Text(
                         text = statusMessage, 
-                        color = Color(0xFF1E40AF),
+                        color = if (isWarning) Color.Red else Color(0xFF1E40AF),
                         modifier = Modifier.padding(16.dp),
                         fontWeight = FontWeight.Bold
                     )
@@ -465,6 +490,27 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
+                    
+                    if (data.presentAm || data.presentPm) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (data.presentAm) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.background(Color(0xFFDCFCE7), RoundedCornerShape(12.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) {
+                                    Box(modifier = Modifier.size(8.dp).background(Color(0xFF16A34A), CircleShape))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("AM Present", color = Color(0xFF16A34A), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                            if (data.presentPm) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.background(Color(0xFFF3E8FF), RoundedCornerShape(12.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) {
+                                    Box(modifier = Modifier.size(8.dp).background(Color(0xFF9333EA), CircleShape))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("PM Present", color = Color(0xFF9333EA), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -483,6 +529,7 @@ class MainActivity : ComponentActivity() {
 
     private fun processAttendanceToken(scannedString: String, onResult: (String) -> Unit) {
         val user = auth.currentUser ?: return onResult("錯誤：請先登入")
+        val userEmail = user.email ?: ""
         
         // Extract the token if it's a full URL
         val token = if (scannedString.contains("/attend/")) {
@@ -503,20 +550,20 @@ class MainActivity : ComponentActivity() {
                         if (doc.getString("token") != token && isExpired) {
                             return@addOnSuccessListener onResult("錯誤：Token 已過期，請掃描最新畫面")
                         }
-                        executeCheckIn(targetLessonId, user.uid, onResult)
+                        executeCheckIn(targetLessonId, user.uid, userEmail, onResult)
                     }
                 return
             }
             token.startsWith("STAT-") -> {
                 targetLessonId = token.split("-").getOrNull(1) ?: return
-                executeCheckIn(targetLessonId, user.uid, onResult)
+                executeCheckIn(targetLessonId, user.uid, userEmail, onResult)
                 return
             }
             else -> onResult("錯誤：無法識別的 Token")
         }
     }
 
-    private fun executeCheckIn(targetLessonId: String, userId: String, onResult: (String) -> Unit) {
+    private fun executeCheckIn(targetLessonId: String, userId: String, userEmail: String, onResult: (String) -> Unit) {
         val splitParts = targetLessonId.split("_")
         val actualLessonId = splitParts[0]
         val forcedPeriod = splitParts.getOrNull(1)
@@ -524,7 +571,11 @@ class MainActivity : ComponentActivity() {
         val isAM = forcedPeriod?.equals("AM") ?: (Calendar.getInstance().get(Calendar.HOUR_OF_DAY) < 13)
         val attRef = db.collection("attendance").document("${actualLessonId}_${userId}")
 
-        val updates = hashMapOf<String, Any>("updatedAt" to FieldValue.serverTimestamp())
+        val newStatusStr = if (isAM) "present_am" else "present_pm"
+        val updates = hashMapOf<String, Any>(
+            "updatedAt" to FieldValue.serverTimestamp(),
+            "studentEmail" to userEmail
+        )
         if (isAM) updates["present_am"] = true else updates["present_pm"] = true
 
         attRef.get().addOnSuccessListener { doc ->
@@ -536,13 +587,24 @@ class MainActivity : ComponentActivity() {
                 }
 
                 if (alreadyPresent) {
-                    onResult("你已經點過名了！(已簽到)")
+                    onResult("已簽到成功 (重複掃描)")
                 } else {
+                    val currentAm = doc.getBoolean("present_am") == true || doc.getString("status") == "present_am" || doc.getString("status") == "present"
+                    val currentPm = doc.getBoolean("present_pm") == true || doc.getString("status") == "present_pm" || doc.getString("status") == "present"
+                    
+                    val combinedStatus = if (isAM) {
+                        if (currentPm) "present" else "present_am"
+                    } else {
+                        if (currentAm) "present" else "present_pm"
+                    }
+                    updates["status"] = combinedStatus
+
                     attRef.update(updates).addOnSuccessListener { onResult("簽到成功！(${if (isAM) "上午" else "下午"}更新)") }
                 }
             } else {
                 attRef.set(hashMapOf(
                     "lessonId" to actualLessonId, "studentId" to userId,
+                    "studentEmail" to userEmail, "status" to newStatusStr,
                     "present_am" to isAM, "present_pm" to !isAM,
                     "createdAt" to FieldValue.serverTimestamp(), "updatedAt" to FieldValue.serverTimestamp()
                 )).addOnSuccessListener { onResult("簽到成功！(建立新紀錄)") }
