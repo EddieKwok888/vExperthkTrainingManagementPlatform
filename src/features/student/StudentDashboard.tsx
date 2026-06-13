@@ -429,7 +429,12 @@ export function StudentDashboard() {
                                 <div className="font-medium text-slate-700">
                                     <span className="text-blue-600 font-bold mr-2">{session.startDate} to {session.endDate}</span>
                                 </div>
-                                {(session.room || session.classroom) && (
+                                {(session.deliveryMode === 'online' || (session.room || '').toLowerCase().includes('online') || (session.classroom || '').toLowerCase().includes('online')) ? (
+                                    <div className="font-medium text-slate-600 flex items-center gap-1.5 mt-0.5">
+                                        <MapPin className="w-4 h-4 text-indigo-600" />
+                                        <span>Mode: <span className="font-bold text-slate-800">Online</span></span>
+                                    </div>
+                                ) : (session.room || session.classroom) && (
                                     <div className="font-medium text-slate-600 flex items-center gap-1.5 mt-0.5">
                                         <MapPin className="w-4 h-4 text-indigo-600" />
                                         <span>Classroom: <span className="font-bold text-slate-800">{(session.room || session.classroom).replace(/\s*\(Persons:.*?\)/gi, '')}</span></span>

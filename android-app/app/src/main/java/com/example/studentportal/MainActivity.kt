@@ -44,7 +44,7 @@ import java.util.Calendar
 
 data class Registration(val id: String, val courseId: String, val sessionId: String, val status: String)
 data class Course(val id: String, val title: String, val courseCode: String, val description: String, val category: String, val level: String, val day: String)
-data class Session(val id: String, val startDate: String, val endDate: String, val classroom: String)
+data class Session(val id: String, val startDate: String, val endDate: String, val classroom: String, val deliveryMode: String)
 data class EnrolledCourseData(val registration: Registration, val course: Course?, val session: Session?)
 
 class MainActivity : ComponentActivity() {
@@ -247,7 +247,8 @@ class MainActivity : ComponentActivity() {
                                     id = doc.id,
                                     startDate = doc.getString("startDate") ?: "",
                                     endDate = doc.getString("endDate") ?: "",
-                                    classroom = (doc.getString("room") ?: doc.getString("classroom") ?: "").replace(Regex("\\s*\\(Persons:.*?\\)", RegexOption.IGNORE_CASE), "")
+                                    classroom = (doc.getString("room") ?: doc.getString("classroom") ?: "").replace(Regex("\\s*\\(Persons:.*?\\)", RegexOption.IGNORE_CASE), ""),
+                                    deliveryMode = doc.getString("deliveryMode") ?: ""
                                 )
                             })
                         }
@@ -391,7 +392,11 @@ class MainActivity : ComponentActivity() {
                             color = statusColor
                         )
                         
-                        if (!data.session?.classroom.isNullOrEmpty()) {
+                        val roomName = data.session?.classroom ?: ""
+                        val deliveryMode = data.session?.deliveryMode ?: ""
+                        val isOnline = deliveryMode.equals("online", true) || roomName.contains("online", true)
+                        
+                        if (isOnline) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.background(Color(0xFFEEF2FF), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
@@ -399,7 +404,21 @@ class MainActivity : ComponentActivity() {
                                 Icon(Icons.Filled.LocationOn, contentDescription = null, modifier = Modifier.size(12.dp), tint = Color(0xFF4F46E5))
                                 Spacer(modifier = Modifier.width(2.dp))
                                 Text(
-                                    text = "Room: ${data.session?.classroom}",
+                                    text = "Mode: ONLINE",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF4F46E5)
+                                )
+                            }
+                        } else if (roomName.isNotEmpty()) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.background(Color(0xFFEEF2FF), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Icon(Icons.Filled.LocationOn, contentDescription = null, modifier = Modifier.size(12.dp), tint = Color(0xFF4F46E5))
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text(
+                                    text = "Room: $roomName",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF4F46E5)
