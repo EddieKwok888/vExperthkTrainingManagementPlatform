@@ -481,8 +481,16 @@ class MainActivity : ComponentActivity() {
             .addOnFailureListener { Toast.makeText(this, "取消掃描", Toast.LENGTH_SHORT).show() }
     }
 
-    private fun processAttendanceToken(token: String, onResult: (String) -> Unit) {
+    private fun processAttendanceToken(scannedString: String, onResult: (String) -> Unit) {
         val user = auth.currentUser ?: return onResult("錯誤：請先登入")
+        
+        // Extract the token if it's a full URL
+        val token = if (scannedString.contains("/attend/")) {
+            scannedString.substringAfterLast("/attend/")
+        } else {
+            scannedString
+        }
+        
         var targetLessonId = ""
 
         when {
