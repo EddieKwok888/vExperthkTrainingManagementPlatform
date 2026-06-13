@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -78,6 +79,13 @@ class MainActivity : ComponentActivity() {
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Icon(
+                imageVector = Icons.Filled.School,
+                contentDescription = "Company Logo",
+                modifier = Modifier.size(80.dp),
+                tint = Color(0xFF1E3A8A)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
             Text(
                 "Student Portal", 
                 style = MaterialTheme.typography.headlineLarge, 
@@ -215,7 +223,18 @@ class MainActivity : ComponentActivity() {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("My Courses") },
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Filled.School,
+                                contentDescription = "Company Logo",
+                                modifier = Modifier.size(28.dp),
+                                tint = Color(0xFF1E3A8A)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("My Courses")
+                        }
+                    },
                     actions = {
                         TextButton(onClick = { onLogout() }) {
                             Text("登出", color = Color(0xFF1E40AF), fontWeight = FontWeight.Bold)
