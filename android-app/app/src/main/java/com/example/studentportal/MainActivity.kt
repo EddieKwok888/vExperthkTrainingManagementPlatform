@@ -255,11 +255,29 @@ class MainActivity : ComponentActivity() {
                             })
                         }
 
-                        enrolledCourses = regs.map { reg ->
+                        enrolledCourses = regs.filter { it.sessionId.isNotEmpty() }.mapNotNull { reg ->
                             val matchedCourse = courseList.find { it.id == reg.courseId }
                             val matchedSession = sessionList.find { it.id == reg.sessionId }
-                            EnrolledCourseData(reg, matchedCourse, matchedSession)
-                        }
+                            if (matchedCourse != null && matchedSession != null) {
+                                EnrolledCourseData(reg, matchedCourse, matchedSession)
+                            } else null
+                        }.sortedWith(Comparator { a, b ->
+                            val sessionA = a.session!!
+                            val sessionB = b.session!!
+                            val formatter = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                            val todayStr = formatter.format(java.util.Date())
+                            
+                            val aEndOrStart = if (sessionA.endDate.isNotEmpty()) sessionA.endDate else sessionA.startDate
+                            val bEndOrStart = if (sessionB.endDate.isNotEmpty()) sessionB.endDate else sessionB.startDate
+                            
+                            val aPast = aEndOrStart < todayStr
+                            val bPast = bEndOrStart < todayStr
+                            
+                            if (aPast && !bPast) return@Comparator 1
+                            if (!aPast && bPast) return@Comparator -1
+                            if (aPast && bPast) return@Comparator sessionB.startDate.compareTo(sessionA.startDate)
+                            return@Comparator sessionA.startDate.compareTo(sessionB.startDate)
+                        })
                     }
                     statusMessage = "" // 成功後清空訊息
                 } else {
