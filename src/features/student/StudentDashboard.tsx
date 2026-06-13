@@ -175,10 +175,7 @@ export function StudentDashboard() {
                 setCertificates(certSnap.docs.map(d => ({ id: d.id, ...d.data() })));
              } catch (e) {}
 
-                // Remove one-time fetch. We will use real-time listeners for attendance below.
-             } catch (e) {
-                console.error("Failed to load certificates", e);
-             }
+                // Removed one-time fetch. Real-time listener for attendance is used below.
           }
         } catch (e) {
           console.error(e);
