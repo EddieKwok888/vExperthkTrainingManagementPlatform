@@ -142,6 +142,11 @@ The system supports multi-language capabilities easily switchable via the UI.
 - **Instructor Dashboard Simplification**: Removed outdated bulk attendance tools ("一鍵點名") to align with the new app-based QR code scanning workflow. Instructors can now seamlessly review the real-time scanned attendance statuses directly synced from the database.
 - **Test Data Management**: Added a handy "Clear Records" button allowing instructors to easily reset attendance testing states locally before finalizing the actual class roster.
 
+### 5. 🤖 Android Native App Integration (Android 原生學生端 App)
+- **API 35 Support**: Built a brand new, fully integrated Android Native Application targeting the latest Android 15 (API 35) SDK using Kotlin and Jetpack Compose.
+- **Real-time QR Check-in**: Integrated Google Play Services Code Scanner to allow students to seamlessly scan WebApp-generated QR codes (`DYN-` and `STAT-` tokens) without requiring manual camera permissions.
+- **Firestore Synchronization**: The Android app flawlessly syncs with the existing Firebase backend, replicating the `StudentDashboard` chunked fetching logic to display enrolled courses and processing real-time attendance updates securely on the client-side.
+
 ## 📅 Updates (2026-06-12)
 
 ### 1. 🛡️ Duplicate Registration Prevention (防重複報名機制)
