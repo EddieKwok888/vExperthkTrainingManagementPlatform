@@ -7,7 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -23,6 +23,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -44,7 +45,7 @@ import java.util.Calendar
 
 data class Registration(val id: String, val courseId: String, val sessionId: String, val status: String)
 data class Course(val id: String, val title: String, val courseCode: String, val description: String, val category: String, val level: String, val day: String)
-data class Session(val id: String, val startDate: String, val endDate: String, val classroom: String, val deliveryMode: String)
+data class Session(val id: String, val startDate: String, val endDate: String, val classroom: String, val deliveryMode: String, val meetingLink: String)
 data class EnrolledCourseData(val registration: Registration, val course: Course?, val session: Session?)
 
 class MainActivity : ComponentActivity() {
@@ -248,7 +249,8 @@ class MainActivity : ComponentActivity() {
                                     startDate = doc.getString("startDate") ?: "",
                                     endDate = doc.getString("endDate") ?: "",
                                     classroom = (doc.getString("room") ?: doc.getString("classroom") ?: "").replace(Regex("\\s*\\(Persons:.*?\\)", RegexOption.IGNORE_CASE), ""),
-                                    deliveryMode = doc.getString("deliveryMode") ?: ""
+                                    deliveryMode = doc.getString("deliveryMode") ?: "",
+                                    meetingLink = doc.getString("meetingLink") ?: ""
                                 )
                             })
                         }
@@ -394,7 +396,9 @@ class MainActivity : ComponentActivity() {
                         
                         val roomName = data.session?.classroom ?: ""
                         val deliveryMode = data.session?.deliveryMode ?: ""
+                        val meetingLink = data.session?.meetingLink ?: ""
                         val isOnline = deliveryMode.equals("online", true) || roomName.contains("online", true)
+                        val uriHandler = LocalUriHandler.current
                         
                         if (isOnline) {
                             Row(
@@ -409,6 +413,23 @@ class MainActivity : ComponentActivity() {
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF4F46E5)
                                 )
+                                if (meetingLink.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "JOIN ROOM",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color(0xFF2563EB),
+                                        modifier = Modifier
+                                            .background(Color(0xFFDBEAFE), RoundedCornerShape(4.dp))
+                                            .clickable { 
+                                                try {
+                                                    uriHandler.openUri(meetingLink)
+                                                } catch (e: Exception) {}
+                                            }
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
                             }
                         } else if (roomName.isNotEmpty()) {
                             Row(

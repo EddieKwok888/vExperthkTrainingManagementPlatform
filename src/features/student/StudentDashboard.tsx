@@ -5,7 +5,7 @@ import { AuthContext } from '../../App';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
-import { Loader2, Download, GraduationCap, FileText, Calendar, BookOpen, CheckCircle, Circle, PlayCircle, LayoutDashboard, Award, MapPin } from 'lucide-react';
+import { Loader2, Download, GraduationCap, FileText, Calendar, BookOpen, CheckCircle, Circle, PlayCircle, LayoutDashboard, Award, MapPin, ExternalLink } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { handleFirestoreError, OperationType } from '../../lib/error';
@@ -430,9 +430,14 @@ export function StudentDashboard() {
                                     <span className="text-blue-600 font-bold mr-2">{session.startDate} to {session.endDate}</span>
                                 </div>
                                 {(session.deliveryMode === 'online' || (session.room || '').toLowerCase().includes('online') || (session.classroom || '').toLowerCase().includes('online')) ? (
-                                    <div className="font-medium text-slate-600 flex items-center gap-1.5 mt-0.5">
+                                    <div className="font-medium text-slate-600 flex flex-wrap items-center gap-1.5 mt-0.5">
                                         <MapPin className="w-4 h-4 text-indigo-600" />
                                         <span>Mode: <span className="font-bold text-slate-800">Online</span></span>
+                                        {session.meetingLink && (
+                                            <a href={session.meetingLink} target="_blank" rel="noreferrer" className="text-[10px] font-bold text-blue-600 ml-2 flex items-center gap-0.5 hover:underline bg-blue-50 px-2 py-0.5 rounded">
+                                                Join Room <ExternalLink className="w-2.5 h-2.5" />
+                                            </a>
+                                        )}
                                     </div>
                                 ) : (session.room || session.classroom) && (
                                     <div className="font-medium text-slate-600 flex items-center gap-1.5 mt-0.5">
