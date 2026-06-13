@@ -130,8 +130,8 @@ export function StudentDashboard() {
             setCourses(courseDocs);
           }
 
+          let lessonDocs: any[] = [];
           if (sessionIds.length > 0) {
-            const lessonDocs: any[] = [];
             const sessionDocs: any[] = [];
             for (let i = 0; i < sessionIds.length; i += 10) {
               const chunk = sessionIds.slice(i, i + 10);
@@ -176,12 +176,12 @@ export function StudentDashboard() {
              } catch (e) {}
 
              try {
-                // Fetch attendance for all sessions the student is enrolled in
+                // Fetch attendance for all lessons the student is enrolled in
                 const attDocs: any[] = [];
-                const sessionIdsList = Array.from(new Set(regsData.map((r: any) => r.sessionId).filter(Boolean)));
-                for (let i = 0; i < sessionIdsList.length; i += 10) {
-                  const chunk = sessionIdsList.slice(i, i + 10);
-                  const attSnap = await getDocs(query(collection(db, 'attendance'), where('sessionId', 'in', chunk)));
+                const lessonIdsList = lessonDocs.map(l => l.id);
+                for (let i = 0; i < lessonIdsList.length; i += 10) {
+                  const chunk = lessonIdsList.slice(i, i + 10);
+                  const attSnap = await getDocs(query(collection(db, 'attendance'), where('lessonId', 'in', chunk)));
                   attDocs.push(...attSnap.docs.map(d => ({ id: d.id, ...d.data() })));
                 }
                 
