@@ -285,7 +285,16 @@ export function InstructorDashboard() {
       const attendanceSnap = await getDocs(query(collection(db, 'attendance'), where('lessonId', '==', lesson.id)));
       const existingAttendance: Record<string, string> = {};
       attendanceSnap.docs.forEach(d => {
-        existingAttendance[d.data().studentId] = d.data().status;
+        const data = d.data();
+        let derivedStatus = data.status || '';
+        if (!derivedStatus) {
+            if (data.present_am && data.present_pm) derivedStatus = 'present';
+            else if (data.present_am) derivedStatus = 'present_am';
+            else if (data.present_pm) derivedStatus = 'present_pm';
+            else if (data.present === true) derivedStatus = 'present';
+        }
+        if (data.studentId) existingAttendance[data.studentId] = derivedStatus;
+        if (data.registrationId) existingAttendance[data.registrationId] = derivedStatus;
       });
       
       const mergedData: Record<string, string> = {};
@@ -335,14 +344,19 @@ export function InstructorDashboard() {
       for (const regId of Object.keys(attendanceData)) {
         const studentRecord = registrations.find(r => r.id === regId);
         const studentId = studentRecord?.studentId || regId;
-        const attendanceId = `${selectedLesson.id}_${regId}`;
+        const attendanceId = `${selectedLesson.id}_${studentId}`;
         const attRef = doc(db, 'attendance', attendanceId);
+        
+        const statusVal = attendanceData[regId] || '';
         batch.set(attRef, {
           lessonId: selectedLesson.id,
           sessionId: selectedLesson.sessionId,
           studentId: studentId,
           registrationId: regId,
-          status: attendanceData[regId],
+          status: statusVal,
+          present_am: statusVal === 'present_am' || statusVal === 'present',
+          present_pm: statusVal === 'present_pm' || statusVal === 'present',
+          present: statusVal === 'present',
           recordedAt: serverTimestamp(),
           recordedBy: user?.uid
         });
