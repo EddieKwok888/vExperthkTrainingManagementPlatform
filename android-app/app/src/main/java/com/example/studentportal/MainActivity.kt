@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.*
@@ -17,6 +18,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
@@ -45,26 +48,120 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MaterialTheme {
-                StudentPortalApp()
+                var isUserLoggedIn by remember { mutableStateOf(auth.currentUser != null) }
+
+                if (isUserLoggedIn) {
+                    StudentPortalApp(onLogout = {
+                        auth.signOut()
+                        isUserLoggedIn = false
+                    })
+                } else {
+                    LoginScreen(
+                        auth = auth,
+                        onLoginSuccess = { isUserLoggedIn = true }
+                    )
+                }
             }
         }
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
-    fun StudentPortalApp() {
+    fun LoginScreen(auth: FirebaseAuth, onLoginSuccess: () -> Unit) {
+        var email by remember { mutableStateOf("") }
+        var password by remember { mutableStateOf("") }
+        var isLoading by remember { mutableStateOf(false) }
+        var errorMessage by remember { mutableStateOf("") }
+
+        Column(
+            modifier = Modifier.fillMaxSize().padding(32.dp).background(MaterialTheme.colorScheme.background),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                "Student Portal", 
+                style = MaterialTheme.typography.headlineLarge, 
+                fontWeight = FontWeight.Bold, 
+                color = Color(0xFF1E3A8A)
+            )
+            Text(
+                "Student Login", 
+                style = MaterialTheme.typography.bodyLarge, 
+                color = Color.Gray,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            Spacer(modifier = Modifier.height(32.dp))
+
+            OutlinedTextField(
+                value = email,
+                onValueChange = { email = it },
+                label = { Text("Email (Username)") },
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                singleLine = true
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = { Text("Password") },
+                modifier = Modifier.fillMaxWidth(),
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                singleLine = true
+            )
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            if (errorMessage.isNotEmpty()) {
+                Text(
+                    text = errorMessage, 
+                    color = MaterialTheme.colorScheme.error, 
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+            }
+
+            Button(
+                onClick = {
+                    if (email.isBlank() || password.isBlank()) {
+                        errorMessage = "請輸入 Email 和密碼"
+                        return@Button
+                    }
+                    isLoading = true
+                    errorMessage = ""
+                    auth.signInWithEmailAndPassword(email.trim(), password)
+                        .addOnSuccessListener {
+                            isLoading = false
+                            onLoginSuccess()
+                        }
+                        .addOnFailureListener { e ->
+                            isLoading = false
+                            errorMessage = e.localizedMessage ?: "登入失敗"
+                        }
+                },
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                enabled = !isLoading
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                } else {
+                    Text("Login")
+                }
+            }
+        }
+    }
+
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable
+    fun StudentPortalApp(onLogout: () -> Unit) {
         var statusMessage by remember { mutableStateOf("歡迎回到 Student Portal") }
         var enrolledCourses by remember { mutableStateOf<List<EnrolledCourseData>>(emptyList()) }
         var isLoading by remember { mutableStateOf(true) }
 
         LaunchedEffect(Unit) {
             try {
-                var user = auth.currentUser
-                if (user == null) {
-                    statusMessage = "系統登入中..."
-                    val result = auth.signInWithEmailAndPassword("student@example.com", "password123").await()
-                    user = result.user
-                }
+                val user = auth.currentUser
 
                 if (user != null) {
                     statusMessage = "讀取課程資料中..."
@@ -106,7 +203,7 @@ class MainActivity : ComponentActivity() {
                     }
                     statusMessage = "" // 成功後清空訊息
                 } else {
-                    statusMessage = "無法獲取登入資訊"
+                    statusMessage = "無法獲取登入資訊，請重新登入"
                 }
             } catch (e: Exception) {
                 statusMessage = "發生錯誤: ${e.message}"
@@ -119,6 +216,11 @@ class MainActivity : ComponentActivity() {
             topBar = {
                 TopAppBar(
                     title = { Text("My Courses") },
+                    actions = {
+                        TextButton(onClick = { onLogout() }) {
+                            Text("登出", color = Color(0xFF1E40AF), fontWeight = FontWeight.Bold)
+                        }
+                    },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFFEFF6FF))
                 )
             },
