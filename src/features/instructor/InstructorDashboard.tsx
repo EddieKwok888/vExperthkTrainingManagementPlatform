@@ -30,7 +30,6 @@ export function InstructorDashboard() {
   
   // Tab control
   const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'hours' | 'reports' | 'profile'>('overview');
-  const [stats, setStats] = useState({ upcomingSessions: 0, activeStudents: 0, averageRating: 0 });
   
   // Real-time attendance listener state
   const [dbAttendance, setDbAttendance] = useState<Record<string, string>>({});
