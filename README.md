@@ -124,7 +124,15 @@ The system supports multi-language capabilities easily switchable via the UI.
 
 > 📜 **View past updates:** Older update logs have been archived. Please check the [CHANGELOG.md](CHANGELOG.md) file for historical updates.
 
-## 📅 Today's Updates (2026-06-13)
+## 📅 Today's Updates (2026-06-14)
+
+### 1. 🚀 Google Play Console Release Preparation (Google Play 上架準備)
+- **Privacy Policy**: Created a bilingual (Chinese/English) Privacy Policy tailored for the Android App to comply with Google Play's strict data safety and camera usage requirements.
+- **Release Notes**: Drafted concise release notes for the initial v1.0 launch.
+- **App Bundle Optimization**: Configured `build.gradle.kts` to enable ProGuard minification (`isMinifyEnabled`) and included native debug symbols (`ndk.debugSymbolLevel`) to resolve Play Console pre-launch warnings and optimize the `.aab` file size.
+- **Build Fix**: Resolved missing ProGuard rules configuration to ensure successful signed App Bundle generation.
+
+## 📅 Updates (2026-06-13)
 
 ### 1. 🎓 Instant PDF Certificate Generation (一鍵下載修業證書)
 - **Direct Download**: Students can now directly download their course completion certificates in high quality from the "My Courses" tab.

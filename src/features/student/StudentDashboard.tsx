@@ -450,7 +450,12 @@ export function StudentDashboard() {
                                         <span>Mode: <span className="font-bold text-slate-800">Online</span></span>
                                         {session.meetingLink && (
                                             <a href={session.meetingLink} target="_blank" rel="noreferrer" className="text-[10px] font-bold text-blue-600 ml-2 flex items-center gap-0.5 hover:underline bg-blue-50 px-2 py-0.5 rounded">
-                                                Join Room <ExternalLink className="w-2.5 h-2.5" />
+                                                {(() => {
+                                                    const link = session.meetingLink.toLowerCase();
+                                                    if (link.includes('zoom.us') || link.includes('zoom.com')) return 'Join Zoom';
+                                                    if (link.includes('teams.microsoft.com') || link.includes('teams.live.com')) return 'Join MS Teams';
+                                                    return 'Join Room';
+                                                })()} <ExternalLink className="w-2.5 h-2.5" />
                                             </a>
                                         )}
                                     </div>

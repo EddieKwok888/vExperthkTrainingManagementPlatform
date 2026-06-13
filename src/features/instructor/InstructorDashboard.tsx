@@ -347,7 +347,7 @@ export function InstructorDashboard() {
                newStat = statByKey || statByEmail || statByStudent || '';
            }
 
-           if (newStat && mergedData[key] !== newStat) {
+           if (mergedData[key] !== newStat) {
               mergedData[key] = newStat;
            }
          });
@@ -392,13 +392,14 @@ export function InstructorDashboard() {
     setSubmittingAttendance(true);
     try {
       const batch = writeBatch(db);
+      const attSnap = await getDocs(query(collection(db, 'attendance'), where('lessonId', '==', selectedLesson.id)));
+      
       for (const regId of Object.keys(attendanceData)) {
         const studentRecord = registrations.find(r => r.id === regId);
         const studentId = studentRecord?.studentId || regId;
+        const studentEmail = studentRecord?.studentEmail || '';
         const attendanceId1 = `${selectedLesson.id}_${regId}`;
         const attendanceId2 = `${selectedLesson.id}_${studentId}`;
-        const attRef1 = doc(db, 'attendance', attendanceId1);
-        const attRef2 = doc(db, 'attendance', attendanceId2);
         
         const statusVal = attendanceData[regId] || '';
         
@@ -408,15 +409,29 @@ export function InstructorDashboard() {
           status: statusVal,
           present_am: statusVal === 'present_am' || statusVal === 'present',
           present_pm: statusVal === 'present_pm' || statusVal === 'present',
+          present: statusVal === 'present',
           absent: statusVal === 'absent',
           timestamp: serverTimestamp(),
           recordedAt: serverTimestamp(),
           recordedBy: user?.uid
         };
 
-        batch.set(attRef1, { ...payload, registrationId: regId, studentId: studentRecord?.studentId || regId }, { merge: true });
+        const existingDocs = attSnap.docs.filter(d => {
+            const data = d.data();
+            return data.registrationId === regId || 
+                   (studentId && data.studentId === studentId) || 
+                   (studentEmail && data.studentEmail === studentEmail);
+        });
+
+        batch.set(doc(db, 'attendance', attendanceId1), { ...payload, registrationId: regId, studentId: studentRecord?.studentId || regId }, { merge: true });
         if (attendanceId1 !== attendanceId2) {
-            batch.set(attRef2, { ...payload, registrationId: regId, studentId: studentId }, { merge: true });
+            batch.set(doc(db, 'attendance', attendanceId2), { ...payload, registrationId: regId, studentId: studentId }, { merge: true });
+        }
+        
+        for (const edoc of existingDocs) {
+            if (edoc.id !== attendanceId1 && edoc.id !== attendanceId2) {
+                batch.set(doc(db, 'attendance', edoc.id), { ...payload, registrationId: regId, studentId: studentRecord?.studentId || regId }, { merge: true });
+            }
         }
       }
       await batch.commit();
@@ -845,7 +860,12 @@ export function InstructorDashboard() {
                                 )}
                                 {s.meetingLink && (
                                   <a href={s.meetingLink} target="_blank" rel="noreferrer" className="text-[10px] font-bold text-blue-600 mt-0.5 flex items-center justify-start sm:justify-end gap-0.5 hover:underline">
-                                    Join Room <ExternalLink className="w-2.5 h-2.5" />
+                                    {(() => {
+                                      const link = s.meetingLink.toLowerCase();
+                                      if (link.includes('zoom.us') || link.includes('zoom.com')) return 'Join Zoom';
+                                      if (link.includes('teams.microsoft.com') || link.includes('teams.live.com')) return 'Join MS Teams';
+                                      return 'Join Room';
+                                    })()} <ExternalLink className="w-2.5 h-2.5" />
                                   </a>
                                 )}
                               </div>

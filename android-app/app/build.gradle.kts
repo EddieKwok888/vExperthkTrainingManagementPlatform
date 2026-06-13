@@ -6,20 +6,22 @@ plugins {
 }
 
 android {
-    namespace = "com.example.studentportal"
-    compileSdk = 36
+    namespace = "com.vexperthk.studentportal"
+    compileSdk = 37
     defaultConfig {
-        applicationId = "com.example.studentportal"
+        applicationId = "com.vexperthk.studentportal"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 1
         versionName = "1.0"
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            ndk.debugSymbolLevel = "SYMBOL_TABLE"
         }
     }
     compileOptions {
@@ -85,13 +87,13 @@ dependencies {
   implementation(libs.androidx.lifecycle.viewmodel.navigation3)
 
   // Firebase
-  implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
-  implementation("com.google.firebase:firebase-auth-ktx")
-  implementation("com.google.firebase:firebase-firestore-ktx")
+  implementation(platform("com.google.firebase:firebase-bom:34.14.1"))
+  implementation("com.google.firebase:firebase-auth")
+  implementation("com.google.firebase:firebase-firestore")
   
   // Google Play Services Code Scanner
   implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
   
   // Kotlin Coroutines Play Services integration
-  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
+  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.11.0")
 }
