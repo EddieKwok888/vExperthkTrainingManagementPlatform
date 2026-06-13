@@ -189,16 +189,39 @@ export function StudentDashboard() {
   }, [role, user]);
 
   useEffect(() => {
-    if (role === 'student' && user) {
-       // Real-time listener for attendance to update progress bar dynamically
-       const q = query(collection(db, 'attendance'), where('studentId', '==', user.uid));
-       const unsubscribe = onSnapshot(q, (snap) => {
-           const myAtt = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-           setAttendanceLogs(myAtt);
-       });
-       return () => unsubscribe();
+    if (role === 'student' && user && lessons.length > 0 && regs.length > 0) {
+       // We must use getDoc for specific IDs because 'list' queries on 'attendance' are blocked by firestore.rules for students.
+       const fetchExactAttendance = async () => {
+           try {
+               const promises: any[] = [];
+               const myRegIds = regs.map(r => r.id);
+               
+               lessons.forEach(l => {
+                   // Android App QR check-in uses: l.id + '_' + user.uid
+                   promises.push(getDoc(doc(db, 'attendance', `${l.id}_${user.uid}`)));
+                   // Instructor Dashboard manual check-in uses: l.id + '_' + registrationId
+                   myRegIds.forEach(regId => {
+                       promises.push(getDoc(doc(db, 'attendance', `${l.id}_${regId}`)));
+                   });
+               });
+               
+               const snapsRaw = await Promise.allSettled(promises);
+               const snaps = snapsRaw
+                   .filter(r => r.status === 'fulfilled' && r.value.exists())
+                   .map(r => (r as any).value);
+               const myAtt = snaps.map(s => ({ id: s.id, ...s.data() }));
+               console.log("DEBUG: Exact attendance docs fetched:", myAtt);
+               setAttendanceLogs(myAtt as any);
+           } catch (error: any) {
+               console.error("DEBUG: Failed to fetch exact attendance:", error);
+           }
+       };
+       fetchExactAttendance();
+       // Poll every 5 seconds to simulate real-time since we can't use onSnapshot list query
+       const interval = setInterval(fetchExactAttendance, 5000);
+       return () => clearInterval(interval);
     }
-  }, [role, user]);
+  }, [role, user, lessons, regs]);
 
   if (role !== 'student') return <div className="text-center py-20">Access Denied</div>;
 
