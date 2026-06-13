@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { db } from '../../lib/firebase';
-import { collection, query, getDocs, where, doc, getDoc } from 'firebase/firestore';
+import { collection, query, getDocs, where, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { AuthContext } from '../../App';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -175,26 +175,9 @@ export function StudentDashboard() {
                 setCertificates(certSnap.docs.map(d => ({ id: d.id, ...d.data() })));
              } catch (e) {}
 
-             try {
-                // Fetch attendance for all lessons the student is enrolled in
-                const attDocs: any[] = [];
-                const lessonIdsList = lessonDocs.map(l => l.id);
-                for (let i = 0; i < lessonIdsList.length; i += 10) {
-                  const chunk = lessonIdsList.slice(i, i + 10);
-                  const attSnap = await getDocs(query(collection(db, 'attendance'), where('lessonId', 'in', chunk)));
-                  attDocs.push(...attSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-                }
-                
-                const myRegistrationIds = new Set(regsData.map((r: any) => r.id));
-                const myAtt = attDocs.filter(a => 
-                  a.studentId === user.uid || 
-                  myRegistrationIds.has(a.registrationId) || 
-                  myRegistrationIds.has(a.studentId)
-                );
-                console.log("DEBUG: fetched attendance logs for student:", myAtt, "regsData:", regsData);
-                setAttendanceLogs(myAtt);
+                // Remove one-time fetch. We will use real-time listeners for attendance below.
              } catch (e) {
-                console.error("Failed to load attendance", e);
+                console.error("Failed to load certificates", e);
              }
           }
         } catch (e) {
@@ -203,8 +186,19 @@ export function StudentDashboard() {
         } finally {
           setLoading(false);
         }
-      };
       fetchData();
+    }
+  }, [role, user]);
+
+  useEffect(() => {
+    if (role === 'student' && user) {
+       // Real-time listener for attendance to update progress bar dynamically
+       const q = query(collection(db, 'attendance'), where('studentId', '==', user.uid));
+       const unsubscribe = onSnapshot(q, (snap) => {
+           const myAtt = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+           setAttendanceLogs(myAtt);
+       });
+       return () => unsubscribe();
     }
   }, [role, user]);
 
