@@ -174,11 +174,27 @@ class MainActivity : ComponentActivity() {
 
                 if (user != null) {
                     statusMessage = "讀取課程資料中..."
-                    val regSnap = db.collection("registrations")
+                    
+                    val regsList = mutableListOf<com.google.firebase.firestore.DocumentSnapshot>()
+                    
+                    // 1. Fetch by studentId
+                    val snapId = db.collection("registrations")
                         .whereEqualTo("studentId", user.uid)
                         .get().await()
+                    regsList.addAll(snapId.documents)
 
-                    val regs = regSnap.documents.map { doc ->
+                    // 2. Fetch by studentEmail
+                    if (!user.email.isNullOrEmpty()) {
+                        val snapEmail = db.collection("registrations")
+                            .whereEqualTo("studentEmail", user.email)
+                            .get().await()
+                        regsList.addAll(snapEmail.documents)
+                    }
+
+                    // 3. Merge and remove duplicates
+                    val uniqueDocs = regsList.distinctBy { it.id }
+
+                    val regs = uniqueDocs.map { doc ->
                         Registration(
                             id = doc.id,
                             courseId = doc.getString("courseId") ?: "",
