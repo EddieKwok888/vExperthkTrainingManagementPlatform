@@ -183,6 +183,7 @@ export function StudentDashboard() {
         } finally {
           setLoading(false);
         }
+      };
       fetchData();
     }
   }, [role, user]);
