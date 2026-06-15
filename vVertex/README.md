@@ -1,34 +1,22 @@
-# vVertex
+# vVertex // vExperthk AI Training Academy
 
-vVertex is a high-tech, single-page static website built to demonstrate the core architecture, role-based access matrix, and mobile terminal attendance flow of the **vExpert Training Management System**.
+vVertex 是一個充滿高科技與 Cyberpunk 風格的單頁靜態網站 (Single-page static website)，專門用來展示 **vExperthk AI Training Academy (培訓管理系統)** 的核心架構、角色權限矩陣 (Access Matrix)，以及手機 App 的點名終端流程。
 
 ## Tech Stack
 - HTML5
-- Tailwind CSS (via CDN)
-- Vanilla JavaScript
-- Custom Glassmorphism & Cyberpunk CSS Styles
+- Tailwind CSS (經 CDN 引入)
+- Vanilla JavaScript (包含 Lightbox 圖片放大功能)
+- Custom Glassmorphism (毛玻璃) & Cyberpunk CSS Styles
 
 ## Project Structure
-- `index.html`: Main landing page containing all sections.
-- `styles.css`: Custom CSS for glassmorphism, glowing borders, and animations.
-- `assets/`: Directory reserved for architecture diagrams and flowcharts (`chart1.jpeg`, `chart2.jpeg`, `chart3.png`).
+- `index.html`: 網站的主頁面，包含所有的展示區塊。
+- `styles.css`: 自訂的 CSS 樣式表，包含發光邊框 (Glowing borders)、Scanlines 特效及動畫。
+- `assets/`: 存放架構圖與流程圖的資料夾 (`chart1.png`, `chart2.png`, `chart3.png`)。
 
-## Deployment via GitHub Pages
-This project is fully static and ready to be deployed to GitHub Pages without any build steps.
+## Deployment (GitHub Pages)
+目前本網站已經整合到 `vExperthkTrainingManagementPlatform` 的主 Repository 中。
 
-```bash
-# 1. Initialize Git repository
-git init
+要瀏覽最新的網頁，只需確保已在 GitHub Repository 的 **Settings > Pages** 部署來源設定為 `main` 分支的 `/ (root)`。
 
-# 2. Add files and commit
-git add .
-git commit -m "feat: initial commit for vVertex static site"
-
-# 3. Create a repository on GitHub, then link it
-git remote add origin https://github.com/YOUR_USERNAME/vVertex.git
-
-# 4. Push to the main branch
-git push -u origin main
-```
-
-Once pushed, go to the repository's **Settings > Pages**, select the `main` branch as the source, and save. Your site will be live shortly!
+專屬網址為：
+👉 `https://eddiekwok888.github.io/vExperthkTrainingManagementPlatform/vVertex/`
