@@ -1,0 +1,63 @@
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap');
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: #050505;
+  background-image: 
+    radial-gradient(circle at 15% 50%, rgba(34, 211, 238, 0.03) 0%, transparent 50%),
+    radial-gradient(circle at 85% 30%, rgba(52, 211, 153, 0.03) 0%, transparent 50%);
+}
+
+h1, h2, h3, h4, .font-mono {
+  font-family: 'Fira Code', monospace;
+}
+
+/* Glassmorphism */
+.glass-panel {
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+}
+
+/* Cyber Glow Borders */
+.glow-border-cyan {
+  border: 1px solid rgba(34, 211, 238, 0.3);
+  box-shadow: 0 0 15px rgba(34, 211, 238, 0.05) inset, 0 0 10px rgba(34, 211, 238, 0.05);
+}
+.glow-border-cyan:hover {
+  border-color: rgba(34, 211, 238, 0.6);
+  box-shadow: 0 0 20px rgba(34, 211, 238, 0.15) inset, 0 0 15px rgba(34, 211, 238, 0.2);
+}
+
+.glow-border-emerald {
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  box-shadow: 0 0 15px rgba(52, 211, 153, 0.05) inset, 0 0 10px rgba(52, 211, 153, 0.05);
+}
+.glow-border-emerald:hover {
+  border-color: rgba(52, 211, 153, 0.6);
+  box-shadow: 0 0 20px rgba(52, 211, 153, 0.15) inset, 0 0 15px rgba(52, 211, 153, 0.2);
+}
+
+/* Blinking Cursor */
+.cursor-blink::after {
+  content: '_';
+  animation: blink 1s step-start infinite;
+  color: #22d3ee;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+/* CRT Scanline effect overlay */
+.scanlines {
+  position: fixed;
+  top: 0; left: 0; width: 100vw; height: 100vh;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%);
+  background-size: 100% 4px;
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0.2;
+}
